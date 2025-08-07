@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ApolloProvider } from '../providers/ApolloProvider';
+import { SettingsProvider } from "@/app/context/SettingsContext";
+import { StashTagsProvider } from "@/context/StashTagsContext";
 import "./globals.css";
 import Link from "next/link";
 
@@ -25,13 +27,17 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <ApolloProvider>
-          <nav className="bg-gray-800 text-white p-4 flex gap-4">
-            <Link href="/">Home</Link>
-            <Link href="/actors">Actors</Link>
-            <Link href="/actors/add">Add Actors</Link>
-            <Link href="/about">About</Link>
-          </nav>
-          {children}
+          <SettingsProvider>
+            <StashTagsProvider>
+              <nav className="bg-gray-800 text-white p-4 flex gap-4">
+                <Link href="/">Home</Link>
+                <Link href="/playlists">Playlists</Link>
+                <Link href="/actors">Actors</Link>
+                <Link href="/actors/add">Add Actors</Link>
+              </nav>
+              {children}
+            </StashTagsProvider>
+          </SettingsProvider>
         </ApolloProvider>
       </body>
     </html>

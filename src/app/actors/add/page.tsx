@@ -1,15 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, gql } from '@apollo/client';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink } from "@/components/ui/pagination";
 
 const GET_ALL_PERFORMERS = gql`
-  query GetAllPerformers {
-    allPerformers {
-      id
-      name
-      image_path
-      rating100
+  query GetAllPerformers($pageNumber: Int, $perPage: Int) {
+    findPerformers(filter: { page: $pageNumber, per_page: $perPage }) {
+      performers {
+        id
+        name
+        image_path
+        rating100
+      }
+    }
+  }
+`;
+
+const FILTER_PERFORMERS = gql`
+  query filterPerformers($filter: String!) {
+    findPerformers(
+      performer_filter: { name: { value: $filter, modifier: INCLUDES } }
+    ) {
+      performers {
+        id
+        name
+        image_path
+        rating100
+      }
     }
   }
 `;
@@ -22,9 +40,27 @@ type Performer = {
 };
 
 export default function ActorGallery() {
-  const { data, loading, error } = useQuery(GET_ALL_PERFORMERS);
   const [filter, setFilter] = useState('');
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [pageNumber, setPageNumber] = useState(1);
+  const perPage = 40;
+
+  const [debouncedFilter, setDebouncedFilter] = useState(filter);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedFilter(filter), 300);
+    return () => clearTimeout(handler);
+  }, [filter]);
+
+  const { data, loading, error } = useQuery(GET_ALL_PERFORMERS, {
+    variables: { pageNumber, perPage },
+    skip: !!debouncedFilter, // Skip paginated query if filter is active
+  });
+
+  const { data: filterData, loading: filterLoading } = useQuery(FILTER_PERFORMERS, {
+    variables: { filter: debouncedFilter },
+    skip: !debouncedFilter,
+  });
 
   const handleAdd = async (actor: Performer) => {
     try {
@@ -39,7 +75,6 @@ export default function ActorGallery() {
         }),
       });
       if (!res.ok) throw new Error('Failed to add actor');
-      // Mark this one as added (client-side only)
       setAddedIds(prev => new Set(prev).add(actor.id));
     } catch (err) {
       console.error(err);
@@ -47,14 +82,16 @@ export default function ActorGallery() {
     }
   };
 
-  if (loading) return <p>Loading actors…</p>;
-  if (error)   return <p>Error: {error.message}</p>;
-  
+  // Show loading for either query
+  if (loading || filterLoading) return <p>Loading actors…</p>;
+  if (error) return <p>Error: {error.message}</p>;
 
-  // client-side filtering
-  const filtered = data.allPerformers.filter((a: any) =>
-    a.name.toLowerCase().includes(filter.toLowerCase())
-  );
+  // Use filtered results if searching, otherwise paginated results
+  const allPerformers = filter
+    ? filterData?.findPerformers?.performers ?? []
+    : data?.findPerformers?.performers ?? [];
+  const totalCount = data?.findPerformers?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
 
   return (
     <div className="p-4">
@@ -66,8 +103,47 @@ export default function ActorGallery() {
         className="w-full p-2 mb-4 border rounded"
       />
 
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-8">
-        {filtered.map((actor: Performer) => {
+      {/* Pagination at the top (only when not filtering) */}
+      {!filter && (
+        <Pagination className="mb-4">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationLink
+                onClick={() => setPageNumber(pageNumber - 1)}
+                disabled={pageNumber === 1}
+                href="#"
+                isActive={false}
+              >
+                Previous
+              </PaginationLink>
+            </PaginationItem>
+            {[...Array(totalPages)].map((_, idx) => (
+              <PaginationItem key={idx}>
+                <PaginationLink
+                  onClick={() => setPageNumber(idx + 1)}
+                  isActive={pageNumber === idx + 1}
+                  href="#"
+                >
+                  {idx + 1}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationLink
+                onClick={() => setPageNumber(pageNumber + 1)}
+                disabled={pageNumber === totalPages}
+                href="#"
+                isActive={false}
+              >
+                Next
+              </PaginationLink>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
+
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 mt-4">
+        {allPerformers.map((actor: Performer) => {
           const isAdded = addedIds.has(actor.id);
           return (
             <div
@@ -100,6 +176,45 @@ export default function ActorGallery() {
           );
         })}
       </div>
+
+      {/* Pagination at the bottom (only when not filtering) */}
+      {!filter && (
+        <Pagination className="mt-8">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationLink
+                onClick={() => setPageNumber(pageNumber - 1)}
+                disabled={pageNumber === 1}
+                href="#"
+                isActive={false}
+              >
+                Previous
+              </PaginationLink>
+            </PaginationItem>
+            {[...Array(totalPages)].map((_, idx) => (
+              <PaginationItem key={idx}>
+                <PaginationLink
+                  onClick={() => setPageNumber(idx + 1)}
+                  isActive={pageNumber === idx + 1}
+                  href="#"
+                >
+                  {idx + 1}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationLink
+                onClick={() => setPageNumber(pageNumber + 1)}
+                disabled={pageNumber === totalPages}
+                href="#"
+                isActive={false}
+              >
+                Next
+              </PaginationLink>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
     </div>
   );
 }

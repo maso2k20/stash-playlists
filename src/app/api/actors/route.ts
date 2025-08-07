@@ -1,7 +1,7 @@
 // src/app/api/actors/route.ts
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';  // adjust path as needed
+import { prisma } from '@/lib/prisma';  
 
 // GET /api/actors
 export async function GET() {
