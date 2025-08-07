@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Pencil } from "lucide-react";
 import Link from "next/link";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useRouter } from "next/navigation";
 
 interface Playlist {
   id: string;
@@ -16,9 +18,11 @@ interface Playlist {
 }
 
 export default function PlaylistsPage() {
+  const router = useRouter();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newType, setNewType] = useState<"MANUAL" | "SMART">("MANUAL");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [toDeleteId, setToDeleteId] = useState<string | null>(null);
@@ -35,13 +39,14 @@ export default function PlaylistsPage() {
     const response = await fetch("/api/playlists", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName, description: newDesc, type: "MANUAL" }),
+      body: JSON.stringify({ name: newName, description: newDesc, type: newType }),
     });
     if (response.ok) {
       const created = await response.json();
       setPlaylists((prev) => [...prev, created]);
       setNewName("");
       setNewDesc("");
+      setNewType("MANUAL");
       setIsCreateOpen(false);
     }
   };
@@ -86,6 +91,16 @@ export default function PlaylistsPage() {
               value={newDesc}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setNewDesc(e.target.value)}
             />
+            <RadioGroup
+              value={newType}
+              onValueChange={(val) => setNewType(val as "MANUAL" | "SMART")}
+              className="flex gap-4"
+            >
+              <RadioGroupItem value="MANUAL" id="manual" />
+              <label htmlFor="manual" className="mr-4">Manual</label>
+              <RadioGroupItem value="SMART" id="smart" />
+              <label htmlFor="smart">Smart</label>
+            </RadioGroup>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
@@ -125,13 +140,27 @@ export default function PlaylistsPage() {
                 <Link href={`/playlists/${playlist.id}`} className="hover:underline">
                   {playlist.name}
                 </Link>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => confirmDelete(playlist.id)}
-                >
-                  <Trash2 />
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      const editType = playlist.type.toLowerCase();
+                      router.push(`/playlists/edit/${editType}/${playlist.id}`);
+                    }}
+                    aria-label="Edit Playlist"
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => confirmDelete(playlist.id)}
+                    aria-label="Delete Playlist"
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>

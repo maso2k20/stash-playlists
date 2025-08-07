@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import VideoJS from "@/components/videojs/VideoJS";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatLength } from "@/lib/formatLength";
 
 type Scene = {
   id: string;
@@ -12,6 +13,7 @@ type Scene = {
     title: string;
     startTime: number;
     endTime: number;
+    screenshot?: string;
   };
 };
 
@@ -43,15 +45,25 @@ function PlaylistItem({
       onClick={onClick}
     >
       <CardContent>
-        <div className="flex justify-between items-center">
-          <div>
-            <strong>{scene.item.title}</strong>
-            <div className="text-sm text-muted-foreground">
-              {scene.item.startTime}s - {scene.item.endTime}s
-            </div>
+        <div className="flex flex-row items-center w-full space-x-4 p-0">
+          <div className="w-32 aspect-video flex-shrink-0">
+            <img
+              src={scene.item.screenshot}
+              alt={scene.item.title}
+              className="object-cover w-full h-full rounded-md"
+            />
           </div>
-          <div className="text-xs text-muted-foreground">#{index + 1}</div>
+
+          <CardContent className="flex-1 p-0">
+            <strong>{scene.item.title}</strong>
+            <p className="text-sm text-muted-foreground">
+              {formatLength(scene.item.endTime - scene.item.startTime)}
+            </p>
+          </CardContent>
+
         </div>
+
+
       </CardContent>
     </Card>
   );
@@ -101,11 +113,11 @@ export default function PlaylistDetailPage() {
     sources:
       items.length > 0
         ? [
-            {
-              src: items[currentIndex].item.stream,
-              type: "video/mp4",
-            },
-          ]
+          {
+            src: items[currentIndex].item.stream,
+            type: "video/mp4",
+          },
+        ]
         : [],
   };
 
@@ -126,10 +138,10 @@ export default function PlaylistDetailPage() {
 
   const offset = items.length
     ? {
-        start: items[currentIndex].item.startTime,
-        end: items[currentIndex].item.endTime,
-        restart_beginning: false,
-      }
+      start: items[currentIndex].item.startTime,
+      end: items[currentIndex].item.endTime,
+      restart_beginning: false,
+    }
     : undefined;
 
   return (
@@ -179,7 +191,7 @@ export default function PlaylistDetailPage() {
       </div>
 
       {/* Right: Static Playlist */}
-      <aside className="w-104 bg-background rounded-lg p-4 overflow-y-auto h-full">
+      <aside className="w-104 bg-background rounded-lg p-2 overflow-y-auto h-full">
         <h2 className="text-xl font-semibold mb-4">{playlist.name}</h2>
         <button
           className="mb-4 px-4 py-2 bg-blue-500 text-white rounded"

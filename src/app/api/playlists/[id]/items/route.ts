@@ -79,3 +79,67 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to upsert items to playlist' }, { status: 500 });
   }
 }
+
+// GET /api/playlists/[id]/items
+export async function GET(request: NextRequest) {
+  // Extract playlistId from the URL
+  const { pathname } = request.nextUrl;
+  const parts = pathname.split('/').filter(Boolean);
+  const playlistId = parts[2];
+  if (!playlistId) {
+    return NextResponse.json({ error: 'Playlist ID is required in the URL' }, { status: 400 });
+  }
+
+  // Ensure playlist exists
+  const playlist = await prisma.playlist.findUnique({ where: { id: playlistId } });
+  if (!playlist) {
+    return NextResponse.json({ error: 'Playlist not found' }, { status: 404 });
+  }
+
+  // Fetch playlist items with item details
+  const playlistItems = await prisma.playlistItem.findMany({
+    where: { playlistId },
+    orderBy: { itemOrder: 'asc' },
+    include: { item: true },
+  });
+
+  const items = playlistItems.map(pi => ({
+    id: pi.item.id,
+    title: pi.item.title,
+    startTime: pi.item.startTime,
+    endTime: pi.item.endTime,
+    screenshot: pi.item.screenshot,
+    stream: pi.item.stream,
+    itemOrder: pi.itemOrder,
+  }));
+
+  return NextResponse.json({ items }, { status: 200 });
+}
+
+// DELETE /api/playlists/[id]/items
+export async function DELETE(request: NextRequest) {
+  // Extract playlistId from the URL
+  const { pathname } = request.nextUrl;
+  const parts = pathname.split('/').filter(Boolean);
+  const playlistId = parts[2];
+  if (!playlistId) {
+    return NextResponse.json({ error: 'Playlist ID is required in the URL' }, { status: 400 });
+  }
+
+  // Parse request body to get itemId
+  const { itemId } = await request.json();
+  if (!itemId) {
+    return NextResponse.json({ error: 'itemId is required' }, { status: 400 });
+  }
+
+  try {
+    // Delete the PlaylistItem (removes item from playlist, but not the item itself)
+    await prisma.playlistItem.deleteMany({
+      where: { playlistId, itemId },
+    });
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: 'Failed to remove item from playlist', details: String(error) }, { status: 500 });
+  }
+}
