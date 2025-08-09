@@ -1,7 +1,6 @@
-# -------- deps
+# ---------- deps
 FROM node:20-alpine AS deps
 WORKDIR /app
-# Needed for Prisma on Alpine
 RUN apk add --no-cache libc6-compat openssl
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 RUN \
@@ -10,7 +9,7 @@ RUN \
   else npm ci; \
   fi
 
-# -------- builder
+# ---------- builder
 FROM node:20-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
@@ -21,41 +20,29 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# -------- runner
+# ---------- runner
 FROM node:20-alpine AS runner
 WORKDIR /app
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Explicit SQLite path to avoid relative-path surprises
+ENV DATABASE_URL="file:/data/prod.db"
 
-# Prisma needs these libs at runtime on Alpine
+# Prisma/Next runtime needs
 RUN apk add --no-cache libc6-compat openssl
 
-# Non-root user (you can override with --user 99:100 on Unraid)
-RUN addgroup -S app && adduser -S app -G app
+# Copy built app + node_modules + prisma
+COPY --from=builder /app ./
 
-# Make npm/npx cache writable for non-root (so `npx prisma` works)
-ENV HOME=/tmp
-ENV NPM_CONFIG_CACHE=/tmp/.npm
+# Ensure data dir exists (your Unraid volume will be mounted here)
+RUN mkdir -p /data
 
-# Copy the standalone build (requires output:'standalone' in next.config)
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/static ./.next/static
+# Copy entrypoint and run it via sh (no chmod on Windows needed)
+COPY entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["sh", "/entrypoint.sh"]
 
-# Prisma schema & migrations (used by `prisma migrate deploy`)
-COPY --from=builder /app/prisma ./prisma
+# Start your app (uses your package.json "start" script)
+CMD ["npm", "run", "start"]
 
-# Prisma engines for the client (NOT the CLI)
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-# IMPORTANT: Do NOT copy @prisma/* or .bin shim; let npx fetch full CLI
-# (copying partial trees causes missing deps like 'effect' / 'read-package-up')
-
-USER app
 EXPOSE 3000
-
-# Optional healthcheck (add /api/health in your app)
-HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD wget -qO- http://localhost:3000/api/health || exit 1
-
-# Run migrations on start (via npx), then start Next standalone server
-CMD ["sh","-c","npx prisma migrate deploy && node server.js"]

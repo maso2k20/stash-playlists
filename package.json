@@ -65,5 +65,8 @@
     "typescript": "^5",
     "read-package-up": "^11.0.0",
     "video.js": "^8.23.3"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
