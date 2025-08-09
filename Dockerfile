@@ -47,7 +47,6 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # ✅ Bake Prisma CLI into the runtime image (so we can run migrate without npx)
 RUN mkdir -p /app/node_modules/.bin
 COPY --from=builder /app/node_modules/prisma /app/node_modules/prisma
-COPY --from=builder /app/node_modules/.bin/prisma /app/node_modules/.bin/prisma
 
 USER app
 EXPOSE 3000
@@ -56,4 +55,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD wget -qO- http://localhost:3000/api/health || exit 1
 
 # Run migrations on start, then launch Next
-CMD ["sh","-c","./node_modules/.bin/prisma migrate deploy && node server.js"]
+CMD ["sh","-c","node node_modules/prisma/build/index.js migrate deploy && node server.js"]
