@@ -36,6 +36,12 @@ export async function POST(request: NextRequest) {
     let startOrder = lastItem ? lastItem.itemOrder + 1 : 0;
 
     for (const [index, item] of items.entries()) {
+      // Skip items with missing startTime or endTime
+      if (item.startTime == null || item.endTime == null) {
+        console.warn(`Skipping item with missing startTime or endTime:`, item);
+        continue;
+      }
+
       // Upsert Item
       await prisma.item.upsert({
         where: { id: item.id },

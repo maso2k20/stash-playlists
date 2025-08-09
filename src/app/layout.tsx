@@ -1,45 +1,64 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { ApolloProvider } from '../providers/ApolloProvider';
-import { SettingsProvider } from "@/app/context/SettingsContext";
-import { StashTagsProvider } from "@/context/StashTagsContext";
-import "./globals.css";
+// app/layout.tsx (Server Component)
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { AppRouterCacheProvider } from "@mui/material-nextjs/v14-appRouter";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+// If your ClientProviders already wraps Joy's CssVarsProvider + Apollo, keep it.
+import ClientProviders from "@/components/ClientProviders";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata = { title: 'Stash Playlist App' };
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Ensures client & server inject styles in the same place */}
+        <meta name="emotion-insertion-point" content="" />
+      </head>
       <body className="antialiased">
-        <ApolloProvider>
-          <SettingsProvider>
-            <StashTagsProvider>
-              <nav className="bg-gray-800 text-white p-4 flex gap-4">
-                <Link href="/">Home</Link>
-                <Link href="/playlists">Playlists</Link>
-                <Link href="/actors">Actors</Link>
-                <Link href="/actors/add">Add Actors</Link>
-              </nav>
-              {children}
-            </StashTagsProvider>
-          </SettingsProvider>
-        </ApolloProvider>
+        {/* Make sure Joy/MUI providers wrap the NAV too, so it’s styled */}
+        <AppRouterCacheProvider options={{ key: "mui", prepend: true }}>
+          <ClientProviders>
+            {/* Top bar */}
+            <NavBar />
+
+            {/* Page content */}
+            {children}
+          </ClientProviders>
+        </AppRouterCacheProvider>
       </body>
     </html>
+  );
+}
+
+/** JoyUI NavBar (Server Component) */
+import { Sheet, Button, Box } from "@mui/joy";
+
+function NavBar() {
+  return (
+    <Sheet
+      component="nav"
+      variant="solid"
+      color="neutral"
+      sx={{
+        px: 2,
+        py: 1,
+        display: "flex",
+        gap: 1,
+        alignItems: "center",
+        borderBottom: "1px solid",
+        borderColor: "neutral.outlinedBorder",
+      }}
+    >
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        <Button component={Link} href="/" variant="soft" size="sm">
+          Home
+        </Button>
+        <Button component={Link} href="/playlists" variant="soft" size="sm">
+          Playlists
+        </Button>
+        <Button component={Link} href="/actors" variant="soft" size="sm">
+          Actors
+        </Button>
+      </Box>
+    </Sheet>
   );
 }

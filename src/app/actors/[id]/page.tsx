@@ -1,41 +1,34 @@
 // src/app/actors/[id]/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, gql } from "@apollo/client";
 import { useParams } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
+import { formatLength } from "@/lib/formatLength";
 
 import {
+  Sheet,
+  Box,
+  Typography,
+  Grid,
   Card,
-  CardHeader,
-  CardContent,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
+  CardContent as JoyCardContent,
+  AspectRatio,
+  CardCover,
+  Button,
+  Chip,
+  Checkbox,
+  Autocomplete,
+  Modal,
+  ModalDialog,
   DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+  DialogContent,
+  DialogActions,
+  Skeleton,
+  Input,
+} from "@mui/joy";
 
 const GET_MARKERS_FOR_ACTOR = gql`
   query findActorsSceneMarkers($actorId: ID!, $tagID: [ID!]!) {
@@ -52,30 +45,28 @@ const GET_MARKERS_FOR_ACTOR = gql`
         end_seconds
         screenshot
         stream
-        scene {
-          id
-        }
+        scene { id }
       }
     }
   }
 `;
 
-export default function Page() {
-  const { id: actorId } = useParams();
-  const [selectedMarkers, setSelectedMarkers] = useState<string[]>([]);
+type Playlist = { id: string; name: string; type: string };
 
-  const [playlists, setPlaylists] = useState<{ id: string; name: string }[]>([]);
+export default function Page() {
+  const params = useParams<{ id: string }>();
+  const actorId = params.id;
+
+  const [selectedMarkers, setSelectedMarkers] = useState<string[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [chosenPlaylistId, setChosenPlaylistId] = useState<string>("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
-  const [playlistPopoverOpen, setPlaylistPopoverOpen] = useState(false);
 
-  const [tagFilter, setTagFilter] = useState("");
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [tagSearch, setTagSearch] = useState("");
 
   const settings = useSettings();
   const stashServer = settings["STASH_SERVER"];
@@ -83,55 +74,62 @@ export default function Page() {
 
   const { stashTags, loading: tagsLoading, error: tagsError } = useStashTags();
 
-  // Fetch playlists once
+  // Load playlists
   useEffect(() => {
-    fetch("/api/playlists")
-      .then((res) => {
+    (async () => {
+      try {
+        const res = await fetch("/api/playlists");
         if (!res.ok) throw new Error(res.statusText);
-        return res.json();
-      })
-      .then(setPlaylists)
-      .catch((err) => setPlaylistsError(err.message))
-      .finally(() => setPlaylistsLoading(false));
+        const json = await res.json();
+        setPlaylists(json ?? []);
+      } catch (e: any) {
+        setPlaylistsError(e.message ?? "Failed to load playlists");
+      } finally {
+        setPlaylistsLoading(false);
+      }
+    })();
   }, []);
 
-  // Use stashTags for query variables
-  const tagIDsForFilter = selectedTagId ? [selectedTagId] : stashTags.map((tag: any) => tag.id);
+  // Tag options
+  const tagOptions = useMemo(
+    () =>
+      (stashTags || [])
+        .filter((t: any) =>
+          tagSearch ? t.name.toLowerCase().includes(tagSearch.toLowerCase()) : true
+        )
+        .map((t: any) => ({ id: t.id as string, label: t.name as string })),
+    [stashTags, tagSearch]
+  );
+  const selectedTagOption =
+    selectedTagId ? tagOptions.find((t: any) => t.id === selectedTagId) ?? null : null;
+
+  // Query markers with either the chosen tag or all available tags
+  const tagIDsForFilter = selectedTagId
+    ? [selectedTagId]
+    : (stashTags || []).map((tag: any) => tag.id);
 
   const { data, loading, error } = useQuery(GET_MARKERS_FOR_ACTOR, {
     variables: { actorId, tagID: tagIDsForFilter },
     fetchPolicy: "cache-and-network",
   });
 
-  useEffect(() => {
-    console.log('selectedMarkers changed:', selectedMarkers);
-  }, [selectedMarkers]);
-
-  useEffect(() => {
-    if (isDialogOpen) {
-      console.log("Playlists loaded for dialog:", playlists);
-    }
-  }, [isDialogOpen, playlists]);
-
-  if (loading || tagsLoading || playlistsLoading) return <p>Loading…</p>;
-  if (error) return <p>Error loading markers: {error.message}</p>;
-  if (tagsError) return <p>Error loading tags: {tagsError}</p>;
-  if (playlistsError) return <p>Error loading playlists: {playlistsError}</p>;
-
   const scenes = data?.findSceneMarkers?.scene_markers ?? [];
 
   const toggleMarker = (markerId: string) => {
     setSelectedMarkers((prev) =>
-      prev.includes(markerId)
-        ? prev.filter((m) => m !== markerId)
-        : [...prev, markerId]
+      prev.includes(markerId) ? prev.filter((m) => m !== markerId) : [...prev, markerId]
     );
   };
+
+  const manualPlaylists = useMemo(
+    () => playlists.filter((pl) => pl.type === "MANUAL"),
+    [playlists]
+  );
 
   const confirmAdd = async () => {
     const items = selectedMarkers
       .map((mId) => {
-        const marker = scenes.find((m: { id: string; }) => m.id === mId);
+        const marker = scenes.find((m: any) => m.id === mId);
         if (!marker) return null;
         return {
           id: marker.id,
@@ -144,21 +142,13 @@ export default function Page() {
       })
       .filter(Boolean);
 
-    console.log("chosenPlaylistId:", chosenPlaylistId);
-    console.log("items to send:", items);
-
     try {
       const res = await fetch(`/api/playlists/${chosenPlaylistId}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items }),
       });
-
-      // Log the raw response and parsed result
-      console.log("fetch response:", res);
-      const result = await res.json();
-      console.log("API result:", result);
-
+      const result = await res.json().catch(() => ({}));
       if (!res.ok) {
         console.error("Add-to-playlist failed:", result);
       } else {
@@ -171,200 +161,245 @@ export default function Page() {
     }
   };
 
-  const filteredTags = stashTags.filter(
-    (tag: any) => tag.name.toLowerCase().includes(tagFilter.toLowerCase())
-  );
-
+  const anyLoading = loading || tagsLoading || playlistsLoading;
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Actions Bar */}
-      <div className="flex flex-wrap items-center gap-4">
-        {/* Tag Filter */}
-        <div className="w-full max-w-xs flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={popoverOpen}
-                  className="w-full justify-between"
-                >
-                  {stashTags.find((tag: any) => tag.id === selectedTagId)?.name || "Choose tag"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput
-                    placeholder="Search tags..."
-                    value={tagFilter}
-                    onValueChange={setTagFilter}
-                  />
-                  <CommandList>
-                    <CommandEmpty>No tags found.</CommandEmpty>
-                    <CommandGroup>
-                      {filteredTags.map((tag: any) => (
-                        <CommandItem
-                          key={tag.id}
-                          value={tag.name}
-                          onSelect={() => {
-                            setSelectedTagId(tag.id ?? null);
-                            setPopoverOpen(false);
-                          }}
-                        >
-                          {tag.name}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <Button
-              variant="ghost"
-              className="ml-2"
-              onClick={() => setSelectedTagId(null)}
-              disabled={selectedTagId === null}
-            >
-              Reset
-            </Button>
+    <Sheet sx={{ p: 2, maxWidth: 1600, mx: "auto" }}>
+      {/* Header / Actions */}
+      <Box
+        sx={{
+          display: "flex",
+          gap: 1,
+          alignItems: "center",
+          flexWrap: "wrap",
+          mb: 2,
+        }}
+      >
+        <Typography level="h2" sx={{ flexGrow: 1 }}>
+          Scenes
+        </Typography>
 
-            {/* “Add to Playlist” button + dialog */}
-            {selectedMarkers.length > 0 && (
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    Add {selectedMarkers.length} to Playlist
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Select Playlist</DialogTitle>
-                  </DialogHeader>
-                  <div className="py-4">
-                    <Popover open={playlistPopoverOpen} onOpenChange={setPlaylistPopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={playlistPopoverOpen}
-                          className="w-full justify-between"
-                        >
-                          {chosenPlaylistId
-                            ? playlists.find((pl) => pl.id === chosenPlaylistId)?.name
-                            : "Choose playlist"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        <Command>
-                          <CommandInput placeholder="Search playlists..." />
-                          <CommandList>
-                            <CommandEmpty>No playlists found.</CommandEmpty>
-                            <CommandGroup>
-                              {playlists.map((pl) => (
-                                <CommandItem
-                                  key={pl.id}
-                                  value={pl.id}
-                                  onSelect={() => {
-                                    setChosenPlaylistId(pl.id);
-                                    setPlaylistPopoverOpen(false);
-                                  }}
-                                >
-                                  {pl.name}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setIsDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      disabled={!chosenPlaylistId}
-                      onClick={confirmAdd}
-                    >
-                      Confirm
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
+        {/* Selected count */}
+        {selectedMarkers.length > 0 && (
+          <Chip color="primary" variant="solid" size="sm">
+            {selectedMarkers.length} selected
+          </Chip>
+        )}
 
-            {selectedMarkers.length > 0 && (
-              <Button
-                variant="ghost"
-                onClick={() => setSelectedMarkers([])}
-                disabled={selectedMarkers.length === 0}
-              >
-                Clear Selection
-              </Button>
-            )}
-          </div>
+        {/* Add to playlist (opens dialog) */}
+        <Button
+          size="sm"
+          disabled={selectedMarkers.length === 0}
+          onClick={() => setIsDialogOpen(true)}
+        >
+          Add to Playlist
+        </Button>
 
+        {/* Clear selection */}
+        <Button
+          size="sm"
+          variant="plain"
+          disabled={selectedMarkers.length === 0}
+          onClick={() => setSelectedMarkers([])}
+        >
+          Clear
+        </Button>
+      </Box>
 
+      {/* Filters row */}
+      <Box
+        sx={{
+          display: "flex",
+          gap: 1,
+          alignItems: "center",
+          flexWrap: "wrap",
+          mb: 2,
+        }}
+      >
+        <Autocomplete
+          placeholder="Filter by tag…"
+          options={tagOptions}
+          value={selectedTagOption}
+          onChange={(_e, val) => setSelectedTagId(val?.id ?? null)}
+          getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          size="sm"
+          sx={{ minWidth: { xs: 220, sm: 300 }, flexGrow: 1 }}
+          slotProps={{
+            input: {
+              value: tagSearch,
+              onChange: (e: any) => setTagSearch(e.target.value),
+            } as any,
+          }}
+        />
+        <Button
+          size="sm"
+          variant="plain"
+          disabled={selectedTagId === null}
+          onClick={() => {
+            setSelectedTagId(null);
+            setTagSearch("");
+          }}
+        >
+          Reset tag
+        </Button>
+      </Box>
 
-        </div>
+      {/* Loading / Errors */}
+      {anyLoading && (
+        <Grid container spacing={2}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Grid key={i} xs={12} sm={6} md={4} lg={3} xl={2}>
+              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
+                <AspectRatio ratio="16/9">
+                  <Skeleton />
+                </AspectRatio>
+                <JoyCardContent>
+                  <Skeleton variant="text" level="title-sm" />
+                  <Skeleton variant="text" level="body-sm" />
+                </JoyCardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
-      </div>
+      {!anyLoading && (error || tagsError || playlistsError) && (
+        <Typography color="danger" level="body-sm" sx={{ mb: 2 }}>
+          {error?.message || tagsError || playlistsError}
+        </Typography>
+      )}
 
+      {/* Empty state */}
+      {!anyLoading && scenes.length === 0 && (
+        <Sheet
+          variant="soft"
+          color="neutral"
+          sx={{ p: 3, borderRadius: "lg", textAlign: "center" }}
+        >
+          <Typography level="title-md">No clips found.</Typography>
+        </Sheet>
+      )}
 
       {/* Scene Cards */}
-      {scenes.length === 0 ? (
-        <p>No clips found.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {scenes.map((marker: any) => (
-            <Card
-              key={marker.id}
-              className="relative p-0 group"
-              style={{ minHeight: "320px" }}
-            >
-              <div
-                className="absolute top-2 right-2 z-10 flex items-center justify-center"
-                style={{ width: "32px", height: "32px" }}
-              >
-                <Checkbox
-                  checked={selectedMarkers.includes(marker.id)}
-                  onCheckedChange={() => toggleMarker(marker.id)}
-                  className={`transition-opacity border border-black ${selectedMarkers.includes(marker.id)
-                    ? "opacity-100 bg-white"
-                    : "opacity-0 group-hover:opacity-100 bg-gray-200"
-                    }`}
-                  style={{ width: "24px", height: "24px" }}
-                />
-              </div>
-              <CardHeader className="p-0">
-                <div
-                  className="relative"
-                  style={{ paddingBottom: "56.25%" }}
+      {!anyLoading && scenes.length > 0 && (
+        <Grid container spacing={2}>
+          {scenes.map((marker: any) => {
+            const checked = selectedMarkers.includes(marker.id);
+            return (
+              <Grid key={marker.id} xs={12} sm={6} md={4} lg={3} xl={2}>
+                <Card
+                  sx={{
+                    p: 0,
+                    overflow: "hidden",
+                    borderRadius: "lg",
+                    position: "relative",
+                    boxShadow: "sm",
+                    transition: "transform 150ms ease, box-shadow 150ms ease",
+                    "&:hover": { transform: "translateY(-2px)", boxShadow: "md" },
+                  }}
                 >
-                  <img
-                    src={marker.screenshot}
-                    alt={marker.title}
-                    className="absolute inset-0 w-full h-full object-cover rounded-t"
-                  />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CardTitle className="text-lg mb-1">
-                  {marker.title}
-                </CardTitle>
-                <p className="text-sm text-gray-500">
-                  {marker.seconds}s – {marker.end_seconds}s
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <AspectRatio ratio="16/9">
+                    {/* Screenshot */}
+                    <CardCover>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={marker.screenshot}
+                        alt={marker.title}
+                        loading="lazy"
+                        style={{ objectFit: "cover" }}
+                      />
+                    </CardCover>
+
+                    {/* Checkbox (top-right) */}
+                    <Box sx={{ position: "absolute", top: 8, right: 8 }}>
+                      <Checkbox
+                        checked={checked}
+                        onChange={() => toggleMarker(marker.id)}
+                        size="sm"
+                        variant="soft"
+                      />
+                    </Box>
+
+                    {/* Bottom gradient + title/time */}
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        px: 1,
+                        py: 0.75,
+                        background:
+                          "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 80%)",
+                      }}
+                    >
+                      <Typography
+                        level="title-sm"
+                        sx={{
+                          color: "#fff",
+                          textShadow: "0 1px 2px rgba(0,0,0,0.6)",
+                          overflow: "hidden",
+                          whiteSpace: "nowrap",
+                          textOverflow: "ellipsis",
+                        }}
+                        title={marker.title}
+                      >
+                        {marker.title}
+                      </Typography>
+                      <Typography level="body-xs" sx={{ color: "#fff" }}>
+                        {formatLength(marker.end_seconds - marker.seconds)}
+                      </Typography>
+                    </Box>
+                  </AspectRatio>
+
+                  {/* Extra content area if you want later */}
+                  {/* <JoyCardContent>…</JoyCardContent> */}
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
       )}
-    </div>
+
+      {/* Add to Playlist Dialog */}
+      <Modal open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
+        <ModalDialog sx={{ minWidth: 360 }}>
+          <DialogTitle>Select Playlist</DialogTitle>
+          <DialogContent>
+            <Typography level="body-sm" sx={{ mb: 1 }}>
+              Choose a manual playlist to add {selectedMarkers.length} item
+              {selectedMarkers.length === 1 ? "" : "s"}.
+            </Typography>
+
+            <Autocomplete
+              placeholder="Choose playlist…"
+              options={manualPlaylists.map((pl) => ({ id: pl.id, label: pl.name }))}
+              value={
+                chosenPlaylistId
+                  ? {
+                      id: chosenPlaylistId,
+                      label: manualPlaylists.find((p) => p.id === chosenPlaylistId)?.name ?? "",
+                    }
+                  : null
+              }
+              onChange={(_e, val) => setChosenPlaylistId(val?.id ?? "")}
+              getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              size="sm"
+              sx={{ width: "100%", mt: 1 }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button variant="plain" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={!chosenPlaylistId} onClick={confirmAdd}>
+              Confirm
+            </Button>
+          </DialogActions>
+        </ModalDialog>
+      </Modal>
+    </Sheet>
   );
 }

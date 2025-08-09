@@ -1,15 +1,32 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder';
-import { useStashTags } from '@/context/StashTagsContext';
 import { gql, useLazyQuery } from '@apollo/client';
 
-// GraphQL query to fetch matching scene markers based on rules
+import Sheet from '@mui/joy/Sheet';
+import Grid from '@mui/joy/Grid';
+import Box from '@mui/joy/Box';
+import Stack from '@mui/joy/Stack';
+import Card from '@mui/joy/Card';
+import CardContent from '@mui/joy/CardContent';
+import CardActions from '@mui/joy/CardActions';
+import Typography from '@mui/joy/Typography';
+import Divider from '@mui/joy/Divider';
+import FormControl from '@mui/joy/FormControl';
+import FormLabel from '@mui/joy/FormLabel';
+import Input from '@mui/joy/Input';
+import Textarea from '@mui/joy/Textarea';
+import Button from '@mui/joy/Button';
+import Chip from '@mui/joy/Chip';
+import Alert from '@mui/joy/Alert';
+import LinearProgress from '@mui/joy/LinearProgress';
+import { formatLength } from "@/lib/formatLength";
+
+import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder'; 
+import { useSettings } from '@/app/context/SettingsContext';
+import { useStashTags } from '@/context/StashTagsContext';
+
 const SMART_PLAYLIST_BUILDER = gql`
   query smartPlaylistBuilder($actorId: [ID!], $tagID: [ID!]!) {
     findSceneMarkers(
@@ -26,10 +43,13 @@ const SMART_PLAYLIST_BUILDER = gql`
         seconds
         screenshot
         stream
+        scene { id }
       }
     }
   }
 `;
+
+type Rules = { actorIds: string[]; tagIds: string[] };
 
 export default function EditAutomaticPlaylistPage() {
   const { id } = useParams();
@@ -38,78 +58,76 @@ export default function EditAutomaticPlaylistPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [rules, setRules] = useState<{ actorIds: string[]; tagIds: string[] }>({
-    actorIds: [],
-    tagIds: []
-  });
+  const [rules, setRules] = useState<Rules>({ actorIds: [], tagIds: [] });
 
-  // Apollo lazy query for preview
+  const settings = useSettings();
+  const stashServer = settings['STASH_SERVER'];
+  const stashAPI = settings['STASH_API'];
+
   const [fetchMarkers, { data: previewData, loading: previewLoading, error: previewError }] =
     useLazyQuery(SMART_PLAYLIST_BUILDER);
 
-  // Fetch playlist details (including saved conditions JSON)
   useEffect(() => {
-    async function fetchPlaylist() {
+    let cancelled = false;
+    (async () => {
       setLoading(true);
-      const res = await fetch(`/api/playlists/${id}`);
-      if (res.ok) {
+      try {
+        const res = await fetch(`/api/playlists/${id}`);
+        if (!res.ok) throw new Error('Failed to load playlist');
         const playlist = await res.json();
+        if (cancelled) return;
+
         setName(playlist.name || '');
         setDescription(playlist.description || '');
-        try {
-          const cond = playlist.conditions ? JSON.parse(playlist.conditions) : {};
-          setRules({
-            actorIds: Array.isArray(cond.actorIds) ? cond.actorIds : [],
-            tagIds:   Array.isArray(cond.tagIds)   ? cond.tagIds   : []
-          });
-        } catch (e) {
-          console.error('Invalid conditions JSON', e);
+        let cond: any = {};
+        if (playlist.conditions && typeof playlist.conditions === 'object') {
+          cond = playlist.conditions;
+        } else if (typeof playlist.conditions === 'string') {
+          try {
+            cond = JSON.parse(playlist.conditions);
+          } catch (e) {
+            console.warn('Failed to parse conditions string:', e);
+          }
         }
-      } else {
-        console.error('Failed to load playlist');
+        setRules({
+          actorIds: Array.isArray(cond.actorIds) ? cond.actorIds.map(String) : [],
+          tagIds: Array.isArray(cond.tagIds) ? cond.tagIds.map(String) : [],
+        });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
-    }
-    fetchPlaylist();
+    })();
+    return () => { cancelled = true; };
   }, [id]);
 
-  // Tags from context
   const { stashTags: tags, loading: tagsLoading, error: tagsError } = useStashTags();
 
-  // Trigger preview query when rules change
   useEffect(() => {
     fetchMarkers({ variables: { actorId: rules.actorIds, tagID: rules.tagIds } });
   }, [rules, fetchMarkers]);
 
-  // Save updated name/description/conditions
+  const markers = useMemo(
+    () => previewData?.findSceneMarkers.scene_markers ?? [],
+    [previewData]
+  );
+
   async function handleSave() {
     setLoading(true);
-    const body = {
-      name,
-      description,
-      conditions: JSON.stringify(rules)
-    };
-    console.debug('Debug Save Payload:', body);
-
-    const res = await fetch(`/api/playlists/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-      setLoading(false);
-      alert('Failed to save playlist metadata.');
-      return;
-    }
-
-    // Clear existing playlist items
     try {
-      // Fetch current items
+      const res = await fetch(`/api/playlists/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, conditions: rules }),
+      });
+      if (!res.ok) throw new Error('Failed to save playlist metadata.');
+
+      // Clear items
       const existingRes = await fetch(`/api/playlists/${id}/items`);
       if (existingRes.ok) {
         const existingData = await existingRes.json();
-        const existingItems = existingData.items || [];
-        for (const it of existingItems) {
+        for (const it of (existingData.items || [])) {
           await fetch(`/api/playlists/${id}/items`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
@@ -117,102 +135,193 @@ export default function EditAutomaticPlaylistPage() {
           });
         }
       }
-    } catch (clearErr) {
-      console.error('Error clearing existing items:', clearErr);
-    }
-    
-    // Upsert matching items into playlist
-    try {
-      const itemsPayload = markers.map((m: { id: any; title: any; seconds: any; end_seconds: any; screenshot: any; stream: any; }) => ({
+
+      // Upsert items
+      const itemsPayload = markers.map((m: any) => ({
         id: m.id,
         title: m.title,
         startTime: m.seconds,
         endTime: m.end_seconds,
         screenshot: m.screenshot,
-        stream: m.stream
+        stream: `${stashServer}/scene/${m.scene.id}/stream?api_key=${stashAPI}`,
       }));
-      console.debug('Upserting items:', itemsPayload);
-      const itemsRes = await fetch(`/api/playlists/${id}/items`, {
+      await fetch(`/api/playlists/${id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsPayload })
+        body: JSON.stringify({ items: itemsPayload }),
       });
-      if (!itemsRes.ok) console.error('Failed to upsert playlist items');
-    } catch (e) {
-      console.error('Error upserting items:', e);
-    }
 
-    setLoading(false);
-    router.push('/playlists');
-    
+      router.push('/playlists');
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || 'Failed to save playlist.');
+      setLoading(false);
+    }
   }
 
-  const markers = previewData?.findSceneMarkers.scene_markers || [];
-
   return (
-    <div className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Edit Automatic Playlist</h1>
+    <Sheet
+      variant="outlined"
+      sx={{
+        
+        mx: 'auto',
+        my: 4,
+        p: { xs: 2, sm: 3, md: 4 },
+        borderRadius: 'lg',
+        bgcolor: 'background.body',
+      }}
+    >
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box>
+          <Typography level="h3">Edit Automatic Playlist</Typography>
+          <Typography level="body-sm" color="neutral">
+            Define rules, preview matches, and save to update the playlist.
+          </Typography>
+        </Box>
+        <Chip size="lg" variant="soft" color="primary">
+          {previewLoading ? 'Loading…' : `${markers.length} match${markers.length === 1 ? '' : 'es'}`}
+        </Chip>
+      </Stack>
 
-      {/* Name Section */}
-      <div className="mb-6">
-        <Label htmlFor="playlist-name" className="block mb-1">Name</Label>
-        <Input
-          id="playlist-name"
-          placeholder="Playlist name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          disabled={loading}
-        />
-      </div>
+      {(loading || previewLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
 
-      {/* Description Section */}
-      <div className="mb-6">
-        <Label htmlFor="playlist-description" className="block mb-1">Description</Label>
-        <Input
-          id="playlist-description"
-          placeholder="Playlist description"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          disabled={loading}
-        />
-      </div>
+      {/* 3-column layout */}
+      <Grid container spacing={2}>
+        {/* Left: Details */}
+        <Grid xs={12} md={4}>
+          <Card variant="outlined" sx={{ height: 300 }}>
+            <CardContent>
+              <Typography level="title-lg" mb={1}>Details</Typography>
+              <Stack spacing={2}>
+                <FormControl>
+                  <FormLabel>Name</FormLabel>
+                  <Input
+                    placeholder="Playlist name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={loading}
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>Description</FormLabel>
+                  <Textarea
+                    minRows={5}
+                    placeholder="Playlist description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={loading}
+                  />
+                </FormControl>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
 
-      {/* Rules Section */}
-      <div className="mb-6">
-        <Label className="block mb-1">Rules</Label>
-        {tagsLoading ? (
-          <p>Loading tags...</p>
-        ) : tagsError ? (
-          <p className="text-red-500">Failed to load tags</p>
-        ) : (
-          <div className="h-140 overflow-auto border rounded-lg p-2">
-            <SmartPlaylistRuleBuilder
-              tags={tags.map((t: { id: any; name: any; }) => ({ id: t.id, label: t.name }))}
-              onChange={setRules}
-              initialRules={rules}
-            />
-          </div>
-        )}
-      </div>
+        {/* Middle: Rules */}
+        <Grid xs={12} md={4}>
+          <Card variant="outlined" sx={{ height: 300 }}>
+            <CardContent>
+              <Typography level="title-lg" mb={1}>Rules</Typography>
+              {tagsLoading && <LinearProgress thickness={2} />}
+              {tagsError && (
+                <Alert color="danger" variant="soft" sx={{ mt: 1 }}>
+                  Failed to load tags.
+                </Alert>
+              )}
+              {!tagsLoading && !tagsError && (
+                <Box sx={{ mt: 1, }}>
+                  <SmartPlaylistRuleBuilder
+                    tags={tags.map((t: { id: string; name: string }) => ({ id: t.id, label: t.name }))}
+                    onChange={setRules}
+                    initialRules={rules}
+                  />
+                </Box>
+              )}
+            </CardContent>
 
-      {/* Preview Section */}
-      <div className="mb-6">
-        <Label className="block mb-1">Preview Matches</Label>
-        {previewLoading ? (
-          <p>Loading preview...</p>
-        ) : previewError ? (
-          <p className="text-red-500">Failed to load preview</p>
-        ) : (
-          <p>{markers.length} scene marker{markers.length === 1 ? '' : 's'} match these rules.</p>
-        )}
-      </div>
+            <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 2 }}>
+              <Button
+                size="lg"
+                color="primary"
+                onClick={handleSave}
+                disabled={loading || !name}
+              >
+                {loading ? 'Saving…' : 'Save'}
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
 
-      {/* Save Button */}
-      <div className="text-right">
-        <Button onClick={handleSave} disabled={loading || !name}>
-          {loading ? 'Saving...' : 'Save'}
-        </Button>
-      </div>
-    </div>
+        {/* Right: Preview */}
+        <Grid xs={12} md={4}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography level="title-lg" mb={1}>Preview Matches</Typography>
+              {previewError && (
+                <Alert color="danger" variant="soft" sx={{ mb: 1 }}>
+                  Failed to load preview.
+                </Alert>
+              )}
+              {!previewError && (
+                <Stack spacing={1}>
+                  <Typography level="body-sm" color="neutral">
+                    {markers.length} scene marker{markers.length === 1 ? '' : 's'} match these rules.
+                  </Typography>
+                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ maxHeight: 900, overflow: 'auto', pr: 0.5 }}>
+                    {markers.length === 0 ? (
+                      <Typography level="body-sm" color="neutral">
+                        No matches yet. Adjust your rules to see results.
+                      </Typography>
+                    ) : (
+                      <Stack spacing={1}>
+                        {markers.slice(0, 50).map((m: any) => (
+                          <Sheet
+                            key={m.id}
+                            variant="soft"
+                            sx={{
+                              p: 1,
+                              borderRadius: 'md',
+                              display: 'grid',
+                              gridTemplateColumns: '80px 1fr',
+                              gap: 1,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Box sx={{ width: 80, height: 45, borderRadius: 'sm', overflow: 'hidden', bgcolor: 'neutral.softBg' }}>
+                              {m.screenshot ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={m.screenshot}
+                                  alt={m.title ?? 'marker'}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                              ) : <Box sx={{ width: '100%', height: '100%' }} />}
+                            </Box>
+                            <Box>
+                              <Typography level="body-md" sx={{ fontWeight: 600 }}>
+                                {m.title || 'Untitled marker'}
+                              </Typography>
+                              <Typography level="body-sm" color="neutral">
+                                {formatLength(m.end_seconds - m.seconds)}
+                              </Typography>
+                            </Box>
+                          </Sheet>
+                        ))}
+                        {markers.length > 50 && (
+                          <Typography level="body-sm" color="neutral">
+                            Showing 50 of {markers.length} results…
+                          </Typography>
+                        )}
+                      </Stack>
+                    )}
+                  </Box>
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Sheet>
   );
 }

@@ -1,16 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from '@/components/ui/command';
-import { cn } from '@/lib/utils';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Box from '@mui/joy/Box';
+import Typography from '@mui/joy/Typography';
+import Chip from '@mui/joy/Chip';
+import Autocomplete from '@mui/joy/Autocomplete';
+import Grid from '@mui/joy/Grid';
 
-// Types
 interface Actor {
   id: string;
   name: string;
@@ -25,148 +19,177 @@ interface SmartPlaylistRuleBuilderProps {
   initialRules?: { actorIds: string[]; tagIds: string[] };
 }
 
-export default function SmartPlaylistRuleBuilder({ tags = [], onChange, initialRules }: SmartPlaylistRuleBuilderProps) {
+function normalizeActors(data: any): Actor[] {
+  if (Array.isArray(data)) return data as Actor[];
+  if (Array.isArray(data?.actors)) return data.actors as Actor[];
+  if (Array.isArray(data?.data?.actors)) return data.data.actors as Actor[];
+  if (Array.isArray(data?.performers)) {
+    return (data.performers as any[]).map((p) => ({ id: String(p.id), name: p.name })) as Actor[];
+  }
+  console.warn('[SPRB] normalize: unknown actors payload shape', data);
+  return [];
+}
+
+function initializeSelections(
+  initialRules: { actorIds: string[]; tagIds: string[] } | undefined,
+  actors: Actor[],
+  tags: Tag[],
+  setSelectedActors: React.Dispatch<React.SetStateAction<Actor[]>>,
+  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>,
+) {
+  if (!initialRules) return;
+
+  const actorIds = (initialRules.actorIds ?? []).map(String);
+  const tagIds = (initialRules.tagIds ?? []).map(String);
+
+  if (actors.length) {
+    const presetActors = actors.filter((a) => actorIds.includes(String(a.id)));
+    setSelectedActors(presetActors);
+  }
+  if (tags.length) {
+    const presetTags = tags.filter((t) => tagIds.includes(String(t.id)));
+    setSelectedTags(presetTags);
+  }
+}
+
+export default function SmartPlaylistRuleBuilder({
+  tags = [],
+  onChange,
+  initialRules,
+}: SmartPlaylistRuleBuilderProps) {
   const [actors, setActors] = useState<Actor[]>([]);
-  const [actorQuery, setActorQuery] = useState('');
   const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
-  const [tagQuery, setTagQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  // Fetch actors and sort
+  // Track whether we've applied the initial selections
+  const hasInitializedRef = useRef(false);
+
+  // If initialRules actually changes (different IDs), allow re-initialization
+  const initKey = useMemo(() => {
+    const a = (initialRules?.actorIds ?? []).map(String).join(',');
+    const t = (initialRules?.tagIds ?? []).map(String).join(',');
+    return `${a}|${t}`;
+  }, [initialRules]);
+  const lastInitKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    async function fetchActors() {
+    if (lastInitKeyRef.current !== initKey) {
+      lastInitKeyRef.current = initKey;
+      hasInitializedRef.current = false; // allow a fresh initialise next time inputs are ready
+    }
+  }, [initKey]);
+
+  // Load actors
+  useEffect(() => {
+    (async () => {
       try {
         const res = await fetch('/api/actors');
-        const data: Actor[] = await res.json();
-        setActors((data || []).sort((a, b) => a.name.localeCompare(b.name)));
+        const raw = await res.text();
+        if (!res.ok) {
+          console.error('[SPRB] /api/actors failed:', res.status);
+          return;
+        }
+        let json: any;
+        try {
+          json = JSON.parse(raw);
+        } catch (e) {
+          console.error('[SPRB] JSON parse error for /api/actors:', e);
+          return;
+        }
+        const normalized = normalizeActors(json);
+        setActors(normalized);
       } catch (err) {
-        console.error('Error loading actors:', err);
+        console.error('[SPRB] fetch /api/actors error:', err);
       }
-    }
-    fetchActors();
+    })();
   }, []);
 
-  // Initialize selections
+  // Initialise selections ONCE when actors + tags + initialRules are all ready.
   useEffect(() => {
-    if (initialRules) {
-      if (initialRules.actorIds?.length && actors.length && selectedActors.length === 0) {
-        setSelectedActors(actors.filter(a => initialRules.actorIds.includes(a.id)));
-      }
-      if (initialRules.tagIds?.length && tags.length && selectedTags.length === 0) {
-        setSelectedTags(tags.filter(t => initialRules.tagIds.includes(t.id)));
-      }
-    }
-  }, [initialRules, actors, tags, selectedActors.length, selectedTags.length]);
+    if (hasInitializedRef.current) return;
+    if (!initialRules) return;            // nothing to initialise
+    if (!actors.length) return;           // wait for actors
+    if (!tags.length) return;             // wait for tags
 
-  // Notify parent
+    initializeSelections(initialRules, actors, tags, setSelectedActors, setSelectedTags);
+    hasInitializedRef.current = true;
+  }, [initialRules, actors, tags]);
+
+  // Stable onChange via ref
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange({
-      actorIds: selectedActors.map(a => a.id),
-      tagIds: selectedTags.map(t => t.id),
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  // Bubble up when selections change.
+  useEffect(() => {
+    // If we're supposed to prefill from initialRules, avoid emitting
+    // an early "empty" change until after init is applied.
+    const shouldBubble = hasInitializedRef.current || !initialRules;
+    if (!shouldBubble) return;
+
+    onChangeRef.current({
+      actorIds: selectedActors.map((a) => String(a.id)),
+      tagIds: selectedTags.map((t) => String(t.id)),
     });
-  }, [selectedActors, selectedTags, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedActors, selectedTags]);
 
-  const filteredActors = actorQuery
-    ? actors.filter(a => a.name.toLowerCase().includes(actorQuery.toLowerCase()))
-    : actors;
-  const filteredTags = tagQuery
-    ? tags.filter(t => t.label.toLowerCase().includes(tagQuery.toLowerCase()))
-    : tags;
-
-  const toggleActor = (actor: Actor) =>
-    setSelectedActors(prev =>
-      prev.some(a => a.id === actor.id) ? prev.filter(a => a.id !== actor.id) : [...prev, actor]
-    );
-  const toggleTag = (tag: Tag) =>
-    setSelectedTags(prev =>
-      prev.some(t => t.id === tag.id) ? prev.filter(t => t.id !== tag.id) : [...prev, tag]
-    );
+  const sortedActors = useMemo(
+    () => [...actors].sort((a, b) => a.name.localeCompare(b.name)),
+    [actors]
+  );
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full min-h-0">
-      {/* Actors Column */}
-      <div className="flex flex-col h-full min-h-0">
-        <label className="block mb-2 font-medium">Actors</label>
-        <Command className="border rounded-lg flex flex-col h-full min-h-0">
-          <CommandInput
+    <Grid container spacing={3} sx={{ width: '100%' }}>
+      <Grid xs={12} md={6}>
+        <Box>
+          <Typography level="title-md" mb={1}>Actors</Typography>
+          <Autocomplete
+            multiple
+            options={sortedActors}
+            value={selectedActors}
+            isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
+            getOptionLabel={(opt) => opt.name}
+            onChange={(_, value) => setSelectedActors(value)}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => {
+                const { key, ...tagProps } = getTagProps({ index });
+                return (
+                  <Chip key={`${option.id}-${index}`} {...tagProps}>
+                    {option.name}
+                  </Chip>
+                );
+              })
+            }
             placeholder="Search actors..."
-            value={actorQuery}
-            onValueChange={setActorQuery}
           />
-          <CommandList className="flex-1 overflow-auto min-h-0">
-            <CommandEmpty>No actors found.</CommandEmpty>
-            <CommandGroup>
-              {filteredActors.map(actor => (
-                <CommandItem
-                  key={actor.id}
-                  onSelect={() => toggleActor(actor)}
-                  className={cn(
-                    'cursor-pointer',
-                    selectedActors.some(a => a.id === actor.id) && 'font-semibold'
-                  )}
-                >
-                  {actor.name}
-                  {selectedActors.some(a => a.id === actor.id) && <span className="ml-auto">✓</span>}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-        <div className="mt-2 flex flex-wrap gap-2 overflow-auto p-1">
-          {selectedActors.map(actor => (
-            <Button
-              key={actor.id}
-              size="sm"
-              variant="outline"
-              onClick={() => toggleActor(actor)}
-            >
-              {actor.name} ✕
-            </Button>
-          ))}
-        </div>
-      </div>
+        </Box>
+      </Grid>
 
-      {/* Tags Column */}
-      <div className="flex flex-col h-full">
-        <label className="block mb-2 font-medium">Tags</label>
-        <Command className="border rounded-lg flex flex-col">
-          <CommandInput
+      <Grid xs={12} md={6}>
+        <Box>
+          <Typography level="title-md" mb={1}>Tags</Typography>
+          <Autocomplete<Tag, true, false, false>
+            multiple
+            options={tags}
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
+            value={selectedTags}
+            onChange={(_, newValue) => setSelectedTags(newValue)}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => {
+                const { key, ...tagProps } = getTagProps({ index });
+                return (
+                  <Chip key={`${option.id}-${index}`} {...tagProps}>
+                    {option.label}
+                  </Chip>
+                );
+              })
+            }
             placeholder="Search tags..."
-            value={tagQuery}
-            onValueChange={setTagQuery}
           />
-          <CommandList className="flex-1 overflow-auto">
-            <CommandEmpty>No tags found.</CommandEmpty>
-            <CommandGroup>
-              {filteredTags.map(tag => (
-                <CommandItem
-                  key={tag.id}
-                  onSelect={() => toggleTag(tag)}
-                  className={cn(
-                    'cursor-pointer',
-                    selectedTags.some(t => t.id === tag.id) && 'font-semibold'
-                  )}
-                >
-                  {tag.label}
-                  {selectedTags.some(t => t.id === tag.id) && <span className="ml-auto">✓</span>}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-        <div className="mt-2 flex flex-wrap gap-2 overflow-auto p-1">
-          {selectedTags.map(tag => (
-            <Button
-              key={tag.id}
-              size="sm"
-              variant="outline"
-              onClick={() => toggleTag(tag)}
-            >
-              {tag.label} ✕
-            </Button>
-          ))}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Grid>
+    </Grid>
   );
 }

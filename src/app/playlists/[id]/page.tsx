@@ -1,12 +1,12 @@
-"use client";
-
+'use client'
+import * as React from 'react';
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { Grid, Container, Sheet, Box } from '@mui/joy';
 import VideoJS from "@/components/videojs/VideoJS";
-import { Card, CardContent } from "@/components/ui/card";
-import { formatLength } from "@/lib/formatLength";
+import { PlaylistDetail } from '@/components/PlaylistDetail';
 
-type Scene = {
+type PlaylistItem = {
   id: string;
   item: {
     stream: string;
@@ -19,71 +19,18 @@ type Scene = {
 
 type Playlist = {
   name: string;
-  items: Scene[];
+  items: PlaylistItem[];
 };
 
-function PlaylistItem({
-  scene,
-  index,
-  isActive,
-  onClick,
-}: {
-  scene: Scene;
-  index: number;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  const style = {
-    cursor: "pointer",
-    background: isActive ? "var(--shadcn-background-active)" : undefined,
-  };
-
-  return (
-    <Card
-      style={style}
-      className="mb-2"
-      onClick={onClick}
-    >
-      <CardContent>
-        <div className="flex flex-row items-center w-full space-x-4 p-0">
-          <div className="w-32 aspect-video flex-shrink-0">
-            <img
-              src={scene.item.screenshot}
-              alt={scene.item.title}
-              className="object-cover w-full h-full rounded-md"
-            />
-          </div>
-
-          <CardContent className="flex-1 p-0">
-            <strong>{scene.item.title}</strong>
-            <p className="text-sm text-muted-foreground">
-              {formatLength(scene.item.endTime - scene.item.startTime)}
-            </p>
-          </CardContent>
-
-        </div>
-
-
-      </CardContent>
-    </Card>
-  );
-}
-
-function shuffleArray<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-export default function PlaylistDetailPage() {
+export default function PlaylistPlayer() {
   const { id } = useParams();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0); // index within playOrder
   const [isMuted, setIsMuted] = useState(true);
   const [hasStarted, setHasStarted] = useState(false);
+
+  // NEW: order of indices into `items` used for playback (so shuffle affects play)
+  const [playOrder, setPlayOrder] = useState<number[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
@@ -95,13 +42,18 @@ export default function PlaylistDetailPage() {
       .then((data) => setPlaylist(data));
   }, [id]);
 
-  // Reset index on new playlist
+  const items = playlist?.items ?? [];
+
+  // Reset index/order when items change
   useEffect(() => {
+    setPlayOrder(items.map((_, i) => i));
     setCurrentIndex(0);
     setHasStarted(false);
-  }, [playlist]);
+  }, [items.length]);
 
-  const items = playlist?.items ?? [];
+  // Current item derived from playOrder
+  const currentItemIndex = playOrder[currentIndex] ?? 0;
+  const currentItem = items[currentItemIndex];
 
   const videoJsOptions = {
     autoplay: false,
@@ -110,15 +62,9 @@ export default function PlaylistDetailPage() {
     fluid: false,
     width: 1920,
     height: 1080,
-    sources:
-      items.length > 0
-        ? [
-          {
-            src: items[currentIndex].item.stream,
-            type: "video/mp4",
-          },
-        ]
-        : [],
+    sources: currentItem
+      ? [{ src: currentItem.item.stream, type: "video/mp4" }]
+      : [],
   };
 
   const handlePlayerReady = (player: any) => {
@@ -136,83 +82,68 @@ export default function PlaylistDetailPage() {
 
   if (!playlist) return <div>Loading...</div>;
 
-  const offset = items.length
+  const offset = currentItem
     ? {
-      start: items[currentIndex].item.startTime,
-      end: items[currentIndex].item.endTime,
-      restart_beginning: false,
-    }
+        start: currentItem.item.startTime,
+        end: currentItem.item.endTime,
+        restart_beginning: false,
+      }
     : undefined;
 
   return (
-    <div className="p-4 pt-10 h-[80vh] flex gap-8">
-      {/* Left: Video Player */}
-      <div className="flex-1 flex flex-col items-center">
-        <div className="video-wrapper">
-          <VideoJS
-            options={videoJsOptions}
-            offset={offset}
-            onReady={handlePlayerReady}
-            hasStarted={hasStarted}
-            onEnded={() => {
-              setHasStarted(true);
-              if (currentIndex < items.length - 1) {
-                setCurrentIndex((i) => i + 1);
-              }
+    <Container maxWidth={false} sx={{ py: 2, px: { xs: 1.5, sm: 2, lg: 3 } }}>
+      <Grid container spacing={2} sx={{ flexGrow: 1 }}>
+        <Grid xs={9} sx={{ display: 'flex' }}>
+          <Sheet
+            variant="plain"
+            sx={{
+              p: 0,
+              borderRadius: 0,
+              bgcolor: 'transparent',
+              width: '100%',
+              maxWidth: 1920,
+              mx: 'auto',
             }}
-          />
-          <video ref={videoRef} className="hidden" />
-        </div>
+          >
+            <Box
+              sx={{
+                width: '100%',
+                '& .video-js': { width: '100%', height: 'auto', borderRadius: 0, overflow: 'visible' },
+                '& .vjs-control-bar': { bottom: 0 },
+              }}
+            >
+              <VideoJS
+                options={{ ...videoJsOptions, fluid: true, aspectRatio: '16:9' }}
+                offset={offset}
+                onReady={handlePlayerReady}
+                hasStarted={hasStarted}
+                onEnded={() => {
+                  setHasStarted(true);
+                  if (currentIndex < playOrder.length - 1) setCurrentIndex(i => i + 1);
+                }}
+              />
+            </Box>
+          </Sheet>
+        </Grid>
 
-        <div className="flex gap-4 mt-4">
-          <button
-            className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-            onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
-            disabled={currentIndex === 0}
-          >
-            Previous
-          </button>
-          <button
-            className="px-4 py-2 bg-gray-300 rounded disabled:opacity-50"
-            onClick={() =>
-              setCurrentIndex((i) => Math.min(i + 1, items.length - 1))
-            }
-            disabled={currentIndex === items.length - 1}
-          >
-            Next
-          </button>
-          <button
-            className="px-4 py-2 bg-gray-300 rounded"
-            onClick={() => setIsMuted((m) => !m)}
-          >
-            {isMuted ? "Unmute" : "Mute"}
-          </button>
-        </div>
-      </div>
-
-      {/* Right: Static Playlist */}
-      <aside className="w-104 bg-background rounded-lg p-2 overflow-y-auto h-full">
-        <h2 className="text-xl font-semibold mb-4">{playlist.name}</h2>
-        <button
-          className="mb-4 px-4 py-2 bg-blue-500 text-white rounded"
-          onClick={() => {
-            const shuffled = shuffleArray(items);
-            setPlaylist({ ...playlist, items: shuffled });
-            setCurrentIndex(0); // Optionally start at the first shuffled item
-          }}
-        >
-          Shuffle
-        </button>
-        {items.map((scene, idx) => (
-          <PlaylistItem
-            key={scene.id}
-            scene={scene}
-            index={idx}
-            isActive={idx === currentIndex}
-            onClick={() => setCurrentIndex(idx)}
+        <Grid xs={3} sx={{ minHeight: 0, display: 'flex' }}>
+          <PlaylistDetail
+            title={playlist?.name}
+            showCounts
+            items={items}
+            // 👇 pass/consume play order so shuffle affects playback
+            playOrder={playOrder}
+            onOrderChange={(order) => {
+              setPlayOrder(order);
+              setCurrentIndex(0); // start from first in the new order
+            }}
+            currentIndex={currentIndex}
+            setCurrentIndex={setCurrentIndex} // interpreted as index within playOrder
+            onDoubleClickPlay={(i) => setCurrentIndex(i)}
+            // onRemoveItem={(id) => {/* DELETE /api/playlists/:id/items with { itemId: id } */}}
           />
-        ))}
-      </aside>
-    </div>
+        </Grid>
+      </Grid>
+    </Container>
   );
 }
