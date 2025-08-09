@@ -1,6 +1,7 @@
 # -------- deps
 FROM node:20-alpine AS deps
 WORKDIR /app
+# Needed for Prisma on Alpine
 RUN apk add --no-cache libc6-compat openssl
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 RUN \
@@ -26,33 +27,35 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Prisma needs these at runtime on Alpine
+# Prisma needs these libs at runtime on Alpine
 RUN apk add --no-cache libc6-compat openssl
 
 # Non-root user (you can override with --user 99:100 on Unraid)
 RUN addgroup -S app && adduser -S app -G app
+
+# Make npm/npx cache writable for non-root (so `npx prisma` works)
+ENV HOME=/tmp
+ENV NPM_CONFIG_CACHE=/tmp/.npm
 
 # Copy the standalone build (requires output:'standalone' in next.config)
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/static ./.next/static
 
-# Prisma schema & migrations (db is NOT here; it's wherever your DATABASE_URL points)
+# Prisma schema & migrations (used by `prisma migrate deploy`)
 COPY --from=builder /app/prisma ./prisma
 
-# Prisma engines (client already references these)
+# Prisma engines for the client (NOT the CLI)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-# ✅ Bake Prisma CLI into the runtime image (so we can run migrate without npx)
-RUN mkdir -p /app/node_modules/.bin
-COPY --from=builder /app/node_modules/prisma /app/node_modules/prisma
+# IMPORTANT: Do NOT copy @prisma/* or .bin shim; let npx fetch full CLI
+# (copying partial trees causes missing deps like 'effect' / 'read-package-up')
 
 USER app
 EXPOSE 3000
 
-# Healthcheck (optional)
+# Optional healthcheck (add /api/health in your app)
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 CMD wget -qO- http://localhost:3000/api/health || exit 1
 
-# Run migrations on start, then launch Next
-CMD ["sh","-c","node node_modules/prisma/build/index.js migrate deploy && node server.js"]
+# Run migrations on start (via npx), then start Next standalone server
+CMD ["sh","-c","npx prisma migrate deploy && node server.js"]
