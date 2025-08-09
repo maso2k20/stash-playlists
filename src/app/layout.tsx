@@ -2,25 +2,19 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v14-appRouter";
-
-// If your ClientProviders already wraps Joy's CssVarsProvider + Apollo, keep it.
 import ClientProviders from "@/components/ClientProviders";
+import { Sheet, Button, Box } from "@mui/joy";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Ensures client & server inject styles in the same place */}
         <meta name="emotion-insertion-point" content="" />
       </head>
       <body className="antialiased">
-        {/* Make sure Joy/MUI providers wrap the NAV too, so it’s styled */}
         <AppRouterCacheProvider options={{ key: "mui", prepend: true }}>
           <ClientProviders>
-            {/* Top bar */}
             <NavBar />
-
-            {/* Page content */}
             {children}
           </ClientProviders>
         </AppRouterCacheProvider>
@@ -28,9 +22,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-
-/** JoyUI NavBar (Server Component) */
-import { Sheet, Button, Box } from "@mui/joy";
 
 function NavBar() {
   return (
@@ -41,22 +32,39 @@ function NavBar() {
       sx={{
         px: 2,
         py: 1,
-        display: "flex",
-        gap: 1,
-        alignItems: "center",
         borderBottom: "1px solid",
         borderColor: "neutral.outlinedBorder",
       }}
     >
-      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-        <Button component={Link} href="/" variant="soft" size="sm">
-          Home
-        </Button>
-        <Button component={Link} href="/playlists" variant="soft" size="sm">
-          Playlists
-        </Button>
-        <Button component={Link} href="/actors" variant="soft" size="sm">
-          Actors
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          flexWrap: "wrap",
+          maxWidth: 1600,
+          mx: "auto",
+        }}
+      >
+        {/* Left links */}
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+          <Button component={Link} href="/" variant="soft" size="sm">
+            Home
+          </Button>
+          <Button component={Link} href="/playlists" variant="soft" size="sm">
+            Playlists
+          </Button>
+          <Button component={Link} href="/actors" variant="soft" size="sm">
+            Actors
+          </Button>
+        </Box>
+
+        {/* Spacer pushes Settings to the right */}
+        <Box sx={{ flexGrow: 1 }} />
+
+        {/* Right-aligned Settings */}
+        <Button component={Link} href="/settings" variant="soft" size="sm" color="neutral">
+          Settings
         </Button>
       </Box>
     </Sheet>
