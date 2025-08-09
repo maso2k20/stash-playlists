@@ -2,22 +2,26 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-async function main() {
-  // Adjust keys/table/fields to match your schema.
-  // This assumes a model named `Settings` with a unique `key` column.
-  const defaults = [
-    { key: 'STASH_API', value: process.env.STASH_GRAPHQL_URL || '' },
-    { key: 'STASH_SERVER',     value: process.env.STASH_API_KEY || 'http://stash:9999/graphql' },
-    { key: 'THEME_MODE', value: 'light' },
-  ];
-
-  for (const s of defaults) {
-    await prisma.settings.upsert({
-      where: { key: s.key },          // requires @unique or @id on `key`
-      update: { value: s.value },
-      create: { key: s.key, value: s.value },
-    });
+// Creates the setting if missing; never overwrites an existing value
+async function ensureSetting(key, value) {
+  const existing = await prisma.settings.findUnique({ where: { key } });
+  if (!existing) {
+    await prisma.settings.create({ data: { key, value } });
+    console.log(`Seed: created ${key}=${value}`);
+  } else {
+    console.log(`Seed: kept existing ${key}=${existing.value}`);
   }
+}
+
+async function main() {
+  // Corrected mapping:
+  // - STASH_SERVER = GraphQL URL (from STASH_GRAPHQL_URL env)
+  // - STASH_API    = API key (from STASH_API_KEY env)
+  await ensureSetting('STASH_SERVER', process.env.STASH_SERVER || 'http://stash:9999/graphql');
+  await ensureSetting('STASH_API',    process.env.STASH_API_KEY     || '');
+
+  // UI default; don’t overwrite user changes
+  await ensureSetting('THEME_MODE', 'light');
 }
 
 main()
