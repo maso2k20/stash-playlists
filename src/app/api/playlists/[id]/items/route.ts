@@ -1,3 +1,4 @@
+// app/api/playlists/[id]/items/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma, PrismaClient } from '@prisma/client';
 
@@ -6,7 +7,7 @@ const prisma = new PrismaClient();
 function pickDefined<T extends Record<string, any>>(obj: T) {
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (v !== undefined) out[k] = v;
+    if (v !== undefined) out[k] = v; // keep nulls so we can intentionally clear fields
   }
   return out;
 }
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
     endTime?: number;
     screenshot?: string | null;
     stream?: string | null;
+    preview?: string | null;   // <-- NEW
     itemOrder?: number;
   };
 
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
       endTime: typeof end === 'number' ? end : Number(end),
       screenshot: raw.screenshot ?? null,
       stream: raw.stream ?? null,
+      preview: raw.preview ?? null,              // <-- NEW
       itemOrder: typeof raw.itemOrder === 'number' ? raw.itemOrder : undefined,
     });
   }
@@ -102,13 +105,14 @@ export async function POST(request: NextRequest) {
       for (let index = 0; index < incoming.length; index++) {
         const it = incoming[index];
 
-        // Upsert Item
+        // Upsert Item (now includes preview)
         const updateData = pickDefined({
           title: it.title,
           startTime: it.startTime,
           endTime: it.endTime,
           screenshot: it.screenshot,
           stream: it.stream,
+          preview: it.preview,                   // <-- NEW
         });
 
         await tx.item.upsert({
@@ -121,6 +125,7 @@ export async function POST(request: NextRequest) {
             endTime: it.endTime ?? 0,
             screenshot: it.screenshot ?? null,
             stream: it.stream ?? null,
+            preview: it.preview ?? null,         // <-- NEW
           },
         });
         upsertedItems++;
@@ -136,8 +141,6 @@ export async function POST(request: NextRequest) {
               data: { itemOrder: desiredOrder },
             });
             linkedUpdated++;
-          } else {
-            // even if order unchanged, consider it updated for telemetry if you want
           }
         } else {
           const created = await tx.playlistItem.create({
@@ -206,6 +209,7 @@ export async function GET(request: NextRequest) {
     endTime: pi.item.endTime,
     screenshot: pi.item.screenshot ?? undefined,
     stream: pi.item.stream ?? undefined,
+    preview: pi.item.preview ?? undefined,   // <-- NEW (expose to UI)
     itemOrder: pi.itemOrder,
   }));
 

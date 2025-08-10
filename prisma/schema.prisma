@@ -69,6 +69,7 @@ model Item {
   endTime    Float     @default(0)
   screenshot String?
   stream     String?
+  preview    String?
 
   playlists  PlaylistItem[]
 

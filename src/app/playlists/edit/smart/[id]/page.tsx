@@ -142,6 +142,7 @@ export default function EditAutomaticPlaylistPage() {
         endTime: Number(m.end_seconds ?? 0),
         screenshot: m.screenshot ?? null,
         stream: `${stashServer}/scene/${m.scene.id}/stream?api_key=${stashAPI}`,
+        preview: (m.preview ?? m.screenshot) ?? null,
         itemOrder: index,
       }));
 

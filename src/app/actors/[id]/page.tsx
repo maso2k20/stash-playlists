@@ -45,6 +45,7 @@ const GET_ALL_MARKERS = gql`
         end_seconds
         screenshot
         stream
+        preview
         scene { id }
       }
     }
@@ -52,6 +53,105 @@ const GET_ALL_MARKERS = gql`
 `;
 
 type Playlist = { id: string; name: string; type: string };
+
+/** HoverPreview
+ * - If preview is .webm: show <video> on hover, screenshot otherwise.
+ * - If preview is .webp: swap <img src> to preview on hover.
+ * - Falls back to screenshot if no preview provided.
+ */
+function joinUrl(base?: string, path?: string) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  if (!base) return path;
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+function withApiKey(url: string, apiKey?: string) {
+  if (!url || !apiKey) return url;
+  if (/[?&]api_key=/.test(url)) return url;
+  return url.includes("?") ? `${url}&api_key=${apiKey}` : `${url}?api_key=${apiKey}`;
+}
+
+function HoverPreview({
+  screenshot,
+  preview,
+  alt,
+  stashBase,
+  apiKey,
+}: {
+  screenshot: string;
+  preview?: string | null;
+  alt: string;
+  stashBase?: string;
+  apiKey?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [videoErrored, setVideoErrored] = useState(false);
+
+  const resolvedPreview = withApiKey(joinUrl(stashBase, preview ?? ""), apiKey);
+  const resolvedShot = withApiKey(joinUrl(stashBase, screenshot ?? ""), apiKey);
+
+  const hasPreview = !!resolvedPreview;
+
+  // ONLY treat as video if it clearly has a video extension
+  const isVideo = hasPreview && /\.(webm|mp4)(?:$|\?)/i.test(resolvedPreview);
+
+  // show <img> with screenshot normally; swap to preview image on hover
+  const showVideo = hovered && isVideo && !videoErrored;
+  const imgSrc = hovered && hasPreview && !isVideo ? resolvedPreview : resolvedShot;
+
+  return (
+    <Box
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      tabIndex={0}
+      sx={{ position: "relative", width: "100%", height: "100%", outline: "none" }}
+    >
+      {/* Base/hover image (handles animated WebP fine) */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imgSrc}
+        alt={alt}
+        loading="lazy"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: showVideo ? "none" : "block",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Only show video on hover if it's actually a video URL */}
+      {showVideo && (
+        <video
+          src={resolvedPreview}
+          muted
+          loop
+          autoPlay
+          playsInline
+          preload="metadata"
+          onError={() => setVideoErrored(true)} // fall back to image if playback fails
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+    </Box>
+  );
+}
+
+
+
 
 export default function Page() {
   const params = useParams<{ id: string }>();
@@ -141,6 +241,9 @@ export default function Page() {
       .map((mId) => {
         const marker = scenes.find((m: any) => m.id === mId);
         if (!marker) return null;
+
+        const preview = marker.preview ?? marker.screenshot ?? null;
+
         return {
           id: marker.id,
           title: marker.title,
@@ -148,6 +251,7 @@ export default function Page() {
           endTime: marker.end_seconds,
           screenshot: marker.screenshot,
           stream: `${stashServer}/scene/${marker.scene.id}/stream?api_key=${stashAPI}`,
+          preview,
         };
       })
       .filter(Boolean);
@@ -306,14 +410,14 @@ export default function Page() {
                     }}
                   >
                     <AspectRatio ratio="16/9">
-                      {/* Screenshot */}
-                      <CardCover>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={marker.screenshot}
+                      {/* Media (screenshot -> preview on hover) */}
+                      <CardCover sx={{ pointerEvents: "auto" }}>
+                        <HoverPreview
+                          screenshot={marker.screenshot}
+                          preview={marker.preview}
                           alt={marker.title}
-                          loading="lazy"
-                          style={{ objectFit: "cover" }}
+                          stashBase={stashServer}
+                          apiKey={stashAPI}
                         />
                       </CardCover>
 
@@ -416,9 +520,9 @@ export default function Page() {
               value={
                 chosenPlaylistId
                   ? {
-                      id: chosenPlaylistId,
-                      label: manualPlaylists.find((p) => p.id === chosenPlaylistId)?.name ?? "",
-                    }
+                    id: chosenPlaylistId,
+                    label: manualPlaylists.find((p) => p.id === chosenPlaylistId)?.name ?? "",
+                  }
                   : null
               }
               onChange={(_e, val) => setChosenPlaylistId(val?.id ?? "")}
