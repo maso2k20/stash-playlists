@@ -1,12 +1,11 @@
-import { ApolloClient, InMemoryCache, HttpLink } from '@apollo/client';
+"use client";
+
+import { ApolloClient, InMemoryCache, HttpLink } from "@apollo/client";
 
 export const apolloClient = new ApolloClient({
   link: new HttpLink({
-    uri: process.env.NEXT_PUBLIC_STASH_GRAPHQL,
-    credentials: 'same-origin',                // include cookies if you need auth
-    headers: {
-      ApiKey: process.env.NEXT_PUBLIC_STASH_API,
-    },
+    uri: "/api/stash-graphql",   // same-origin proxy
+    credentials: "same-origin",
   }),
   cache: new InMemoryCache(),
 });
