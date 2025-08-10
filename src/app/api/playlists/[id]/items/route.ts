@@ -1,11 +1,8 @@
 // src/app/api/playlists/[id]/items/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, PrismaClient } from "@prisma/client";
-import { buildItemsForPlaylist } from "@/lib/smartPlaylistServer"; // shared server-side builder
-
-const prisma = new PrismaClient();
-
-type PlaylistType = "MANUAL" | "SMART" | "AUTOMATIC";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { buildItemsForPlaylist } from "@/lib/smartPlaylistServer";
 
 type IncomingItem = {
   id: string;
@@ -19,9 +16,9 @@ type IncomingItem = {
 };
 
 function pickDefined<T extends Record<string, any>>(obj: T) {
-  const out: Record<string, any> = {};
+  const out: Partial<T> = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (v !== undefined) out[k] = v; // keep nulls to intentionally clear fields
+    if (v !== undefined) (out as any)[k] = v; // keep nulls to intentionally clear
   }
   return out;
 }
@@ -30,19 +27,26 @@ function jsonError(status: number, message: string, extra?: any) {
   return NextResponse.json({ error: message, ...extra }, { status });
 }
 
-function normalizeIncoming(items: IncomingItem[]): IncomingItem[] {
+/**
+ * Normalize any array of items coming either from the editor or the builder.
+ * IMPORTANT: Only include optional media fields if they actually exist on the payload.
+ * - absent  => undefined  (DB untouched)
+ * - null    => clear DB column
+ * - string  => set DB column
+ */
+function normalizeIncoming(items: any[]): IncomingItem[] {
   const seen = new Set<string>();
   const incoming: IncomingItem[] = [];
 
   for (let i = 0; i < items.length; i++) {
-    const raw = items[i];
+    const raw = items[i]?.item ?? items[i];
     if (!raw || typeof raw.id !== "string" || !raw.id.trim()) continue;
 
     if (seen.has(raw.id)) continue;
     seen.add(raw.id);
 
-    const start = raw.startTime;
-    const end = raw.endTime;
+    const start = raw.startTime ?? raw.seconds ?? raw.start ?? raw.start_time;
+    const end = raw.endTime ?? raw.end ?? raw.end_time;
     if (start == null || end == null) continue;
 
     incoming.push({
@@ -50,10 +54,19 @@ function normalizeIncoming(items: IncomingItem[]): IncomingItem[] {
       title: raw.title ?? "",
       startTime: typeof start === "number" ? start : Number(start),
       endTime: typeof end === "number" ? end : Number(end),
-      screenshot: raw.screenshot ?? null,
-      stream: raw.stream ?? null,
-      preview: raw.preview ?? null,
-      itemOrder: typeof raw.itemOrder === "number" ? raw.itemOrder : undefined,
+
+      screenshot: Object.prototype.hasOwnProperty.call(raw, "screenshot")
+        ? (raw.screenshot as string | null | undefined) ?? null
+        : undefined,
+      stream: Object.prototype.hasOwnProperty.call(raw, "stream")
+        ? (raw.stream as string | null | undefined) ?? null
+        : undefined,
+      preview: Object.prototype.hasOwnProperty.call(raw, "preview")
+        ? (raw.preview as string | null | undefined) ?? null
+        : undefined,
+
+      itemOrder: typeof items[i]?.order === "number" ? items[i].order :
+                 typeof raw.itemOrder === "number" ? raw.itemOrder : undefined,
     });
   }
   return incoming;
@@ -73,30 +86,29 @@ async function syncItems(
     });
     const existingByItemId = new Map(existingLinks.map((e) => [e.itemId, e]));
     const incomingIds = incoming.map((i) => i.id);
-    const incomingSet = new Set(incomingIds);
 
-    // Fetch any existing Item rows so we can decide whether to keep timings
     const existingItems = await tx.item.findMany({
       where: { id: { in: incomingIds } },
-      select: { id: true, startTime: true, endTime: true },
+      select: { id: true },
     });
     const existingItemMap = new Map(existingItems.map((x) => [x.id, x]));
 
     let upsertedItems = 0;
     let linkedCreated = 0;
     let linkedUpdated = 0;
+    let deleted = 0;
 
     for (let index = 0; index < incoming.length; index++) {
       const it = incoming[index];
       const exists = existingItemMap.has(it.id);
 
-      // Only overwrite timings if we're not preserving them OR the item doesn't exist yet
       const shouldWriteTimings = !preserveTimings || !exists;
 
       const updateData = pickDefined({
         title: it.title,
         startTime: shouldWriteTimings ? it.startTime : undefined,
         endTime: shouldWriteTimings ? it.endTime : undefined,
+        // Media only if present (undefined keys are dropped)
         screenshot: it.screenshot,
         stream: it.stream,
         preview: it.preview,
@@ -117,35 +129,36 @@ async function syncItems(
       });
       upsertedItems++;
 
-      const desiredOrder = it.itemOrder ?? index;
+      const desiredOrder =
+        typeof it.itemOrder === "number" ? it.itemOrder : index;
       const link = existingByItemId.get(it.id);
 
       if (link) {
         if (link.itemOrder !== desiredOrder) {
           await tx.playlistItem.update({
             where: { id: link.id },
-            data: { itemOrder: intOrZero(desiredOrder) },
+            data: { itemOrder: desiredOrder },
           });
           linkedUpdated++;
         }
       } else {
         const created = await tx.playlistItem.create({
-          data: { playlistId, itemId: it.id, itemOrder: intOrZero(desiredOrder) },
-          select: { id: true, itemId: true, itemOrder: true },
+          data: { playlistId, itemId: it.id, itemOrder: desiredOrder },
         });
         existingByItemId.set(created.itemId, created);
         linkedCreated++;
       }
     }
 
-    // Delete links not present anymore
+    // prune removed links
+    const incomingSet = new Set(incomingIds);
     const toDelete = existingLinks
       .filter((e) => !incomingSet.has(e.itemId))
       .map((e) => e.id);
-
-    let deleted = 0;
     if (toDelete.length) {
-      const res = await tx.playlistItem.deleteMany({ where: { id: { in: toDelete } } });
+      const res = await tx.playlistItem.deleteMany({
+        where: { id: { in: toDelete } },
+      });
       deleted = res.count;
     }
 
@@ -153,11 +166,7 @@ async function syncItems(
   });
 }
 
-function intOrZero(n: number) {
-  return Number.isFinite(n) ? Math.trunc(n) : 0;
-}
-
-// POST /api/playlists/[id]/items  (manual sync OR smart refresh)
+// POST /api/playlists/[id]/items
 export async function POST(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const parts = pathname.split("/").filter(Boolean);
@@ -167,80 +176,47 @@ export async function POST(request: NextRequest) {
   const playlist = await prisma.playlist.findUnique({ where: { id: playlistId } });
   if (!playlist) return jsonError(404, "Playlist not found");
 
-  let payload: { items?: IncomingItem[]; clear?: boolean; refresh?: boolean; regenerate?: boolean };
+  let payload: any;
   try {
     payload = await request.json();
   } catch {
-    return jsonError(400, "Invalid JSON");
+    payload = {};
   }
 
-  // Explicit clear request
   if (payload?.clear === true) {
     await prisma.playlistItem.deleteMany({ where: { playlistId } });
+    return NextResponse.json({ message: "Playlist cleared" }, { status: 200 });
+  }
+
+  // Refresh/regenerate path (or missing items array)
+  if (payload?.refresh === true || payload?.regenerate === true || !Array.isArray(payload?.items)) {
+    const built = await buildItemsForPlaylist(playlistId);
+    const incoming = normalizeIncoming(built ?? []);
+
+    const result = await syncItems(playlistId, incoming, {
+      preserveTimings: payload?.refresh === true && payload?.regenerate !== true,
+    });
+    const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
     return NextResponse.json(
-      { message: "Playlist cleared", upsertedItems: 0, linkedCreated: 0, linkedUpdated: 0, deleted: 0 },
+      {
+        message: payload?.regenerate ? "Regenerated from rules" : "Refreshed from rules",
+        ...result,
+        totalLinkedNow,
+      },
       { status: 200 }
     );
   }
 
-  // Smart/AUTOMATIC refresh (explicit)
-  if (payload?.refresh === true || payload?.regenerate === true) {
-    try {
-      const built = await buildItemsForPlaylist(playlistId);
-      const incoming = normalizeIncoming(built ?? []);
-
-      // If nothing to change, succeed with a no-op
-      if (incoming.length === 0) {
-        const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
-        return NextResponse.json(
-          {
-            message: "No changes (0 matches for rules)",
-            upsertedItems: 0,
-            linkedCreated: 0,
-            linkedUpdated: 0,
-            deleted: 0,
-            totalLinkedNow,
-          },
-          { status: 200 }
-        );
-      }
-
-      const result = await syncItems(playlistId, incoming, {
-        preserveTimings: payload.refresh === true && payload.regenerate !== true, // refresh = keep timings
-      });
-      const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
-
-      return NextResponse.json(
-        {
-          message:
-            payload.regenerate
-              ? "Playlist regenerated from rules (timings rebuilt)"
-              : "Playlist refreshed from rules (timings preserved)",
-          ...result,
-          totalLinkedNow,
-        },
-        { status: 200 }
-      );
-    } catch (e: any) {
-      console.error("Refresh error:", e);
-      return jsonError(500, e?.message ?? "Failed to refresh from rules");
-    }
-  }
-
-  // Manual sync with explicit items[]
+  // Manual sync (editor Save)
   if (!Array.isArray(payload.items)) {
-    return jsonError(400, "`items` must be an array (or send { refresh: true } to rebuild from rules).");
+    return jsonError(400, "`items` must be an array.");
   }
-
   const incoming = normalizeIncoming(payload.items);
-  if (incoming.length === 0) {
-    return jsonError(400, "No valid items provided (nothing was changed).");
-  }
+  if (!incoming.length) return jsonError(400, "No valid items provided.");
 
   try {
-    const result = await syncItems(playlistId, incoming);
+    const result = await syncItems(playlistId, incoming, { preserveTimings: false });
     const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
-
     return NextResponse.json(
       { message: "Sync complete", ...result, totalLinkedNow },
       { status: 200 }
@@ -264,16 +240,26 @@ export async function GET(request: NextRequest) {
   const playlistId = parts[2];
   if (!playlistId) return jsonError(400, "Playlist ID is required in the URL");
 
-  const playlist = await prisma.playlist.findUnique({ where: { id: playlistId } });
-  if (!playlist) return jsonError(404, "Playlist not found");
-
-  const playlistItems = await prisma.playlistItem.findMany({
+  const rows = await prisma.playlistItem.findMany({
     where: { playlistId },
     orderBy: { itemOrder: "asc" },
-    include: { item: true },
+    select: {
+      itemOrder: true,
+      item: {
+        select: {
+          id: true,
+          title: true,
+          startTime: true,
+          endTime: true,
+          screenshot: true,
+          stream: true,
+          preview: true,
+        },
+      },
+    },
   });
 
-  const items = playlistItems.map((pi) => ({
+  const items = rows.map((pi) => ({
     id: pi.item.id,
     title: pi.item.title,
     startTime: pi.item.startTime,
@@ -295,17 +281,13 @@ export async function DELETE(request: NextRequest) {
   if (!playlistId) return jsonError(400, "Playlist ID is required in the URL");
 
   let body: { itemId?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "Invalid JSON");
-  }
+  try { body = await request.json(); } catch { return jsonError(400, "Invalid JSON"); }
 
   const itemId = body?.itemId;
   if (!itemId) return jsonError(400, "itemId is required");
 
   try {
-    const res = await prisma.playlistItem.deleteMany({ where: { playlistId, itemId } });
+    const res = await prisma.playlistItem.deleteMany({ where: { playlistId, itemId: body.itemId } });
     return NextResponse.json({ success: true, removed: res.count }, { status: 200 });
   } catch (error) {
     console.error(error);

@@ -14,17 +14,15 @@ async function getStashConfig(): Promise<StashConfig> {
       process.env.STASH_SERVER ||
       process.env.STASH_ENDPOINT ||
       "").trim();
-
   const envKey =
     (process.env.STASH_API ||
       process.env.STASH_API_KEY ||
       process.env.STASH_KEY ||
       "").trim();
 
-  // DB fallback (your schema uses STASH_SERVER + STASH_API)
+  // DB fallback (Settings table)
   let dbUrl = "";
   let dbKey = "";
-
   try {
     const rows =
       (await prisma.settings.findMany({
@@ -42,17 +40,11 @@ async function getStashConfig(): Promise<StashConfig> {
         },
         select: { key: true, value: true },
       })) || [];
-
     const map = Object.fromEntries(
-      rows.map((r: { key: string; value: string | null }) => [
-        r.key,
-        (r.value ?? "").trim(),
-      ])
+      rows.map((r: { key: string; value: string | null }) => [r.key, r.value || ""]) as any
     );
 
-    dbUrl =
-      map.STASH_GRAPHQL_URL || map.STASH_SERVER || map.STASH_ENDPOINT || "";
-
+    dbUrl = map.STASH_GRAPHQL_URL || map.STASH_SERVER || map.STASH_ENDPOINT || "";
     dbKey = map.STASH_API || map.STASH_API_KEY || map.STASH_KEY || "";
   } catch {
     // ignore prisma read errors
@@ -60,12 +52,6 @@ async function getStashConfig(): Promise<StashConfig> {
 
   let url = envUrl || dbUrl;
   let apiKey = envKey || dbKey;
-
-  if (!url) {
-    throw new Error(
-      "Stash URL not configured. Set STASH_SERVER or STASH_GRAPHQL_URL (env or Settings table)."
-    );
-  }
 
   // Detect accidental swap
   const apiKeyLooksLikeUrl = /^https?:\/\//i.test(apiKey);
@@ -76,11 +62,15 @@ async function getStashConfig(): Promise<StashConfig> {
     apiKey = tmp;
   }
 
+  if (!url) {
+    throw new Error(
+      "Stash URL not configured. Set STASH_SERVER or STASH_GRAPHQL_URL (env or Settings table)."
+    );
+  }
   if (!/^https?:\/\//i.test(url)) {
     throw new Error(`Invalid Stash URL: "${url}" (must start with http/https).`);
   }
-
-  // Normalize: ensure /graphql
+  // Ensure GraphQL suffix
   if (!/\/graphql\/?$/i.test(url)) {
     url = url.replace(/\/+$/g, "") + "/graphql";
   }
@@ -122,14 +112,14 @@ export async function stashGraph<T>(
 // ---------- SMART PLAYLIST BUILDER ----------
 
 type SmartPlaylistConditions = {
-  actorIds?: string[];     // performer IDs
-  tagIds?: string[];       // marker tags
-  perPage?: number;        // default 1000
-  clip?: { before?: number; after?: number }; // seconds around marker
+  actorIds?: string[];
+  tagIds?: string[];
+  perPage?: number;
+  clip?: { before?: number; after?: number };
 };
 
 type BuiltItem = {
-  id: string;                 // use marker id as stable Item.id
+  id: string;
   title?: string;
   startTime: number;
   endTime: number;
@@ -137,6 +127,8 @@ type BuiltItem = {
   stream?: string | null;
   preview?: string | null;
   itemOrder?: number;
+  sceneId?: string;
+  markerId?: string;
 };
 
 export async function buildItemsForPlaylist(
@@ -147,50 +139,35 @@ export async function buildItemsForPlaylist(
     where: { id: playlistId },
     select: { type: true, conditions: true },
   });
-
   if (!playlist) throw new Error("Playlist not found");
 
-  const conditions: SmartPlaylistConditions =
-    (playlist.conditions as any) || {};
-
-  const actorIds = Array.isArray(conditions.actorIds)
-    ? conditions.actorIds
-    : [];
+  const conditions: SmartPlaylistConditions = (playlist.conditions as any) || {};
+  const actorIds = Array.isArray(conditions.actorIds) ? conditions.actorIds : [];
   const tagIds = Array.isArray(conditions.tagIds) ? conditions.tagIds : [];
-
-  const perPage =
-    typeof conditions.perPage === "number" && conditions.perPage > 0
-      ? conditions.perPage
-      : 1000;
-
-  const before = Math.max(0, Number(conditions.clip?.before ?? 3)); // default -3s
-  const after = Math.max(1, Number(conditions.clip?.after ?? 27));  // default +27s
+  const perPage = Math.max(1, Number(conditions.perPage ?? 5000));
+  const before = Math.max(0, Number(conditions.clip?.before ?? 3));
+  const after = Math.max(1, Number(conditions.clip?.after ?? 27));
 
   if (!actorIds.length && !tagIds.length) {
-    // No rules → nothing to build
     return [];
   }
 
-    // 2) Build query text & variable declarations only for used filters
+  // 2) Build query
   const filterParts: string[] = [];
   const varDecls: string[] = ["$perPage: Int"];
   const vars: Record<string, any> = { perPage };
 
   if (actorIds.length) {
     filterParts.push(`performers: { modifier: INCLUDES_ALL, value: $actorIds }`);
-    varDecls.push("$actorIds: [ID!]");
-    vars.actorIds = actorIds;
+    varDecls.push("$actorIds: [ID!]"); vars.actorIds = actorIds;
   }
   if (tagIds.length) {
     filterParts.push(`tags: { modifier: INCLUDES, value: $tagIds }`);
-    varDecls.push("$tagIds: [ID!]");
-    vars.tagIds = tagIds;
+    varDecls.push("$tagIds: [ID!]"); vars.tagIds = tagIds;
   }
 
   const sceneMarkerFilter =
-    filterParts.length > 0
-      ? `scene_marker_filter: { ${filterParts.join("\n")} }`
-      : "";
+    filterParts.length > 0 ? `scene_marker_filter: { ${filterParts.join("\n")} }` : "";
 
   const query = `
     query BuildMarkers(${varDecls.join(", ")}) {
@@ -216,45 +193,72 @@ export async function buildItemsForPlaylist(
         id: string;
         title?: string | null;
         seconds: number;
-        scene: { id: string; title?: string | null };
+        scene: { id: string; title?: string | null } | null;
       }>;
     };
   };
 
   const data = await stashGraph<Q>(query, vars);
 
-
   const { url, apiKey } = await getStashConfig();
-  // Base server URL for preview/screenshot endpoints
   const baseServer = url.replace(/\/graphql\/?$/i, "");
+  const keyParam = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : "";
 
   const items: BuiltItem[] = (data.findSceneMarkers?.scene_markers ?? []).map(
     (m, idx) => {
       const start = Math.max(0, Math.floor(m.seconds - before));
       const end = Math.max(start + 1, Math.floor(m.seconds + after));
 
-      const titleParts = [];
-      if (m.scene?.title) titleParts.push(m.scene.title);
-      if (m.title) titleParts.push(m.title);
-      const title = titleParts.join(" – ") || "Marker";
+      // --- Deduped title logic ---
+      const norm = (s?: string | null) =>
+        (s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
-      // Stash preview endpoint for markers:
-      // /scene/{sceneId}/scene_marker/{markerId}/preview?api_key=TOKEN
+      const sceneTitleRaw = m.scene?.title ?? "";
+      const markerTitleRaw = m.title ?? "";
+
+      const sNorm = norm(sceneTitleRaw);
+      const mNorm = norm(markerTitleRaw);
+
+      let title = sceneTitleRaw || markerTitleRaw || "Marker";
+
+      if (sNorm && mNorm) {
+        const areSame = sNorm === mNorm;
+        const contains = sNorm.includes(mNorm) || mNorm.includes(sNorm);
+
+        if (!areSame && !contains) {
+          title = `${sceneTitleRaw} – ${markerTitleRaw}`;
+        } else {
+          title =
+            sceneTitleRaw.length >= markerTitleRaw.length
+              ? sceneTitleRaw
+              : markerTitleRaw;
+        }
+      }
+
+      const sceneId = m.scene?.id ?? undefined;
+      const markerId = m.id;
+
       const preview =
-        apiKey && m.scene?.id && m.id
-          ? `${baseServer}/scene/${m.scene.id}/scene_marker/${m.id}/preview?api_key=${encodeURIComponent(
-              apiKey
-            )}`
-          : null;
+        sceneId && markerId
+          ? `${baseServer}/scene/${sceneId}/scene_marker/${markerId}/preview${keyParam}`
+          : undefined;
+      const screenshot = sceneId
+        ? `${baseServer}/scene/${sceneId}/screenshot${keyParam}`
+        : undefined;
+      const stream = sceneId
+        ? `${baseServer}/scene/${sceneId}/stream${keyParam}`
+        : undefined;
 
       return {
         id: m.id,
         title,
         startTime: start,
         endTime: end,
-        screenshot: null, // optional; add if you have a reliable path field
-        stream: null,     // your player can derive stream from scene + times if needed
+        screenshot,
+        stream,
         preview,
+        sceneId,
+        markerId,
         itemOrder: idx,
       };
     }
