@@ -27,7 +27,16 @@ import {
   Tooltip,
   Typography,
 } from "@mui/joy";
-import { Trash2, Plus, Pencil, Film, Clock, User, Tag as TagIcon } from "lucide-react";
+import {
+  Trash2,
+  Plus,
+  Pencil,
+  Film,
+  Clock,
+  User,
+  Tag as TagIcon,
+  RefreshCcw,
+} from "lucide-react";
 import { useStashTags } from "@/context/StashTagsContext"; // ensure this path matches your project
 
 type PlaylistType = "MANUAL" | "SMART";
@@ -61,6 +70,9 @@ export default function PlaylistsPage() {
   // Per-playlist stats and conditions
   const [stats, setStats] = useState<Record<string, PlaylistStats>>({});
   const [conds, setConds] = useState<Record<string, ParsedConds>>({});
+
+  // Per-playlist "refreshing" state
+  const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -136,8 +148,12 @@ export default function PlaylistsPage() {
           if (!res.ok) throw new Error("playlist fetch failed");
           const data = await res.json();
           // API returns: conditionsResolved.actors [{id,name}], and tagIds (string[])
-          const actorNames = (data.conditionsResolved?.actors ?? []).map((a: any) => a?.name ?? a?.id).filter(Boolean);
-          const tagNames = (data.conditionsResolved?.tagIds ?? []).map((id: string) => tagNameById(id)).filter(Boolean);
+          const actorNames = (data.conditionsResolved?.actors ?? [])
+            .map((a: any) => a?.name ?? a?.id)
+            .filter(Boolean);
+          const tagNames = (data.conditionsResolved?.tagIds ?? [])
+            .map((id: string) => tagNameById(id))
+            .filter(Boolean);
           return [p.id, { actors: actorNames, tags: tagNames } as ParsedConds] as const;
         })
       );
@@ -202,6 +218,37 @@ export default function PlaylistsPage() {
       setPlaylists((prev) => prev.filter((p) => p.id !== toDeleteId));
       setToDeleteId(null);
       setIsDeleteOpen(false);
+    }
+  };
+
+  // 🔁 Refresh a SMART playlist using your unified items route
+  const refreshSmart = async (playlistId: string) => {
+    setRefreshing((r) => ({ ...r, [playlistId]: true }));
+    try {
+      const res = await fetch(`/api/playlists/${playlistId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh: true }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      // Re-fetch stats so counts/duration update immediately
+      const sRes = await fetch(`/api/playlists/${playlistId}/stats`);
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        setStats((prev) => ({
+          ...prev,
+          [playlistId]: {
+            itemCount: sData.itemCount ?? 0,
+            durationMs: sData.durationMs ?? 0,
+          },
+        }));
+      }
+      // (no need to re-fetch conditions—they don’t change on refresh)
+    } catch (e) {
+      console.error("Refresh failed", e);
+    } finally {
+      setRefreshing((r) => ({ ...r, [playlistId]: false }));
     }
   };
 
@@ -284,6 +331,9 @@ export default function PlaylistsPage() {
           const moreActors = Math.max(0, actorNames.length - maxShow);
           const moreTags = Math.max(0, tagNames.length - maxShow);
 
+          const isSmart = playlist.type === "SMART";
+          const isBusy = !!refreshing[playlist.id];
+
           return (
             <Grid xs={12} sm={6} lg={6} key={playlist.id}>
               <Card variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -336,7 +386,7 @@ export default function PlaylistsPage() {
                   </Stack>
 
                   {/* SMART conditions row */}
-                  {playlist.type === "SMART" && (
+                  {isSmart && (
                     <Stack spacing={0.75} sx={{ mt: 1 }}>
                       {/* Actors */}
                       <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
@@ -375,7 +425,25 @@ export default function PlaylistsPage() {
                   <Button size="sm" variant="plain" onClick={() => router.push(`/playlists/${playlist.id}`)}>
                     Open
                   </Button>
+
                   <Stack direction="row" spacing={0.5}>
+                    {/* 🔁 Refresh (SMART only) */}
+                    {isSmart && (
+                      <Tooltip title="Refresh items (rebuild from rules)">
+                        <span>
+                          <IconButton
+                            size="sm"
+                            variant="soft"
+                            onClick={() => refreshSmart(playlist.id)}
+                            disabled={isBusy}
+                            aria-label="Refresh playlist"
+                          >
+                            <RefreshCcw className={isBusy ? "animate-spin" : ""} size={16} />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+
                     <Tooltip title="Edit playlist">
                       <IconButton
                         size="sm"
@@ -389,6 +457,7 @@ export default function PlaylistsPage() {
                         <Pencil size={16} />
                       </IconButton>
                     </Tooltip>
+
                     <Tooltip title="Delete playlist">
                       <IconButton
                         size="sm"

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { gql, useLazyQuery } from '@apollo/client';
+import { useLazyQuery } from '@apollo/client';
 
 import Sheet from '@mui/joy/Sheet';
 import Grid from '@mui/joy/Grid';
@@ -28,32 +28,16 @@ import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder';
 import { useSettings } from '@/app/context/SettingsContext';
 import { useStashTags } from '@/context/StashTagsContext';
 
-const SMART_PLAYLIST_BUILDER = gql`
-  query smartPlaylistBuilder($actorId: [ID!], $tagID: [ID!]!) {
-    findSceneMarkers(
-      filter: { per_page: 5000 }
-      scene_marker_filter: {
-        performers: { modifier: INCLUDES_ALL, value: $actorId }
-        tags: { modifier: INCLUDES_ALL, value: $tagID }
-      }
-    ) {
-      scene_markers {
-        id
-        title
-        end_seconds
-        seconds
-        screenshot
-        stream
-        scene { id }
-      }
-    }
-  }
-`;
-
-type Rules = { actorIds: string[]; tagIds: string[] };
+// 🔁 Shared query + helpers used by both editor and refresh API
+import {
+  SMART_PLAYLIST_BUILDER,
+  buildSmartVars,
+  mapMarkersToItems,
+  type SmartRules as Rules,
+} from '@/shared/smartPlaylistQuery';
 
 export default function EditAutomaticPlaylistPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
   const [name, setName] = useState('');
@@ -66,14 +50,15 @@ export default function EditAutomaticPlaylistPage() {
   const stashAPI = settings['STASH_API'];
 
   const [fetchMarkers, { data: previewData, loading: previewLoading, error: previewError }] =
-    useLazyQuery(SMART_PLAYLIST_BUILDER);
+    useLazyQuery(SMART_PLAYLIST_BUILDER, { fetchPolicy: "no-cache" });
 
+  // Load playlist meta + rules
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/playlists/${id}`);
+        const res = await fetch(`/api/playlists/${id}`, { cache: "no-store" });
         if (!res.ok) throw new Error('Failed to load playlist');
         const playlist = await res.json();
         if (cancelled) return;
@@ -103,14 +88,16 @@ export default function EditAutomaticPlaylistPage() {
     return () => { cancelled = true; };
   }, [id]);
 
+  // Stash tags for the builder UI
   const { stashTags: tags, loading: tagsLoading, error: tagsError } = useStashTags();
 
+  // Preview query (reuses shared var builder)
   useEffect(() => {
-    fetchMarkers({ variables: { actorId: rules.actorIds, tagID: rules.tagIds } });
+    fetchMarkers({ variables: buildSmartVars(rules) });
   }, [rules, fetchMarkers]);
 
   const markers = useMemo(
-    () => previewData?.findSceneMarkers.scene_markers ?? [],
+    () => previewData?.findSceneMarkers?.scene_markers ?? [],
     [previewData]
   );
 
@@ -134,17 +121,11 @@ export default function EditAutomaticPlaylistPage() {
         return;
       }
 
-      // 3) Prepare payload
-      const itemsPayload = markers.map((m: any, index: number) => ({
-        id: String(m.id),
-        title: m.title ?? '',
-        startTime: Number(m.seconds ?? 0),
-        endTime: Number(m.end_seconds ?? 0),
-        screenshot: m.screenshot ?? null,
-        stream: `${stashServer}/scene/${m.scene.id}/stream?api_key=${stashAPI}`,
-        preview: (m.preview ?? m.screenshot) ?? null,
-        itemOrder: index,
-      }));
+      // 3) Prepare payload using shared mapper (keeps parity with refresh)
+      const itemsPayload = mapMarkersToItems(markers, {
+        stashServer,
+        stashAPI,
+      });
 
       // 4) Sync
       const res = await fetch(`/api/playlists/${id}/items`, {
@@ -158,7 +139,7 @@ export default function EditAutomaticPlaylistPage() {
         try {
           const data = await res.json();
           if (data?.error) msg = data.error;
-        } catch { }
+        } catch { /* ignore */ }
         throw new Error(msg);
       }
 
@@ -169,7 +150,6 @@ export default function EditAutomaticPlaylistPage() {
       setLoading(false);
     }
   }
-
 
   return (
     <Sheet
@@ -313,7 +293,7 @@ export default function EditAutomaticPlaylistPage() {
                                 {m.title || 'Untitled marker'}
                               </Typography>
                               <Typography level="body-sm" color="neutral">
-                                {formatLength(m.end_seconds - m.seconds)}
+                                {formatLength((Number(m.end_seconds ?? 0)) - (Number(m.seconds ?? 0)))}
                               </Typography>
                             </Box>
                           </Sheet>
