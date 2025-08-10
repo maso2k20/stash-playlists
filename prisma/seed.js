@@ -17,8 +17,8 @@ async function main() {
   // Corrected mapping:
   // - STASH_SERVER = GraphQL URL (from STASH_GRAPHQL_URL env)
   // - STASH_API    = API key (from STASH_API_KEY env)
-  await ensureSetting('STASH_SERVER', process.env.STASH_SERVER || 'http://stash:9999/graphql');
-  await ensureSetting('STASH_API',    process.env.STASH_API_KEY     || '');
+  await ensureSetting('STASH_SERVER', process.env.NEXT_PUBLIC_STASH_GRAPHQL || 'http://stash:9999/graphql');
+  await ensureSetting('STASH_API',    process.env.NEXT_PUBLIC_STASH_API     || '');
 
   // UI default; don’t overwrite user changes
   await ensureSetting('THEME_MODE', 'light');
