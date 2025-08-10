@@ -1,5 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -11,24 +10,21 @@ datasource db {
 }
 
 model Settings {
-  id          String   @id @default(uuid())
-  key         String   @unique
-  value       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 model Actor {
-  id          String   @id
-  name        String
-  image_path  String
-  rating      Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id
+  name       String
+  image_path String
+  rating     Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 }
-
-
-// Prisma schema for playlist support (manual + smart playlists with clip times)
 
 enum PlaylistType {
   MANUAL
@@ -36,46 +32,46 @@ enum PlaylistType {
 }
 
 model Playlist {
-  id           String          @id @default(uuid())
-  name         String
-  description  String?
-  type         PlaylistType    @default(MANUAL)
-
-  // For manual playlists: explicit items ordering and clip definitions
-  items        PlaylistItem[]
-
-  // For smart playlists: JSON-based conditions (e.g. filter rules)
-  conditions   Json?
-
-  // Metadata
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  type        PlaylistType   @default(MANUAL)
+  items       PlaylistItem[]
+  conditions  Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @default(now()) @updatedAt
 }
 
 model PlaylistItem {
-  id          String      @id @default(uuid())
-  playlist    Playlist    @relation(fields: [playlistId], references: [id])
-  playlistId  String
+  id         String    @id @default(uuid())
 
-  // Reference to your existing Item model
-  item        Item        @relation(fields: [itemId], references: [id])
-  itemId      String
+  // Cascade delete when playlist is removed
+  playlist   Playlist  @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  playlistId String
 
-  // Ordering of items in manual playlists
-  itemOrder   Int
+  item       Item      @relation(fields: [itemId], references: [id])
+  itemId     String
 
+  itemOrder  Int       @default(0)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  @@unique([playlistId, itemId], name: "playlist_item_unique")
   @@index([playlistId, itemOrder])
+  @@index([itemId])
 }
 
-// Define the Item model if not already present in your schema
 model Item {
-  id           String      @id
-  title        String
-  startTime    Float       @default(0)
-  endTime      Float       @default(0)
-  screenshot   String?
-  stream       String?
+  id         String    @id
+  title      String
+  startTime  Float     @default(0)
+  endTime    Float     @default(0)
+  screenshot String?
+  stream     String?
 
-  // Relations
-  playlists    PlaylistItem[]  
+  playlists  PlaylistItem[]
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
 }

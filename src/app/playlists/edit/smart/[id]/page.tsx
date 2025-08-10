@@ -1,3 +1,4 @@
+// filepath: src/app/test/playlist/[id]/EditAutomaticPlaylistPage.tsx
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -23,7 +24,7 @@ import Alert from '@mui/joy/Alert';
 import LinearProgress from '@mui/joy/LinearProgress';
 import { formatLength } from "@/lib/formatLength";
 
-import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder'; 
+import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder';
 import { useSettings } from '@/app/context/SettingsContext';
 import { useStashTags } from '@/context/StashTagsContext';
 
@@ -116,40 +117,49 @@ export default function EditAutomaticPlaylistPage() {
   async function handleSave() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/playlists/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, conditions: rules }),
-      });
-      if (!res.ok) throw new Error('Failed to save playlist metadata.');
-
-      // Clear items
-      const existingRes = await fetch(`/api/playlists/${id}/items`);
-      if (existingRes.ok) {
-        const existingData = await existingRes.json();
-        for (const it of (existingData.items || [])) {
-          await fetch(`/api/playlists/${id}/items`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itemId: it.id }),
-          });
-        }
+      // 1) Save metadata + conditions
+      {
+        const res = await fetch(`/api/playlists/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description, conditions: rules }),
+        });
+        if (!res.ok) throw new Error('Failed to save playlist metadata.');
       }
 
-      // Upsert items
-      const itemsPayload = markers.map((m: any) => ({
-        id: m.id,
-        title: m.title,
-        startTime: m.seconds,
-        endTime: m.end_seconds,
-        screenshot: m.screenshot,
+      // 2) If no markers, do NOT sync items — avoid accidental clears
+      if (!markers || markers.length === 0) {
+        setLoading(false);
+        alert('No matches found. Saved name/description/rules, but did not update playlist items.');
+        return;
+      }
+
+      // 3) Prepare payload
+      const itemsPayload = markers.map((m: any, index: number) => ({
+        id: String(m.id),
+        title: m.title ?? '',
+        startTime: Number(m.seconds ?? 0),
+        endTime: Number(m.end_seconds ?? 0),
+        screenshot: m.screenshot ?? null,
         stream: `${stashServer}/scene/${m.scene.id}/stream?api_key=${stashAPI}`,
+        itemOrder: index,
       }));
-      await fetch(`/api/playlists/${id}/items`, {
+
+      // 4) Sync
+      const res = await fetch(`/api/playlists/${id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: itemsPayload }),
       });
+
+      if (!res.ok) {
+        let msg = `Failed to sync playlist items (HTTP ${res.status})`;
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch { }
+        throw new Error(msg);
+      }
 
       router.push('/playlists');
     } catch (e: any) {
@@ -159,11 +169,11 @@ export default function EditAutomaticPlaylistPage() {
     }
   }
 
+
   return (
     <Sheet
       variant="outlined"
       sx={{
-        
         mx: 'auto',
         my: 4,
         p: { xs: 2, sm: 3, md: 4 },
@@ -185,7 +195,6 @@ export default function EditAutomaticPlaylistPage() {
 
       {(loading || previewLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
 
-      {/* 3-column layout */}
       <Grid container spacing={2}>
         {/* Left: Details */}
         <Grid xs={12} md={4}>
@@ -229,7 +238,7 @@ export default function EditAutomaticPlaylistPage() {
                 </Alert>
               )}
               {!tagsLoading && !tagsError && (
-                <Box sx={{ mt: 1, }}>
+                <Box sx={{ mt: 1 }}>
                   <SmartPlaylistRuleBuilder
                     tags={tags.map((t: { id: string; name: string }) => ({ id: t.id, label: t.name }))}
                     onChange={setRules}

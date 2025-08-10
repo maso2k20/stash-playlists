@@ -27,16 +27,16 @@ import {
   DialogContent,
   DialogActions,
   Skeleton,
-  Input,
 } from "@mui/joy";
 
-const GET_MARKERS_FOR_ACTOR = gql`
-  query findActorsSceneMarkers($actorId: ID!, $tagID: [ID!]!) {
+const GET_ALL_MARKERS = gql`
+  query findActorsSceneMarkers($actorId: ID!, $tagID: [ID!]!, $pageNumber: Int, $perPage: Int) {
     findSceneMarkers(
       scene_marker_filter: {
         performers: { modifier: INCLUDES, value: [$actorId] }
         tags: { modifier: INCLUDES, value: $tagID }
       }
+      filter: { page: $pageNumber, per_page: $perPage }
     ) {
       scene_markers {
         id
@@ -66,13 +66,28 @@ export default function Page() {
   const [chosenPlaylistId, setChosenPlaylistId] = useState<string>("");
 
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
-  const [tagSearch, setTagSearch] = useState("");
 
   const settings = useSettings();
   const stashServer = settings["STASH_SERVER"];
   const stashAPI = settings["STASH_API"];
 
   const { stashTags, loading: tagsLoading, error: tagsError } = useStashTags();
+
+  // Pagination state
+  const [pageNumber, setPageNumber] = useState(1);
+  const perPage = 60;
+
+  // Reset page to 1 whenever tag filter changes
+  useEffect(() => {
+    setPageNumber(1);
+  }, [selectedTagId]);
+
+  // Smooth-scroll to top on page change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [pageNumber]);
 
   // Load playlists
   useEffect(() => {
@@ -90,15 +105,10 @@ export default function Page() {
     })();
   }, []);
 
-  // Tag options
+  // Tag options (no manual filtering; let Joy Autocomplete filter by label)
   const tagOptions = useMemo(
-    () =>
-      (stashTags || [])
-        .filter((t: any) =>
-          tagSearch ? t.name.toLowerCase().includes(tagSearch.toLowerCase()) : true
-        )
-        .map((t: any) => ({ id: t.id as string, label: t.name as string })),
-    [stashTags, tagSearch]
+    () => (stashTags || []).map((t: any) => ({ id: String(t.id), label: t.name as string })),
+    [stashTags]
   );
   const selectedTagOption =
     selectedTagId ? tagOptions.find((t: any) => t.id === selectedTagId) ?? null : null;
@@ -106,10 +116,10 @@ export default function Page() {
   // Query markers with either the chosen tag or all available tags
   const tagIDsForFilter = selectedTagId
     ? [selectedTagId]
-    : (stashTags || []).map((tag: any) => tag.id);
+    : (stashTags || []).map((tag: any) => String(tag.id));
 
-  const { data, loading, error } = useQuery(GET_MARKERS_FOR_ACTOR, {
-    variables: { actorId, tagID: tagIDsForFilter },
+  const { data, loading, error } = useQuery(GET_ALL_MARKERS, {
+    variables: { actorId, tagID: tagIDsForFilter, pageNumber, perPage },
     fetchPolicy: "cache-and-network",
   });
 
@@ -163,8 +173,12 @@ export default function Page() {
 
   const anyLoading = loading || tagsLoading || playlistsLoading;
 
+  // Simple "has next page" heuristic: if we got fewer than perPage, it's the last page
+  const hasNextPage = scenes.length === perPage;
+  const hasPrevPage = pageNumber > 1;
+
   return (
-    <Sheet sx={{ p: 2, maxWidth: 1600, mx: "auto" }}>
+    <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
       {/* Header / Actions */}
       <Box
         sx={{
@@ -222,24 +236,15 @@ export default function Page() {
           value={selectedTagOption}
           onChange={(_e, val) => setSelectedTagId(val?.id ?? null)}
           getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
-          isOptionEqualToValue={(a, b) => a.id === b.id}
+          isOptionEqualToValue={(a, b) => a?.id === b?.id}
           size="sm"
           sx={{ minWidth: { xs: 220, sm: 300 }, flexGrow: 1 }}
-          slotProps={{
-            input: {
-              value: tagSearch,
-              onChange: (e: any) => setTagSearch(e.target.value),
-            } as any,
-          }}
         />
         <Button
           size="sm"
           variant="plain"
-          disabled={selectedTagId === null}
-          onClick={() => {
-            setSelectedTagId(null);
-            setTagSearch("");
-          }}
+          disabled={!selectedTagId}
+          onClick={() => setSelectedTagId(null)}
         >
           Reset tag
         </Button>
@@ -283,83 +288,116 @@ export default function Page() {
 
       {/* Scene Cards */}
       {!anyLoading && scenes.length > 0 && (
-        <Grid container spacing={2}>
-          {scenes.map((marker: any) => {
-            const checked = selectedMarkers.includes(marker.id);
-            return (
-              <Grid key={marker.id} xs={12} sm={6} md={4} lg={3} xl={2}>
-                <Card
-                  sx={{
-                    p: 0,
-                    overflow: "hidden",
-                    borderRadius: "lg",
-                    position: "relative",
-                    boxShadow: "sm",
-                    transition: "transform 150ms ease, box-shadow 150ms ease",
-                    "&:hover": { transform: "translateY(-2px)", boxShadow: "md" },
-                  }}
-                >
-                  <AspectRatio ratio="16/9">
-                    {/* Screenshot */}
-                    <CardCover>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={marker.screenshot}
-                        alt={marker.title}
-                        loading="lazy"
-                        style={{ objectFit: "cover" }}
-                      />
-                    </CardCover>
+        <>
+          <Grid container spacing={2}>
+            {scenes.map((marker: any) => {
+              const checked = selectedMarkers.includes(marker.id);
+              return (
+                <Grid key={marker.id} xs={12} sm={6} md={4} lg={3} xl={2}>
+                  <Card
+                    sx={{
+                      p: 0,
+                      overflow: "hidden",
+                      borderRadius: "lg",
+                      position: "relative",
+                      boxShadow: "sm",
+                      transition: "transform 150ms ease, box-shadow 150ms ease",
+                      "&:hover": { transform: "translateY(-2px)", boxShadow: "md" },
+                    }}
+                  >
+                    <AspectRatio ratio="16/9">
+                      {/* Screenshot */}
+                      <CardCover>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={marker.screenshot}
+                          alt={marker.title}
+                          loading="lazy"
+                          style={{ objectFit: "cover" }}
+                        />
+                      </CardCover>
 
-                    {/* Checkbox (top-right) */}
-                    <Box sx={{ position: "absolute", top: 8, right: 8 }}>
-                      <Checkbox
-                        checked={checked}
-                        onChange={() => toggleMarker(marker.id)}
-                        size="sm"
-                        variant="soft"
-                      />
-                    </Box>
+                      {/* Checkbox (top-right) */}
+                      <Box sx={{ position: "absolute", top: 8, right: 8 }}>
+                        <Checkbox
+                          checked={checked}
+                          onChange={() => toggleMarker(marker.id)}
+                          size="sm"
+                          variant="soft"
+                        />
+                      </Box>
 
-                    {/* Bottom gradient + title/time */}
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        px: 1,
-                        py: 0.75,
-                        background:
-                          "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 80%)",
-                      }}
-                    >
-                      <Typography
-                        level="title-sm"
+                      {/* Bottom gradient + title/time */}
+                      <Box
                         sx={{
-                          color: "#fff",
-                          textShadow: "0 1px 2px rgba(0,0,0,0.6)",
-                          overflow: "hidden",
-                          whiteSpace: "nowrap",
-                          textOverflow: "ellipsis",
+                          position: "absolute",
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          px: 1,
+                          py: 0.75,
+                          background:
+                            "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 80%)",
                         }}
-                        title={marker.title}
                       >
-                        {marker.title}
-                      </Typography>
-                      <Typography level="body-xs" sx={{ color: "#fff" }}>
-                        {formatLength(marker.end_seconds - marker.seconds)}
-                      </Typography>
-                    </Box>
-                  </AspectRatio>
+                        <Typography
+                          level="title-sm"
+                          sx={{
+                            color: "#fff",
+                            textShadow: "0 1px 2px rgba(0,0,0,0.6)",
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                          }}
+                          title={marker.title}
+                        >
+                          {marker.title}
+                        </Typography>
+                        <Typography level="body-xs" sx={{ color: "#fff" }}>
+                          {formatLength(marker.end_seconds - marker.seconds)}
+                        </Typography>
+                      </Box>
+                    </AspectRatio>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
 
-                  {/* Extra content area if you want later */}
-                  {/* <JoyCardContent>…</JoyCardContent> */}
-                </Card>
-              </Grid>
-            );
-          })}
-        </Grid>
+          {/* Pagination controls */}
+          <Box
+            sx={{
+              mt: 2,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <Button
+              size="sm"
+              variant="outlined"
+              disabled={!hasPrevPage || loading}
+              onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+
+            <Chip size="sm" variant="soft">
+              Page {pageNumber}
+            </Chip>
+
+            <Button
+              size="sm"
+              variant="outlined"
+              disabled={!hasNextPage || loading}
+              onClick={() => setPageNumber((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </Box>
+        </>
       )}
 
       {/* Add to Playlist Dialog */}
@@ -385,7 +423,7 @@ export default function Page() {
               }
               onChange={(_e, val) => setChosenPlaylistId(val?.id ?? "")}
               getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
+              isOptionEqualToValue={(a, b) => a?.id === b?.id}
               size="sm"
               sx={{ width: "100%", mt: 1 }}
             />
