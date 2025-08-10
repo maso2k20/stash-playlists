@@ -32,9 +32,7 @@ export default function MyActorsPage() {
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-    fetch(`${baseUrl}/api/actors`, { cache: "no-store" })
+    fetch("/api/actors", { cache: "no-store" })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
