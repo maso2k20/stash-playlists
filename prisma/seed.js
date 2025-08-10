@@ -1,25 +1,61 @@
-import { PrismaClient } from "@prisma/client";
+// prisma/seed.js
+const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-async function upsertIfEmpty(key: string, value: string) {
+function isBlank(v) {
+  return v == null || String(v).trim() === '';
+}
+
+async function upsertIfMissingOrBlank(key, incomingValue) {
+  const trimmed = isBlank(incomingValue) ? '' : String(incomingValue).trim();
+
   const existing = await prisma.settings.findUnique({ where: { key } });
+
   if (!existing) {
-    await prisma.settings.create({ data: { key, value } });
+    if (isBlank(trimmed)) {
+      console.log(`↷ [${key}] not in DB and no default provided — leaving unset`);
+      return;
+    }
+    await prisma.settings.create({ data: { key, value: trimmed } });
+    console.log(`✓ [${key}] created`);
     return;
   }
-  // Do NOT clobber a non-empty value
-  if (!existing.value || existing.value.trim() === "") {
-    await prisma.settings.update({ where: { key }, data: { value } });
+
+  // Only fill if the existing value is blank AND we have a non-blank default
+  if (isBlank(existing.value) && !isBlank(trimmed)) {
+    await prisma.settings.update({ where: { key }, data: { value: trimmed } });
+    console.log(`✓ [${key}] was blank → filled from default`);
+  } else {
+    console.log(`• [${key}] already set — leaving as-is`);
   }
+}
+
+function normalizeServer(url) {
+  if (isBlank(url)) return '';
+  let u = String(url).trim();
+  if (!/^https?:\/\//i.test(u)) u = `http://${u}`;
+  // strip trailing slash
+  u = u.replace(/\/+$/, '');
+  return u;
 }
 
 async function main() {
-  // Optionally pull defaults from env the FIRST time
-  const server = process.env.STASH_SERVER ?? "http://192.168.1.17:6969";
-  const api    = process.env.STASH_API    ?? ""; // leave blank if not provided
+  // Use env defaults only on first/blank; never overwrite non-empty DB values.
+  const envServer = normalizeServer(process.env.STASH_SERVER || '');
+  const envApi    = (process.env.STASH_API || '').trim();
 
-  await upsertIfEmpty("STASH_SERVER", server);
-  await upsertIfEmpty("STASH_API", api);
+  await upsertIfMissingOrBlank('STASH_SERVER', envServer);
+  await upsertIfMissingOrBlank('STASH_API', envApi);
+
+  // Add any other app defaults the same way:
+  // await upsertIfMissingOrBlank('SOME_OTHER_KEY', process.env.SOME_OTHER_KEY);
 }
 
-main().finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
