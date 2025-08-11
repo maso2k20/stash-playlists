@@ -7,6 +7,8 @@ import { useParams } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
 import { formatLength } from "@/lib/formatLength";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 import {
   Sheet,
@@ -150,9 +152,6 @@ function HoverPreview({
   );
 }
 
-
-
-
 export default function Page() {
   const params = useParams<{ id: string }>();
   const actorId = params.id;
@@ -166,6 +165,9 @@ export default function Page() {
   const [chosenPlaylistId, setChosenPlaylistId] = useState<string>("");
 
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+
+  const pathname = usePathname();
+  const isMarkersPage = !pathname?.includes("/scenes");
 
   const settings = useSettings();
   const stashServer = settings["STASH_SERVER"];
@@ -293,9 +295,27 @@ export default function Page() {
           mb: 2,
         }}
       >
-        <Typography level="h2" sx={{ flexGrow: 1 }}>
-          Scenes
-        </Typography>
+
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1 }}>
+          <Link href={`/actors/${actorId}`} passHref>
+            <Button
+              size="sm"
+              variant={isMarkersPage ? "solid" : "soft"}
+              component="a"
+            >
+              Markers
+            </Button>
+          </Link>
+          <Link href={`/actors/${actorId}/scenes`} passHref>
+            <Button
+              size="sm"
+              variant={isMarkersPage ? "soft" : "solid"}
+              component="a"
+            >
+              Scenes
+            </Button>
+          </Link>
+        </Box>
 
         {/* Selected count */}
         {selectedMarkers.length > 0 && (
