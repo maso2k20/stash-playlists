@@ -609,6 +609,20 @@ export default function SceneTagManagerPage() {
     // Can the clock buttons read time?
     const canReadPlayerTime = playerReady && !!playerRef.current?.currentTime;
 
+    // Format markers for videojs-markers plugin
+    const formatMarkersForVideoJS = useMemo(() => {
+        if (!markers || markers.length === 0) return [];
+        
+        return markers
+            .filter(marker => typeof marker.seconds === 'number' && marker.seconds >= 0)
+            .map(marker => ({
+                time: marker.seconds,
+                text: marker.primary_tag?.name || marker.title || 'Untitled Marker',
+                duration: marker.end_seconds ? Math.max(0, marker.end_seconds - marker.seconds) : undefined
+            }))
+            .sort((a, b) => a.time - b.time);
+    }, [markers]);
+
     return (
         <Container maxWidth={false} sx={{ px: { xs: 1.5, sm: 2, lg: 3 }, py: 2 }}>
             <Sheet sx={{ p: 0 }}>
@@ -1008,6 +1022,7 @@ export default function SceneTagManagerPage() {
                                         vttPath={scene?.paths?.vtt}
                                         stashServer={stashServer}
                                         stashAPI={stashAPI}
+                                        markers={formatMarkersForVideoJS}
                                     />
                                 ) : (
                                     <Box

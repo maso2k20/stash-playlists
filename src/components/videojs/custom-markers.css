@@ -1,0 +1,41 @@
+/* Custom Video Markers Styles */
+.custom-video-marker {
+  transition: all 0.2s ease;
+}
+
+.custom-video-marker:hover {
+  width: 5px !important;
+  background-color: #1976D2 !important;
+  box-shadow: 0 0 8px rgba(33, 150, 243, 0.6);
+}
+
+.custom-video-marker-range {
+  transition: all 0.2s ease;
+}
+
+.custom-video-marker-range:hover {
+  background-color: rgba(33, 150, 243, 0.6) !important;
+  border-color: rgba(33, 150, 243, 0.8) !important;
+}
+
+.custom-video-marker-tooltip {
+  font-family: Arial, Helvetica, sans-serif;
+  text-shadow: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure markers are visible over other controls */
+.video-js .vjs-progress-control .custom-video-marker {
+  position: absolute !important;
+  z-index: 1000 !important;
+}
+
+.video-js .vjs-progress-control .custom-video-marker-range {
+  position: absolute !important;
+  z-index: 998 !important;
+}
+
+.video-js .vjs-progress-control .custom-video-marker-tooltip {
+  position: absolute !important;
+  z-index: 1001 !important;
+}
