@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useQuery, gql } from "@apollo/client";
 import Link from "next/link";
 import { useSettings } from "@/app/context/SettingsContext";
+import { useStashTags } from "@/context/StashTagsContext";
 import { usePathname } from "next/navigation";
 import {
     Sheet,
@@ -60,6 +61,32 @@ const GET_ACTOR_SCENES_WITH_TAG = gql`
         performers: { modifier: INCLUDES, value: [$actorId] }
         has_markers: $hasMarkers
         tags: { modifier: INCLUDES, value: $markersOrganisedIds }
+      }
+      filter: { page: $pageNumber, per_page: $perPage }
+    ) {
+      scenes {
+        id
+        title
+        paths { screenshot vtt }
+      }
+    }
+  }
+`;
+
+/* Tag-excluded query: excludes tags: EXCLUDES $markersOrganisedIds */
+const GET_ACTOR_SCENES_WITHOUT_TAG = gql`
+  query findActorScenesWithoutTag(
+    $actorId: ID!
+    $hasMarkers: String
+    $markersOrganisedIds: [ID!]!
+    $pageNumber: Int
+    $perPage: Int
+  ) {
+    findScenes(
+      scene_filter: {
+        performers: { modifier: INCLUDES, value: [$actorId] }
+        has_markers: $hasMarkers
+        tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
       }
       filter: { page: $pageNumber, per_page: $perPage }
     ) {
@@ -165,7 +192,17 @@ export default function ActorScenesPage() {
     // Filters
     const [hasMarkers, setHasMarkers] = useState<"true" | "false">("true");
     const [markersOrganised, setMarkersOrganised] = useState<boolean>(false);
-    const MARKERS_TAG_ID = 3104;
+    
+    // Get tag options from context
+    const { stashTags } = useStashTags();
+    
+    // Find tag ID by name (same pattern as scenes detail page)
+    const findTagIdByName = (tagName: string): string | null => {
+        const tag = stashTags?.find((t: any) => t.name === tagName);
+        return tag?.id ? String(tag.id) : null;
+    };
+    
+    const markersTagId = findTagIdByName("Markers Organised");
 
     // Pagination
     const [pageNumber, setPageNumber] = useState(1);
@@ -188,35 +225,36 @@ export default function ActorScenesPage() {
     const withTagVars = {
         actorId,
         hasMarkers,
-        markersOrganisedIds: [MARKERS_TAG_ID],
+        markersOrganisedIds: markersTagId ? [markersTagId] : [],
         pageNumber,
         perPage,
     };
 
     const {
-        data: dataBase,
-        loading: loadingBase,
-        error: errorBase,
-    } = useQuery(GET_ACTOR_SCENES_BASE, {
-        variables: baseVars,
-        skip: markersOrganised, // skip when tag filter is enabled
+        data: dataWithTag,
+        loading: loadingWithTag,
+        error: errorWithTag,
+    } = useQuery(GET_ACTOR_SCENES_WITH_TAG, {
+        variables: withTagVars,
+        skip: !markersOrganised || !markersTagId, // skip when checkbox is unchecked or tag not found
         fetchPolicy: "cache-and-network",
     });
 
     const {
-        data: dataTagged,
-        loading: loadingTagged,
-        error: errorTagged,
-    } = useQuery(GET_ACTOR_SCENES_WITH_TAG, {
+        data: dataWithoutTag,
+        loading: loadingWithoutTag,
+        error: errorWithoutTag,
+    } = useQuery(GET_ACTOR_SCENES_WITHOUT_TAG, {
         variables: withTagVars,
-        skip: !markersOrganised, // skip when tag filter is disabled
+        skip: markersOrganised || !markersTagId, // skip when checkbox is checked or tag not found
         fetchPolicy: "cache-and-network",
     });
 
-    const loading = markersOrganised ? loadingTagged : loadingBase;
-    const error = markersOrganised ? errorTagged : errorBase;
-    const scenes =
-        (markersOrganised ? dataTagged?.findScenes?.scenes : dataBase?.findScenes?.scenes) ?? [];
+    const loading = markersOrganised ? loadingWithTag : loadingWithoutTag;
+    const error = markersOrganised ? errorWithTag : errorWithoutTag;
+    const scenes = markersOrganised 
+        ? (dataWithTag?.findScenes?.scenes ?? [])
+        : (dataWithoutTag?.findScenes?.scenes ?? []);
 
     // Pagination heuristics
     const hasNextPage = scenes.length === perPage;
@@ -273,6 +311,7 @@ export default function ActorScenesPage() {
                     size="sm"
                     label="Markers Organised"
                     checked={markersOrganised}
+                    disabled={!markersTagId}
                     onChange={(e) => setMarkersOrganised(e.target.checked)}
                 />
             </Box>
