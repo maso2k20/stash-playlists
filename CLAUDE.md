@@ -37,8 +37,8 @@ This is a Next.js application that creates playlists from Stash server markers, 
 
 **Playlist System:**
 - Manual playlists: User-curated item collections
-- Smart playlists: Auto-generated based on actor/tag conditions with configurable clip timing
-- Items represent video segments with start/end times, screenshots, and stream URLs
+- Smart playlists: Auto-generated based on actor/tag/rating conditions with configurable clip timing
+- Items represent video segments with start/end times, screenshots, stream URLs, and optional 1-5 star ratings
 
 **Stash Integration:**
 - Configuration via environment variables or Settings table (STASH_GRAPHQL_URL, STASH_API_KEY)
@@ -53,6 +53,9 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - `/api/actors` - Actor management and scene retrieval
 - `/api/playlists` - CRUD operations and smart playlist generation
 - `/api/playlists/[id]/items` - Playlist item management with ordering
+- `/api/items` - Item creation and management
+- `/api/items/[id]/rating` - Individual item rating GET/PATCH operations
+- `/api/items/filter` - Filter items by minimum rating
 - `/api/settings` - Configuration management
 - `/api/stash-graphql` - Proxy to Stash server GraphQL
 
@@ -65,6 +68,16 @@ This is a Next.js application that creates playlists from Stash server markers, 
 ### Smart Playlist Logic
 Located in `src/lib/smartPlaylistServer.ts:buildItemsForPlaylist()`:
 - Queries Stash for scene markers matching actor/tag conditions
+- Applies rating filters (minimum rating threshold) by checking database
 - Creates video clips with configurable before/after timing around markers
 - Generates deduped titles combining scene and marker names
 - Provides preview, screenshot, and stream URLs with API key authentication
+
+### Rating System
+Comprehensive 1-5 star rating system for markers/items:
+- **Database**: `rating` field in Item table (nullable integer)
+- **UI Component**: `src/components/StarRating.tsx` - Interactive star rating with MUI Joy
+- **Scene Management**: Rate markers directly on `/scenes/[id]` page
+- **Smart Playlist Integration**: Filter by minimum rating in rule builder
+- **Auto-creation**: Items are created automatically when rating non-existent markers
+- **API**: Full CRUD operations for ratings with validation and error handling
