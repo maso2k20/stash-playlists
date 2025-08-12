@@ -157,25 +157,13 @@ export default function SceneTagManagerPage() {
         return sceneId ? `${stashServer}/scene/${sceneId}/stream?api_key=${stashAPI}` : "";
     }, [sceneId, stashServer, stashAPI]);
 
-    const [initialScreenshotPath, setInitialScreenshotPath] = useState<string>("");
-    
-    // Reset screenshot path when scene ID changes, then set it when scene loads
-    useEffect(() => {
-        setInitialScreenshotPath("");
-    }, [sceneId]);
-
-    useEffect(() => {
-        if (scene?.paths?.screenshot && !initialScreenshotPath) {
-            setInitialScreenshotPath(scene.paths.screenshot);
-        }
-    }, [scene?.paths?.screenshot, initialScreenshotPath]);
-
     const posterUrl = useMemo(() => {
-        const raw = initialScreenshotPath || "";
+        const raw = scene?.paths?.screenshot || "";
+        if (!raw) return undefined;
         const abs = joinUrl(stashServer, raw);
         const withKey = withApiKey(abs, stashAPI);
         return withKey || undefined; // undefined avoids a broken img if empty
-    }, [initialScreenshotPath, stashServer, stashAPI]);
+    }, [scene?.paths?.screenshot, stashServer, stashAPI]);
 
     // ----- State -----
     // Drafts for BOTH server markers and new temporary rows (by id)
@@ -221,12 +209,6 @@ export default function SceneTagManagerPage() {
         });
     }, [markers.length]);
 
-    useEffect(() => {
-        const p = playerRef.current;
-        if (!p) return;
-        // Video.js treats "" as "no poster"
-        p.poster(posterUrl || "");
-    }, [posterUrl]);
 
     const setDraft = (id: string, patch: Partial<Draft>) =>
         setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || ({} as Draft)), ...patch } }));
@@ -565,7 +547,6 @@ export default function SceneTagManagerPage() {
     const handlePlayerReady = (player: any) => {
         playerRef.current = player;
         player.muted(true);
-        if (posterUrl) player.poster(posterUrl);
         setPlayerReady(true);
     };
 
