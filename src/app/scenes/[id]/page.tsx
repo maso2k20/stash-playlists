@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { useQuery, gql } from "@apollo/client";
+import { useQuery, useMutation, gql } from "@apollo/client";
 import {
     Container,
     Sheet,
@@ -33,7 +33,8 @@ const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
     findScene(id: $id) {
       id
       title
-      paths { screenshot vtt }   
+      paths { screenshot vtt }
+      tags { id name }
       scene_markers {
         id
         title
@@ -47,7 +48,7 @@ const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
 `;
 
 /* Mutations */
-const UPDATE_SCENE_MARKER_STR = `
+const UPDATE_SCENE_MARKER = gql`
   mutation updateSceneMarker($input: SceneMarkerUpdateInput!) {
     sceneMarkerUpdate(input: $input) {
       id
@@ -60,7 +61,7 @@ const UPDATE_SCENE_MARKER_STR = `
   }
 `;
 
-const CREATE_SCENE_MARKER_STR = `
+const CREATE_SCENE_MARKER = gql`
   mutation createSceneMarker($input: SceneMarkerCreateInput!) {
     sceneMarkerCreate(input: $input) {
       id
@@ -68,6 +69,15 @@ const CREATE_SCENE_MARKER_STR = `
       seconds
       end_seconds
       primary_tag { id name }
+      tags { id name }
+    }
+  }
+`;
+
+const UPDATE_SCENE = gql`
+  mutation updateScene($input: SceneUpdateInput!) {
+    sceneUpdate(input: $input) {
+      id
       tags { id name }
     }
   }
@@ -111,6 +121,10 @@ export default function SceneTagManagerPage() {
         fetchPolicy: "cache-and-network",
     });
 
+    const [updateSceneMarker] = useMutation(UPDATE_SCENE_MARKER);
+    const [createSceneMarker] = useMutation(CREATE_SCENE_MARKER);
+    const [updateScene] = useMutation(UPDATE_SCENE);
+
     const scene = data?.findScene;
     const markers: Marker[] = (scene?.scene_markers ?? []) as any;
 
@@ -125,13 +139,30 @@ export default function SceneTagManagerPage() {
     const settings = useSettings();
     const stashServer = String(settings["STASH_SERVER"] || "").replace(/\/+$/, "");
     const stashAPI = String(settings["STASH_API"] || "");
-    const streamUrl = scene?.id ? `${stashServer}/scene/${scene.id}/stream?api_key=${stashAPI}` : "";
+    // Stabilize streamUrl and posterUrl to prevent video jumping on marker updates
+    const streamUrl = useMemo(() => {
+        return sceneId ? `${stashServer}/scene/${sceneId}/stream?api_key=${stashAPI}` : "";
+    }, [sceneId, stashServer, stashAPI]);
+
+    const [initialScreenshotPath, setInitialScreenshotPath] = useState<string>("");
+    
+    // Reset screenshot path when scene ID changes, then set it when scene loads
+    useEffect(() => {
+        setInitialScreenshotPath("");
+    }, [sceneId]);
+
+    useEffect(() => {
+        if (scene?.paths?.screenshot && !initialScreenshotPath) {
+            setInitialScreenshotPath(scene.paths.screenshot);
+        }
+    }, [scene?.paths?.screenshot, initialScreenshotPath]);
+
     const posterUrl = useMemo(() => {
-        const raw = scene?.paths?.screenshot || "";
+        const raw = initialScreenshotPath || "";
         const abs = joinUrl(stashServer, raw);
         const withKey = withApiKey(abs, stashAPI);
         return withKey || undefined; // undefined avoids a broken img if empty
-    }, [scene?.paths?.screenshot, stashServer, stashAPI]);
+    }, [initialScreenshotPath, stashServer, stashAPI]);
 
     // ----- State -----
     // Drafts for BOTH server markers and new temporary rows (by id)
@@ -208,25 +239,40 @@ export default function SceneTagManagerPage() {
         );
     };
 
-    // Use existing API proxy so settings are applied server-side
-    async function callStashGraph<T = any>(query: string, variables: Record<string, any>): Promise<T> {
-        const res = await fetch("/api/stash-graphql", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query, variables }),
-        });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || json?.errors) {
-            const msg = json?.errors?.map((e: any) => e?.message).join("; ") || `HTTP ${res.status}`;
-            throw new Error(msg);
-        }
-        return json.data;
-    }
 
     const normalizedTagIds = (d: Draft) =>
         d.primary_tag_id ? Array.from(new Set([d.primary_tag_id, ...d.tag_ids])) : d.tag_ids;
 
     const isTemp = (id: string) => id.startsWith("tmp_");
+
+    // Find tag ID by name from available tags
+    const findTagIdByName = (tagName: string): string | null => {
+        const tag = tagOptions.find(t => t.name === tagName);
+        return tag?.id || null;
+    };
+
+    // Add "Markers Organised" tag to the scene
+    const addMarkersOrganisedTag = async () => {
+        const markersOrganisedTagId = findTagIdByName("Markers Organised");
+        if (!markersOrganisedTagId || !scene) return;
+
+        // Check if scene already has this tag
+        const currentTagIds = (scene.tags || []).map((t: Tag) => t.id);
+        if (currentTagIds.includes(markersOrganisedTagId)) return;
+
+        try {
+            await updateScene({
+                variables: {
+                    input: {
+                        id: sceneId,
+                        tag_ids: [...currentTagIds, markersOrganisedTagId]
+                    }
+                }
+            });
+        } catch (e) {
+            console.error("Failed to add 'Markers Organised' tag:", e);
+        }
+    };
 
     // Save existing (update) OR new (create)
     const handleSaveRow = async (id: string) => {
@@ -236,26 +282,30 @@ export default function SceneTagManagerPage() {
         if (isTemp(id)) {
             try {
                 setSavingId(id);
-                await callStashGraph(CREATE_SCENE_MARKER_STR, {
-                    input: {
-                        scene_id: sceneId,
-                        title: d.title,
-                        seconds: Math.max(0, Number(d.seconds) || 0),
-                        end_seconds:
-                            typeof d.end_seconds === "number" && Number.isFinite(d.end_seconds)
-                                ? Math.max(0, Number(d.end_seconds))
-                                : null,
-                        primary_tag_id: d.primary_tag_id,
-                        tag_ids: normalizedTagIds(d),
+                await createSceneMarker({
+                    variables: {
+                        input: {
+                            scene_id: sceneId,
+                            title: d.title,
+                            seconds: Math.max(0, Number(d.seconds) || 0),
+                            end_seconds:
+                                typeof d.end_seconds === "number" && Number.isFinite(d.end_seconds)
+                                    ? Math.max(0, Number(d.end_seconds))
+                                    : null,
+                            primary_tag_id: d.primary_tag_id,
+                            tag_ids: normalizedTagIds(d),
+                        },
                     },
                 });
-                // Remove temp and refresh
+                // Remove temp
                 setNewIds((prev) => prev.filter((x) => x !== id));
                 setDrafts((prev) => {
                     const { [id]: _, ...rest } = prev;
                     return rest;
                 });
-                await refetch();
+                await addMarkersOrganisedTag();
+                // Delay refetch to prevent video jumping
+                setTimeout(() => refetch(), 100);
             } catch (e) {
                 console.error("Failed to create marker:", e);
             } finally {
@@ -265,20 +315,24 @@ export default function SceneTagManagerPage() {
             // existing -> update
             try {
                 setSavingId(id);
-                await callStashGraph(UPDATE_SCENE_MARKER_STR, {
-                    input: {
-                        id,
-                        title: d.title,
-                        seconds: Math.max(0, Number(d.seconds) || 0),
-                        end_seconds:
-                            typeof d.end_seconds === "number" && Number.isFinite(d.end_seconds)
-                                ? Math.max(0, Number(d.end_seconds))
-                                : null,
-                        primary_tag_id: d.primary_tag_id,
-                        tag_ids: normalizedTagIds(d),
+                await updateSceneMarker({
+                    variables: {
+                        input: {
+                            id,
+                            title: d.title,
+                            seconds: Math.max(0, Number(d.seconds) || 0),
+                            end_seconds:
+                                typeof d.end_seconds === "number" && Number.isFinite(d.end_seconds)
+                                    ? Math.max(0, Number(d.end_seconds))
+                                    : null,
+                            primary_tag_id: d.primary_tag_id,
+                            tag_ids: normalizedTagIds(d),
+                        },
                     },
                 });
-                await refetch();
+                await addMarkersOrganisedTag();
+                // Delay refetch to prevent video jumping
+                setTimeout(() => refetch(), 100);
             } catch (e) {
                 console.error("Failed to update marker:", e);
             } finally {
@@ -333,10 +387,11 @@ export default function SceneTagManagerPage() {
         if (!dirtyCount) return;
         setSavingAll(true);
         try {
-            await Promise.allSettled([
-                // create all new
-                ...newEntries.map(({ id, d }) =>
-                    callStashGraph(CREATE_SCENE_MARKER_STR, {
+            // Handle all mutations sequentially 
+            // Create all new markers
+            for (const { id, d } of newEntries) {
+                await createSceneMarker({
+                    variables: {
                         input: {
                             scene_id: sceneId,
                             title: d!.title,
@@ -348,11 +403,14 @@ export default function SceneTagManagerPage() {
                             primary_tag_id: d!.primary_tag_id,
                             tag_ids: normalizedTagIds(d!),
                         },
-                    })
-                ),
-                // update all dirty existing
-                ...dirtyExistingEntries.map(({ id, d }) =>
-                    callStashGraph(UPDATE_SCENE_MARKER_STR, {
+                    },
+                });
+            }
+
+            // Update all dirty existing markers
+            for (const { id, d } of dirtyExistingEntries) {
+                await updateSceneMarker({
+                    variables: {
                         input: {
                             id,
                             title: d!.title,
@@ -364,9 +422,10 @@ export default function SceneTagManagerPage() {
                             primary_tag_id: d!.primary_tag_id,
                             tag_ids: normalizedTagIds(d!),
                         },
-                    })
-                ),
-            ]);
+                    },
+                });
+            }
+
             // Clear temps
             setNewIds([]);
             setDrafts((prev) => {
@@ -374,7 +433,9 @@ export default function SceneTagManagerPage() {
                 for (const id of Object.keys(next)) if (isTemp(id)) delete next[id];
                 return next;
             });
-            await refetch();
+            await addMarkersOrganisedTag();
+            // Delay refetch to prevent video jumping
+            setTimeout(() => refetch(), 100);
         } catch (e) {
             console.error("Save all failed:", e);
         } finally {
@@ -471,15 +532,7 @@ export default function SceneTagManagerPage() {
         }
     };
 
-    // Ignore clicks from controls; clicking card background jumps to start
-    const handleCardClick = (
-        e: React.MouseEvent<HTMLDivElement, MouseEvent>,
-        seconds: number
-    ) => {
-        const el = e.target as HTMLElement;
-        if (el.closest("input, textarea, button, [role='combobox'], [contenteditable]")) return;
-        jumpTo(seconds);
-    };
+    // Removed handleCardClick - only the Jump button should trigger video seeking
 
     // Add a new inline marker row
     const addNewInline = () => {
@@ -606,12 +659,10 @@ export default function SceneTagManagerPage() {
                                             <Card
                                                 key={id}
                                                 variant="soft"
-                                                onClick={(e) => handleCardClick(e, d.seconds)}
                                                 sx={{
                                                     p: 1.25,
                                                     display: "grid",
                                                     gap: 0.75,
-                                                    cursor: "pointer",
                                                     transition: "transform 120ms ease, box-shadow 120ms ease",
                                                     "&:hover": { transform: "translateY(-1px)", boxShadow: "md" },
                                                 }}
@@ -634,7 +685,6 @@ export default function SceneTagManagerPage() {
                                                         onChange={(e) => setDraft(id, { title: e.target.value })}
                                                         size="sm"
                                                         sx={{ minWidth: 220 }}
-                                                        onClick={(e) => e.stopPropagation()}
                                                     />
 
                                                     <Box
@@ -654,10 +704,7 @@ export default function SceneTagManagerPage() {
                                                         <Button
                                                             size="sm"
                                                             variant="outlined"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                jumpTo(d.seconds);
-                                                            }}
+                                                            onClick={() => jumpTo(d.seconds)}
                                                         >
                                                             Jump
                                                         </Button>
@@ -685,8 +732,7 @@ export default function SceneTagManagerPage() {
                                                                 size="sm"
                                                                 variant="soft"
                                                                 disabled={!canReadPlayerTime}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
+                                                                onClick={() => {
                                                                     const t = currentPlayerSecond();
                                                                     setDraft(id, { seconds: t });
                                                                 }}
@@ -701,7 +747,6 @@ export default function SceneTagManagerPage() {
                                                         onChange={(seconds) => setDraft(id, { seconds })}
                                                         size="sm"
                                                         sx={{ width: 140 }}
-                                                        onClick={(e) => e.stopPropagation()}
                                                         placeholder="0:00"
                                                     />
 
@@ -712,8 +757,7 @@ export default function SceneTagManagerPage() {
                                                                 size="sm"
                                                                 variant="soft"
                                                                 disabled={!canReadPlayerTime}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
+                                                                onClick={() => {
                                                                     const t = currentPlayerSecond();
                                                                     setDraft(id, { end_seconds: t });
                                                                 }}
@@ -728,7 +772,6 @@ export default function SceneTagManagerPage() {
                                                         onChange={(seconds) => setDraft(id, { end_seconds: seconds === 0 ? null : seconds })}
                                                         size="sm"
                                                         sx={{ width: 140 }}
-                                                        onClick={(e) => e.stopPropagation()}
                                                         placeholder="0:00"
                                                     />
                                                 </Box>
@@ -751,7 +794,6 @@ export default function SceneTagManagerPage() {
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
                                                         sx={{ minWidth: 240, flex: 1, maxWidth: 480 }}
                                                         placeholder="Select primary tag…"
-                                                        onClick={(e) => e.stopPropagation()}
                                                     />
                                                 </Box>
 
@@ -783,7 +825,6 @@ export default function SceneTagManagerPage() {
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
                                                         sx={{ minWidth: 320, flex: 1, maxWidth: 600 }}
                                                         placeholder="Add tags…"
-                                                        onClick={(e) => e.stopPropagation()}
                                                     />
                                                 </Box>
 
@@ -793,20 +834,14 @@ export default function SceneTagManagerPage() {
                                                         size="sm"
                                                         variant="plain"
                                                         disabled={savingThis || savingAll}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleResetRow(id);
-                                                        }}
+                                                        onClick={() => handleResetRow(id)}
                                                     >
                                                         {isNew ? "Discard" : "Reset"}
                                                     </Button>
                                                     <Button
                                                         size="sm"
                                                         disabled={!dirty || savingThis || savingAll}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleSaveRow(id);
-                                                        }}
+                                                        onClick={() => handleSaveRow(id)}
                                                     >
                                                         {savingThis ? "Saving…" : isNew ? "Create" : "Save"}
                                                     </Button>
