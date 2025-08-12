@@ -104,32 +104,113 @@ export default function AddActorsPage() {
     fetchPolicy: "cache-and-network",
   });
 
+  // For multi-word searches, we need a fallback strategy since server tokenizes
+  const searchQuery = useMemo(() => {
+    if (!debouncedFilter) return "";
+    return debouncedFilter;
+  }, [debouncedFilter]);
+
+  const fallbackQuery = useMemo(() => {
+    if (!debouncedFilter) return "";
+    const words = debouncedFilter.trim().split(/\s+/);
+    // If it's a multi-word search, use just the first word as fallback
+    return words.length > 1 ? words[0] : "";
+  }, [debouncedFilter]);
+
   const {
     data: filterData,
     loading: filterLoading,
     error: filterError,
   } = useQuery(FILTER_PERFORMERS, {
-    variables: { filter: debouncedFilter },
-    skip: !debouncedFilter,
+    variables: { filter: searchQuery },
+    skip: !searchQuery,
     fetchPolicy: "cache-and-network",
   });
 
-  const loadingAny = loading || filterLoading;
-  const errorAny = error || filterError;
+  const {
+    data: fallbackData,
+    loading: fallbackLoading,
+    error: fallbackError,
+  } = useQuery(FILTER_PERFORMERS, {
+    variables: { filter: fallbackQuery },
+    skip: !fallbackQuery,
+    fetchPolicy: "cache-and-network",
+  });
+
+  const loadingAny = loading || filterLoading || fallbackLoading;
+  const errorAny = error || filterError || fallbackError;
 
   const performersRaw: Performer[] = useMemo(() => {
     if (debouncedFilter) {
-      return filterData?.findPerformers?.performers ?? [];
+      const primaryResults = filterData?.findPerformers?.performers ?? [];
+      const fallbackResults = fallbackData?.findPerformers?.performers ?? [];
+      
+      // Combine primary and fallback results, removing duplicates
+      const combinedResults = [...primaryResults];
+      const existingIds = new Set(primaryResults.map(p => p.id));
+      
+      for (const performer of fallbackResults) {
+        if (!existingIds.has(performer.id)) {
+          combinedResults.push(performer);
+        }
+      }
+      
+      return combinedResults;
     }
     return data?.findPerformers?.performers ?? [];
-  }, [debouncedFilter, filterData, data]);
+  }, [debouncedFilter, filterData, data, fallbackData]);
+
+  // Apply client-side filtering for better search results
+  const performersFiltered = useMemo(() => {
+    if (!debouncedFilter) return performersRaw;
+    
+    const searchTerm = debouncedFilter.toLowerCase();
+    
+    // Filter and sort results to prioritize phrase matches over tokenized matches
+    return performersRaw
+      .filter((p) => {
+        const name = p.name.toLowerCase();
+        // Always include if the name contains the search term as a phrase
+        if (name.includes(searchTerm)) return true;
+        
+        // For tokenized results (when server splits on spaces), 
+        // only include if all search tokens appear in the name
+        const searchTokens = searchTerm.split(/\s+/).filter(t => t.length > 0);
+        return searchTokens.every(token => name.includes(token));
+      })
+      .sort((a, b) => {
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+        
+        // Prioritize exact matches
+        if (aName === searchTerm && bName !== searchTerm) return -1;
+        if (bName === searchTerm && aName !== searchTerm) return 1;
+        
+        // Then prioritize phrase matches (contains search term as continuous text)
+        const aContainsPhrase = aName.includes(searchTerm);
+        const bContainsPhrase = bName.includes(searchTerm);
+        
+        if (aContainsPhrase && !bContainsPhrase) return -1;
+        if (bContainsPhrase && !aContainsPhrase) return 1;
+        
+        // Then prioritize names that start with the search term
+        const aStarts = aName.startsWith(searchTerm);
+        const bStarts = bName.startsWith(searchTerm);
+        
+        if (aStarts && !bStarts) return -1;
+        if (bStarts && !aStarts) return 1;
+        
+        // Finally, sort alphabetically
+        return aName.localeCompare(bName);
+      });
+  }, [performersRaw, debouncedFilter]);
 
   // Apply "hide existing" filter
   const performers = useMemo(() => {
-    if (!hideExisting) return performersRaw;
-    const filtered = performersRaw.filter((p) => !existingIds.has(p.id));
+    if (!hideExisting) return performersFiltered;
+    const filtered = performersFiltered.filter((p) => !existingIds.has(p.id));
     return filtered;
-  }, [performersRaw, hideExisting, existingIds]);
+  }, [performersFiltered, hideExisting, existingIds]);
 
   // For pagination when not filtering by name:
   // We don't know totalCount reliably; use a heuristic:
@@ -139,7 +220,7 @@ export default function AddActorsPage() {
     // If the source page has fewer than perPage, assume we're at the end
     performersRaw.length === perPage;
 
-  const hiddenCount = performersRaw.length - performers.length;
+  const hiddenCount = performersFiltered.length - performers.length;
 
   const handleAdd = async (actor: Performer) => {
     try {
