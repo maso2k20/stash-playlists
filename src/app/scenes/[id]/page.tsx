@@ -20,8 +20,14 @@ import {
     Grid,
     IconButton,
     Tooltip,
+    Modal,
+    ModalDialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
 } from "@mui/joy";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { useStashTags } from "@/context/StashTagsContext";
 import { useSettings } from "@/app/context/SettingsContext";
 import VideoJS from "@/components/videojs/VideoJS";
@@ -74,6 +80,12 @@ const CREATE_SCENE_MARKER = gql`
   }
 `;
 
+const DELETE_SCENE_MARKER = gql`
+  mutation deleteSceneMarker($id: ID!) {
+    sceneMarkerDestroy(id: $id)
+  }
+`;
+
 const UPDATE_SCENE = gql`
   mutation updateScene($input: SceneUpdateInput!) {
     sceneUpdate(input: $input) {
@@ -123,6 +135,7 @@ export default function SceneTagManagerPage() {
 
     const [updateSceneMarker] = useMutation(UPDATE_SCENE_MARKER);
     const [createSceneMarker] = useMutation(CREATE_SCENE_MARKER);
+    const [deleteSceneMarker] = useMutation(DELETE_SCENE_MARKER);
     const [updateScene] = useMutation(UPDATE_SCENE);
 
     const scene = data?.findScene;
@@ -181,6 +194,10 @@ export default function SceneTagManagerPage() {
     const playerRef = useRef<any>(null);
     const [playerReady, setPlayerReady] = useState(false);
     const [hasStarted, setHasStarted] = useState(false);
+
+    // Delete confirmation dialog
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [markerToDelete, setMarkerToDelete] = useState<{ id: string; title: string } | null>(null);
 
     // Init drafts from server markers
     useEffect(() => {
@@ -364,6 +381,53 @@ export default function SceneTagManagerPage() {
                 tag_ids: (m.tags || []).map((t) => t.id),
             },
         }));
+    };
+
+    const handleDeleteRow = (id: string) => {
+        if (isTemp(id)) {
+            // Just remove temp row
+            setNewIds((prev) => prev.filter((x) => x !== id));
+            setDrafts((prev) => {
+                const { [id]: _, ...rest } = prev;
+                return rest;
+            });
+            return;
+        }
+
+        // Show confirmation dialog for existing markers
+        const marker = markers.find((m) => m.id === id);
+        const markerTitle = marker?.title || "Untitled Marker";
+        setMarkerToDelete({ id, title: markerTitle });
+        setDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!markerToDelete) return;
+
+        try {
+            setSavingId(markerToDelete.id);
+            await deleteSceneMarker({
+                variables: { id: markerToDelete.id }
+            });
+            // Remove from drafts
+            setDrafts((prev) => {
+                const { [markerToDelete.id]: _, ...rest } = prev;
+                return rest;
+            });
+            // Delay refetch to prevent video jumping
+            setTimeout(() => refetch(), 100);
+        } catch (e) {
+            console.error("Failed to delete marker:", e);
+        } finally {
+            setSavingId(null);
+            setDeleteDialogOpen(false);
+            setMarkerToDelete(null);
+        }
+    };
+
+    const cancelDelete = () => {
+        setDeleteDialogOpen(false);
+        setMarkerToDelete(null);
     };
 
     // Save All / Reset All must include temp rows as well
@@ -830,6 +894,18 @@ export default function SceneTagManagerPage() {
 
                                                 {/* Per-row actions */}
                                                 <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", mt: 0.5 }}>
+                                                    <Tooltip title="Delete marker" variant="soft">
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="soft"
+                                                            color="danger"
+                                                            disabled={savingThis || savingAll}
+                                                            onClick={() => handleDeleteRow(id)}
+                                                            aria-label="Delete marker"
+                                                        >
+                                                            <DeleteIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
                                                     <Button
                                                         size="sm"
                                                         variant="plain"
@@ -972,6 +1048,29 @@ export default function SceneTagManagerPage() {
                     </Grid>
                 </Grid>
             </Sheet>
+
+            {/* Delete Confirmation Dialog */}
+            <Modal open={deleteDialogOpen} onClose={cancelDelete}>
+                <ModalDialog sx={{ minWidth: 360 }}>
+                    <DialogTitle>Delete Marker</DialogTitle>
+                    <DialogContent>
+                        <Typography level="body-sm">
+                            Are you sure you want to delete "{markerToDelete?.title}"?
+                        </Typography>
+                        <Typography level="body-xs" sx={{ mt: 1, opacity: 0.8 }}>
+                            This action cannot be undone.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button variant="plain" onClick={cancelDelete}>
+                            Cancel
+                        </Button>
+                        <Button color="danger" onClick={confirmDelete}>
+                            Delete
+                        </Button>
+                    </DialogActions>
+                </ModalDialog>
+            </Modal>
         </Container>
     );
 }
