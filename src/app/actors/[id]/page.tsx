@@ -301,7 +301,6 @@ export default function Page() {
             <Button
               size="sm"
               variant={isMarkersPage ? "solid" : "soft"}
-              component="a"
             >
               Markers
             </Button>
@@ -310,7 +309,6 @@ export default function Page() {
             <Button
               size="sm"
               variant={isMarkersPage ? "soft" : "solid"}
-              component="a"
             >
               Scenes
             </Button>

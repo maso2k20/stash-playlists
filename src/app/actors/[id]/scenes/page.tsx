@@ -40,7 +40,7 @@ const GET_ACTOR_SCENES_BASE = gql`
       scenes {
         id
         title
-        paths { screenshot }
+        paths { screenshot vtt }
       }
     }
   }
