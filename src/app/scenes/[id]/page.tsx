@@ -191,12 +191,17 @@ export default function SceneTagManagerPage() {
     useEffect(() => {
         const next: Record<string, Draft> = {};
         for (const m of markers) {
+            const markerTagIds = (m.tags || []).map((t) => t.id);
+            const normalizedMarkerTagIds = m.primary_tag?.id 
+                ? Array.from(new Set([m.primary_tag.id, ...markerTagIds]))
+                : markerTagIds;
+            
             next[m.id] = {
                 title: m.title || "",
                 seconds: Number(m.seconds || 0),
                 end_seconds: m.end_seconds != null ? Number(m.end_seconds) : null,
                 primary_tag_id: m.primary_tag?.id ?? null,
-                tag_ids: (m.tags || []).map((t) => t.id),
+                tag_ids: normalizedMarkerTagIds,
             };
         }
         setDrafts((prev) => {
@@ -222,20 +227,30 @@ export default function SceneTagManagerPage() {
     };
 
     const isDirtyExisting = (m: Marker, d: Draft) => {
+        const serverTagIds = (m.tags || []).map((t) => t.id);
+        const serverNormalizedTagIds = m.primary_tag?.id 
+            ? Array.from(new Set([m.primary_tag.id, ...serverTagIds]))
+            : serverTagIds;
+        
         const server = {
             title: m.title || "",
             seconds: Number(m.seconds || 0),
             end_seconds: m.end_seconds != null ? Number(m.end_seconds) : null,
             primary_tag_id: m.primary_tag?.id ?? null,
-            tag_ids: (m.tags || []).map((t) => t.id),
+            tag_ids: serverNormalizedTagIds,
         };
-        return (
+        
+        const draftNormalizedTags = normalizedTagIds(d);
+        const isDirty = (
             d.title !== server.title ||
             d.seconds !== server.seconds ||
             (d.end_seconds ?? null) !== (server.end_seconds ?? null) ||
             d.primary_tag_id !== server.primary_tag_id ||
-            !eqShallowSet(d.tag_ids, server.tag_ids)
+            !eqShallowSet(draftNormalizedTags, server.tag_ids)
         );
+        
+        
+        return isDirty;
     };
 
 
@@ -330,6 +345,24 @@ export default function SceneTagManagerPage() {
                     },
                 });
                 await addMarkersOrganisedTag();
+                // Immediately update the draft to match what was just saved to clear "unsaved" state
+                // The saved tags will be normalized (primary tag included), so we store the normalized version
+                const normalizedTags = normalizedTagIds(d);
+                setDrafts((prev) => {
+                    const newDraft = {
+                        title: d.title,
+                        seconds: Math.max(0, Number(d.seconds) || 0),
+                        end_seconds: typeof d.end_seconds === "number" && Number.isFinite(d.end_seconds)
+                            ? Math.max(0, Number(d.end_seconds))
+                            : null,
+                        primary_tag_id: d.primary_tag_id,
+                        tag_ids: normalizedTags,
+                    };
+                    return {
+                        ...prev,
+                        [id]: newDraft,
+                    };
+                });
                 // Delay refetch to prevent video jumping
                 setTimeout(() => refetch(), 100);
             } catch (e) {
@@ -472,11 +505,25 @@ export default function SceneTagManagerPage() {
                 });
             }
 
-            // Clear temps
+            // Clear temps and reset existing marker drafts to their saved state
             setNewIds([]);
             setDrafts((prev) => {
                 const next = { ...prev };
+                // Remove all temporary drafts
                 for (const id of Object.keys(next)) if (isTemp(id)) delete next[id];
+                // Reset existing markers to match what was just saved
+                for (const { id, d } of dirtyExistingEntries) {
+                    const normalizedTags = normalizedTagIds(d!);
+                    next[id] = {
+                        title: d!.title,
+                        seconds: Math.max(0, Number(d!.seconds) || 0),
+                        end_seconds: typeof d!.end_seconds === "number" && Number.isFinite(d!.end_seconds)
+                            ? Math.max(0, Number(d!.end_seconds))
+                            : null,
+                        primary_tag_id: d!.primary_tag_id,
+                        tag_ids: normalizedTags,
+                    };
+                }
                 return next;
             });
             await addMarkersOrganisedTag();
@@ -669,7 +716,7 @@ export default function SceneTagManagerPage() {
                                     Reset All
                                 </Button>
                                 <Button size="sm" disabled={!dirtyCount || savingAll} onClick={handleSaveAll}>
-                                    {savingAll ? "Saving…" : "Save All"}
+                                    {savingAll ? "Saving…" : "Save"}
                                 </Button>
                             </Box>
 
@@ -908,13 +955,6 @@ export default function SceneTagManagerPage() {
                                                         onClick={() => handleResetRow(id)}
                                                     >
                                                         {isNew ? "Discard" : "Reset"}
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        disabled={!dirty || savingThis || savingAll}
-                                                        onClick={() => handleSaveRow(id)}
-                                                    >
-                                                        {savingThis ? "Saving…" : isNew ? "Create" : "Save"}
                                                     </Button>
                                                 </Box>
                                             </Card>
