@@ -671,7 +671,7 @@ export default function SceneTagManagerPage() {
     }, [markers]);
 
     return (
-        <Container maxWidth={false} sx={{ px: { xs: 1.5, sm: 2, lg: 3 }, py: 2 }}>
+        <Container maxWidth={false} sx={{ px: { xs: 1, sm: 1.5, lg: 2 }, py: 1.5 }}>
             <Sheet sx={{ p: 0 }}>
                 {/* Title */}
                 {loading ? (
@@ -687,12 +687,12 @@ export default function SceneTagManagerPage() {
                 )}
 
                 <Grid container spacing={2}>
-                    {/* LEFT: Marker editor (50%) */}
-                    <Grid xs={12} md={6}>
+                    {/* LEFT: Marker editor (40%) */}
+                    <Grid xs={12} md={5}>
                         <Card variant="outlined" sx={{ p: 1.25, borderRadius: "lg" }}>
                             {/* Row: header + bulk actions */}
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
-                                <Typography level="title-md">Markers</Typography>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75, flexWrap: "wrap" }}>
+                                <Typography level="title-sm">Markers</Typography>
                                 {!loading && (
                                     <Chip size="sm" variant="soft">
                                         {markers.length + newIds.length}
@@ -723,7 +723,7 @@ export default function SceneTagManagerPage() {
                             <Divider />
 
                             {/* Editable list */}
-                            <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+                            <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.5 }}>
                                 {loading || tagsLoading ? (
                                     Array.from({ length: 6 }).map((_, i) => (
                                         <Card key={i} variant="soft" sx={{ p: 1.25 }}>
@@ -766,9 +766,9 @@ export default function SceneTagManagerPage() {
                                                 key={id}
                                                 variant="soft"
                                                 sx={{
-                                                    p: 1.25,
+                                                    p: 1,
                                                     display: "grid",
-                                                    gap: 0.75,
+                                                    gap: 0.5,
                                                     transition: "transform 120ms ease, box-shadow 120ms ease",
                                                     "&:hover": { transform: "translateY(-1px)", boxShadow: "md" },
                                                 }}
@@ -782,7 +782,7 @@ export default function SceneTagManagerPage() {
                                                         gap: 1,
                                                     }}
                                                 >
-                                                    <Typography level="title-sm" sx={{ width: 84 }}>
+                                                    <Typography level="body-sm" sx={{ width: 84, fontSize: "0.75rem" }}>
                                                         Title
                                                     </Typography>
 
@@ -790,7 +790,7 @@ export default function SceneTagManagerPage() {
                                                         value={d.title}
                                                         onChange={(e) => setDraft(id, { title: e.target.value })}
                                                         size="sm"
-                                                        sx={{ minWidth: 220 }}
+                                                        sx={{ minWidth: 180 }}
                                                     />
 
                                                     <Box
@@ -826,8 +826,8 @@ export default function SceneTagManagerPage() {
                                                 </Box>
 
                                                 {/* Seconds (clock icon before each) */}
-                                                <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                                                    <Typography level="title-sm" sx={{ minWidth: 84 }}>
+                                                <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>
+                                                    <Typography level="body-sm" sx={{ minWidth: 84, fontSize: "0.75rem" }}>
                                                         Start / End
                                                     </Typography>
 
@@ -852,7 +852,7 @@ export default function SceneTagManagerPage() {
                                                         value={d.seconds}
                                                         onChange={(seconds) => setDraft(id, { seconds })}
                                                         size="sm"
-                                                        sx={{ width: 140 }}
+                                                        sx={{ width: 100 }}
                                                         placeholder="0:00"
                                                     />
 
@@ -877,14 +877,14 @@ export default function SceneTagManagerPage() {
                                                         value={d.end_seconds ?? 0}
                                                         onChange={(seconds) => setDraft(id, { end_seconds: seconds === 0 ? null : seconds })}
                                                         size="sm"
-                                                        sx={{ width: 140 }}
+                                                        sx={{ width: 100 }}
                                                         placeholder="0:00"
                                                     />
                                                 </Box>
 
                                                 {/* Primary tag */}
-                                                <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                                                    <Typography level="title-sm" sx={{ minWidth: 84 }}>
+                                                <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>
+                                                    <Typography level="body-sm" sx={{ minWidth: 84, fontSize: "0.75rem" }}>
                                                         Primary
                                                     </Typography>
                                                     <Autocomplete
@@ -898,14 +898,14 @@ export default function SceneTagManagerPage() {
                                                         onChange={(_e, val) => setDraft(id, { primary_tag_id: val?.id ?? null })}
                                                         getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
-                                                        sx={{ minWidth: 240, flex: 1, maxWidth: 480 }}
+                                                        sx={{ minWidth: 200, flex: 1, maxWidth: 400 }}
                                                         placeholder="Select primary tag…"
                                                     />
                                                 </Box>
 
                                                 {/* Other tags */}
-                                                <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
-                                                    <Typography level="title-sm" sx={{ minWidth: 84, mt: 0.6 }}>
+                                                <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-start", flexWrap: "wrap" }}>
+                                                    <Typography level="body-sm" sx={{ minWidth: 84, mt: 0.6, fontSize: "0.75rem" }}>
                                                         Other tags
                                                     </Typography>
                                                     <Autocomplete
@@ -929,13 +929,13 @@ export default function SceneTagManagerPage() {
                                                         }
                                                         getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
-                                                        sx={{ minWidth: 320, flex: 1, maxWidth: 600 }}
+                                                        sx={{ minWidth: 280, flex: 1, maxWidth: 500 }}
                                                         placeholder="Add tags…"
                                                     />
                                                 </Box>
 
                                                 {/* Per-row actions */}
-                                                <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", mt: 0.5 }}>
+                                                <Box sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end", mt: 0.25 }}>
                                                     <Tooltip title="Delete marker" variant="soft">
                                                         <IconButton
                                                             size="sm"
@@ -975,7 +975,7 @@ export default function SceneTagManagerPage() {
                                     gap: 1,
                                 }}
                             >
-                                <Typography level="title-md">Common Tags</Typography>
+                                <Typography level="title-sm">Common Tags</Typography>
 
                                 <Autocomplete
                                     multiple
@@ -1028,8 +1028,8 @@ export default function SceneTagManagerPage() {
                         </Card>
                     </Grid>
 
-                    {/* RIGHT: VideoJS player (50%) */}
-                    <Grid xs={12} md={6} sx={{ display: "flex" }}>
+                    {/* RIGHT: VideoJS player (60%) */}
+                    <Grid xs={12} md={7} sx={{ display: "flex" }}>
                         <Sheet
                             variant="plain"
                             sx={{
