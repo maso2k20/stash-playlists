@@ -2,12 +2,19 @@ import React from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import videojsOffset from 'videojs-offset';
+import vttThumbnails from 'videojs-vtt-thumbnails';
+import 'videojs-vtt-thumbnails/dist/videojs-vtt-thumbnails.css';
+import './vtt-thumbnails.css';
+import { processVttFile, cleanupVttBlob } from '../../lib/vttProcessor';
+
 videojs.registerPlugin('offset', videojsOffset);
+videojs.registerPlugin('vttThumbnails', vttThumbnails);
 
 export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
-  const { options, onReady, offset } = props;
+  const vttBlobRef = React.useRef(null);
+  const { options, onReady, offset, vttPath, stashServer, stashAPI } = props;
 
   const [visible, setVisible] = React.useState(true);
 
@@ -22,6 +29,27 @@ export const VideoJS = (props) => {
         if (offset) {
           player.offset(offset);
         }
+        
+        // Initialize VTT thumbnails if VTT path is provided
+        if (vttPath && stashServer && stashAPI) {
+          processVttFile(vttPath, stashServer, stashAPI)
+            .then((vttBlobUrl) => {
+              if (vttBlobUrl) {
+                vttBlobRef.current = vttBlobUrl;
+                player.vttThumbnails({
+                  src: vttBlobUrl,
+                  showTimestamp: true,
+                  responsive: true,
+                  width: 160,
+                  height: 90
+                });
+              }
+            })
+            .catch((error) => {
+              console.error('Failed to initialize VTT thumbnails:', error);
+            });
+        }
+        
         if (onReady) {
           onReady(player);
         }
@@ -84,7 +112,14 @@ export const VideoJS = (props) => {
 
   React.useEffect(() => {
     const player = playerRef.current;
+    const vttBlobUrl = vttBlobRef.current;
     return () => {
+      // Clean up VTT blob URL to prevent memory leaks
+      if (vttBlobUrl) {
+        cleanupVttBlob(vttBlobUrl);
+        vttBlobRef.current = null;
+      }
+      
       if (player && !player.isDisposed()) {
         player.dispose();
         playerRef.current = null;

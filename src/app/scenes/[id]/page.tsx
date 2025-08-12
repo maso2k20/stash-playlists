@@ -32,7 +32,7 @@ const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
     findScene(id: $id) {
       id
       title
-      paths { screenshot }   
+      paths { screenshot vtt }   
       scene_markers {
         id
         title
@@ -911,12 +911,32 @@ export default function SceneTagManagerPage() {
                                     "& .vjs-control-bar": { bottom: 0 },
                                 }}
                             >
-                                <VideoJS
-                                    options={videoJsOptions}
-                                    onReady={handlePlayerReady}
-                                    hasStarted={hasStarted}
-                                    onEnded={() => setHasStarted(true)}
-                                />
+                                {/* Only render VideoJS when we have scene data and settings */}
+                                {scene && stashServer && stashAPI ? (
+                                    <VideoJS
+                                        options={videoJsOptions}
+                                        onReady={handlePlayerReady}
+                                        hasStarted={hasStarted}
+                                        onEnded={() => setHasStarted(true)}
+                                        vttPath={scene?.paths?.vtt}
+                                        stashServer={stashServer}
+                                        stashAPI={stashAPI}
+                                    />
+                                ) : (
+                                    <Box
+                                        sx={{
+                                            width: "100%",
+                                            aspectRatio: "16/9",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            bgcolor: "neutral.100",
+                                            borderRadius: "md"
+                                        }}
+                                    >
+                                        <Typography level="body-sm">Loading video player...</Typography>
+                                    </Box>
+                                )}
                             </Box>
                         </Sheet>
                     </Grid>

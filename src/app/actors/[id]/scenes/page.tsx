@@ -66,7 +66,7 @@ const GET_ACTOR_SCENES_WITH_TAG = gql`
       scenes {
         id
         title
-        paths { screenshot }
+        paths { screenshot vtt }
       }
     }
   }
@@ -235,7 +235,6 @@ export default function ActorScenesPage() {
                     <Button
                         size="sm"
                         variant={isScenesPage ? "soft" : "solid"} // swap for opposite
-                        component="a"
                     >
                         Markers
                     </Button>
@@ -244,7 +243,6 @@ export default function ActorScenesPage() {
                     <Button
                         size="sm"
                         variant={isScenesPage ? "solid" : "soft"} // current page highlighted
-                        component="a"
                     >
                         Scenes
                     </Button>
