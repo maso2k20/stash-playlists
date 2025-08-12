@@ -25,6 +25,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { useStashTags } from "@/context/StashTagsContext";
 import { useSettings } from "@/app/context/SettingsContext";
 import VideoJS from "@/components/videojs/VideoJS";
+import TimeInput from "@/components/TimeInput";
 
 /* Query: scene with markers + tags */
 const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
@@ -695,14 +696,13 @@ export default function SceneTagManagerPage() {
                                                             </IconButton>
                                                         </span>
                                                     </Tooltip>
-                                                    <Input
-                                                        type="number"
+                                                    <TimeInput
                                                         value={d.seconds}
-                                                        onChange={(e) => setDraft(id, { seconds: Number(e.target.value) })}
+                                                        onChange={(seconds) => setDraft(id, { seconds })}
                                                         size="sm"
-                                                        slotProps={{ input: { min: 0, step: 1 } }}
                                                         sx={{ width: 140 }}
                                                         onClick={(e) => e.stopPropagation()}
+                                                        placeholder="0:00"
                                                     />
 
                                                     {/* End icon */}
@@ -723,18 +723,13 @@ export default function SceneTagManagerPage() {
                                                             </IconButton>
                                                         </span>
                                                     </Tooltip>
-                                                    <Input
-                                                        type="number"
-                                                        value={d.end_seconds ?? ""}
-                                                        onChange={(e) =>
-                                                            setDraft(id, {
-                                                                end_seconds: e.target.value === "" ? null : Number(e.target.value),
-                                                            })
-                                                        }
+                                                    <TimeInput
+                                                        value={d.end_seconds ?? 0}
+                                                        onChange={(seconds) => setDraft(id, { end_seconds: seconds === 0 ? null : seconds })}
                                                         size="sm"
-                                                        slotProps={{ input: { min: 0, step: 1 } }}
                                                         sx={{ width: 140 }}
                                                         onClick={(e) => e.stopPropagation()}
+                                                        placeholder="0:00"
                                                     />
                                                 </Box>
 
