@@ -150,7 +150,7 @@ export default function AddActorsPage() {
       const existingIds = new Set(primaryResults.map(p => p.id));
       
       for (const performer of fallbackResults) {
-        if (!existingIds.has(performer.id)) {
+        if (!existingIds.has((performer as Performer).id)) {
           combinedResults.push(performer);
         }
       }

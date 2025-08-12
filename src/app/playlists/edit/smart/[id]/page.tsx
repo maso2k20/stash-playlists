@@ -43,7 +43,7 @@ export default function EditAutomaticPlaylistPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [rules, setRules] = useState<Rules>({ actorIds: [], tagIds: [] });
+  const [rules, setRules] = useState<Rules>({ actorIds: [], tagIds: [], minRating: null });
 
   const settings = useSettings();
   const stashServer = settings['STASH_SERVER'];
@@ -51,6 +51,9 @@ export default function EditAutomaticPlaylistPage() {
 
   const [fetchMarkers, { data: previewData, loading: previewLoading, error: previewError }] =
     useLazyQuery(SMART_PLAYLIST_BUILDER, { fetchPolicy: "no-cache" });
+
+  const [filteredMarkers, setFilteredMarkers] = useState<any[]>([]);
+  const [filteringLoading, setFilteringLoading] = useState(false);
 
   // Load playlist meta + rules
   useEffect(() => {
@@ -78,6 +81,7 @@ export default function EditAutomaticPlaylistPage() {
         setRules({
           actorIds: Array.isArray(cond.actorIds) ? cond.actorIds.map(String) : [],
           tagIds: Array.isArray(cond.tagIds) ? cond.tagIds.map(String) : [],
+          minRating: typeof cond.minRating === 'number' ? cond.minRating : null,
         });
       } catch (e) {
         console.error(e);
@@ -96,10 +100,54 @@ export default function EditAutomaticPlaylistPage() {
     fetchMarkers({ variables: buildSmartVars(rules) });
   }, [rules, fetchMarkers]);
 
-  const markers = useMemo(
+  const rawMarkers = useMemo(
     () => previewData?.findSceneMarkers?.scene_markers ?? [],
     [previewData]
   );
+
+  // Apply rating filter to preview results
+  useEffect(() => {
+    if (!rawMarkers.length) {
+      setFilteredMarkers([]);
+      return;
+    }
+
+    (async () => {
+      setFilteringLoading(true);
+      try {
+        // Convert markers to items format for filtering
+        const items = mapMarkersToItems(rawMarkers, { stashServer, stashAPI });
+        
+        // Apply rating filter if specified
+        let filteredItems = items;
+        if (rules.minRating && rules.minRating >= 1) {
+          const response = await fetch('/api/items/filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              itemIds: items.map(item => item.id),
+              minRating: rules.minRating 
+            }),
+          });
+          
+          if (response.ok) {
+            const { filteredIds } = await response.json();
+            const filteredIdSet = new Set(filteredIds);
+            filteredItems = items.filter(item => filteredIdSet.has(item.id));
+          }
+        }
+
+        // Convert back to marker format for display
+        const filteredMarkerIds = new Set(filteredItems.map(item => item.id));
+        setFilteredMarkers(rawMarkers.filter((marker: any) => filteredMarkerIds.has(marker.id)));
+      } catch (error) {
+        console.error('Error filtering markers by rating:', error);
+        setFilteredMarkers(rawMarkers); // Fallback to unfiltered
+      } finally {
+        setFilteringLoading(false);
+      }
+    })();
+  }, [rawMarkers, rules.minRating, stashServer, stashAPI]);
 
   async function handleSave() {
     setLoading(true);
@@ -115,14 +163,14 @@ export default function EditAutomaticPlaylistPage() {
       }
 
       // 2) If no markers, do NOT sync items — avoid accidental clears
-      if (!markers || markers.length === 0) {
+      if (!filteredMarkers || filteredMarkers.length === 0) {
         setLoading(false);
         alert('No matches found. Saved name/description/rules, but did not update playlist items.');
         return;
       }
 
       // 3) Prepare payload using shared mapper (keeps parity with refresh)
-      const itemsPayload = mapMarkersToItems(markers, {
+      const itemsPayload = mapMarkersToItems(filteredMarkers, {
         stashServer,
         stashAPI,
       });
@@ -170,11 +218,11 @@ export default function EditAutomaticPlaylistPage() {
           </Typography>
         </Box>
         <Chip size="lg" variant="soft" color="primary">
-          {previewLoading ? 'Loading…' : `${markers.length} match${markers.length === 1 ? '' : 'es'}`}
+          {(previewLoading || filteringLoading) ? 'Loading…' : `${filteredMarkers.length} match${filteredMarkers.length === 1 ? '' : 'es'}`}
         </Chip>
       </Stack>
 
-      {(loading || previewLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
+      {(loading || previewLoading || filteringLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
 
       <Grid container spacing={2}>
         {/* Left: Details */}
@@ -255,17 +303,17 @@ export default function EditAutomaticPlaylistPage() {
               {!previewError && (
                 <Stack spacing={1}>
                   <Typography level="body-sm" color="neutral">
-                    {markers.length} scene marker{markers.length === 1 ? '' : 's'} match these rules.
+                    {filteredMarkers.length} scene marker{filteredMarkers.length === 1 ? '' : 's'} match these rules.
                   </Typography>
                   <Divider sx={{ my: 1 }} />
                   <Box sx={{ maxHeight: 900, overflow: 'auto', pr: 0.5 }}>
-                    {markers.length === 0 ? (
+                    {filteredMarkers.length === 0 ? (
                       <Typography level="body-sm" color="neutral">
                         No matches yet. Adjust your rules to see results.
                       </Typography>
                     ) : (
                       <Stack spacing={1}>
-                        {markers.slice(0, 50).map((m: any) => (
+                        {filteredMarkers.slice(0, 50).map((m: any) => (
                           <Sheet
                             key={m.id}
                             variant="soft"
@@ -298,9 +346,9 @@ export default function EditAutomaticPlaylistPage() {
                             </Box>
                           </Sheet>
                         ))}
-                        {markers.length > 50 && (
+                        {filteredMarkers.length > 50 && (
                           <Typography level="body-sm" color="neutral">
-                            Showing 50 of {markers.length} results…
+                            Showing 50 of {filteredMarkers.length} results…
                           </Typography>
                         )}
                       </Stack>

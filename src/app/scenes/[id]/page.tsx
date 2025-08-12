@@ -32,6 +32,7 @@ import { useStashTags } from "@/context/StashTagsContext";
 import { useSettings } from "@/app/context/SettingsContext";
 import VideoJS from "@/components/videojs/VideoJS";
 import TimeInput from "@/components/TimeInput";
+import StarRating from "@/components/StarRating";
 
 /* Query: scene with markers + tags */
 const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
@@ -187,6 +188,10 @@ export default function SceneTagManagerPage() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [markerToDelete, setMarkerToDelete] = useState<{ id: string; title: string } | null>(null);
 
+    // Ratings state
+    const [ratings, setRatings] = useState<Record<string, number | null>>({});
+    const [loadingRating, setLoadingRating] = useState<string | null>(null);
+
     // Init drafts from server markers
     useEffect(() => {
         const next: Record<string, Draft> = {};
@@ -214,9 +219,113 @@ export default function SceneTagManagerPage() {
         });
     }, [markers.length]);
 
+    // Load ratings for existing markers
+    useEffect(() => {
+        const loadRatings = async () => {
+            const ratingsMap: Record<string, number | null> = {};
+            for (const marker of markers) {
+                try {
+                    const response = await fetch(`/api/items/${marker.id}/rating`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        ratingsMap[marker.id] = data.item.rating;
+                    } else if (response.status === 404) {
+                        // Item doesn't exist yet, set rating as null (unrated)
+                        ratingsMap[marker.id] = null;
+                    }
+                } catch (error) {
+                    console.error(`Failed to load rating for marker ${marker.id}:`, error);
+                    // Set as null on error too
+                    ratingsMap[marker.id] = null;
+                }
+            }
+            setRatings(ratingsMap);
+        };
+
+        if (markers.length > 0) {
+            loadRatings();
+        }
+    }, [markers]);
+
 
     const setDraft = (id: string, patch: Partial<Draft>) =>
         setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || ({} as Draft)), ...patch } }));
+
+    // Handle rating updates
+    const handleRatingChange = async (markerId: string, rating: number | null) => {
+        if (isTemp(markerId)) {
+            // For temporary markers, we can't save ratings yet
+            return;
+        }
+
+        setLoadingRating(markerId);
+        try {
+            const response = await fetch(`/api/items/${markerId}/rating`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ rating }),
+            });
+
+            if (response.ok) {
+                setRatings(prev => ({
+                    ...prev,
+                    [markerId]: rating,
+                }));
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to update rating:', response.status, errorText);
+                
+                // If item doesn't exist (404), create it first
+                if (response.status === 404) {
+                    const marker = markers.find(m => m.id === markerId);
+                    if (marker) {
+                        console.log('Item not found, creating it first...');
+                        await createItemForMarker(marker, rating);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error updating rating:', error);
+        } finally {
+            setLoadingRating(null);
+        }
+    };
+
+    // Create item for marker if it doesn't exist
+    const createItemForMarker = async (marker: Marker, rating: number | null) => {
+        try {
+            // Create the item first using the playlist items API
+            const itemPayload = {
+                id: marker.id,
+                title: marker.title || '',
+                startTime: marker.seconds || 0,
+                endTime: marker.end_seconds || (marker.seconds || 0) + 30, // default 30 second duration
+                rating: rating,
+            };
+
+            const createResponse = await fetch('/api/items', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(itemPayload),
+            });
+
+            if (createResponse.ok) {
+                setRatings(prev => ({
+                    ...prev,
+                    [marker.id]: rating,
+                }));
+                console.log('Item created and rating set successfully');
+            } else {
+                console.error('Failed to create item:', await createResponse.text());
+            }
+        } catch (error) {
+            console.error('Error creating item:', error);
+        }
+    };
 
     const eqShallowSet = (a: string[], b: string[]) => {
         if (a.length !== b.length) return false;
@@ -932,6 +1041,31 @@ export default function SceneTagManagerPage() {
                                                         sx={{ minWidth: 280, flex: 1, maxWidth: 500 }}
                                                         placeholder="Add tags…"
                                                     />
+                                                </Box>
+
+                                                {/* Rating */}
+                                                <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>
+                                                    <Typography level="body-sm" sx={{ minWidth: 84, fontSize: "0.75rem" }}>
+                                                        Rating
+                                                    </Typography>
+                                                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                                        <StarRating
+                                                            value={ratings[id] || null}
+                                                            onChange={(rating) => handleRatingChange(id, rating)}
+                                                            readonly={isNew || loadingRating === id}
+                                                            size="sm"
+                                                        />
+                                                        {loadingRating === id && (
+                                                            <Typography level="body-xs" sx={{ opacity: 0.7 }}>
+                                                                Saving...
+                                                            </Typography>
+                                                        )}
+                                                        {isNew && (
+                                                            <Typography level="body-xs" sx={{ opacity: 0.7 }}>
+                                                                Save marker first
+                                                            </Typography>
+                                                        )}
+                                                    </Box>
                                                 </Box>
 
                                                 {/* Per-row actions */}

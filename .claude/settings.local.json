@@ -6,7 +6,9 @@
       "Bash(git add:*)",
       "Bash(npm install:*)",
       "Bash(curl:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma migrate reset:*)"
     ],
     "deny": [],
     "ask": []

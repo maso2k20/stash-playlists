@@ -4,6 +4,9 @@ import Typography from '@mui/joy/Typography';
 import Chip from '@mui/joy/Chip';
 import Autocomplete from '@mui/joy/Autocomplete';
 import Grid from '@mui/joy/Grid';
+import Select from '@mui/joy/Select';
+import Option from '@mui/joy/Option';
+import StarRating from './StarRating';
 
 interface Actor {
   id: string;
@@ -15,8 +18,8 @@ interface Tag {
 }
 interface SmartPlaylistRuleBuilderProps {
   tags?: Tag[];
-  onChange: (rules: { actorIds: string[]; tagIds: string[] }) => void;
-  initialRules?: { actorIds: string[]; tagIds: string[] };
+  onChange: (rules: { actorIds: string[]; tagIds: string[]; minRating?: number | null }) => void;
+  initialRules?: { actorIds: string[]; tagIds: string[]; minRating?: number | null };
 }
 
 function normalizeActors(data: any): Actor[] {
@@ -31,11 +34,12 @@ function normalizeActors(data: any): Actor[] {
 }
 
 function initializeSelections(
-  initialRules: { actorIds: string[]; tagIds: string[] } | undefined,
+  initialRules: { actorIds: string[]; tagIds: string[]; minRating?: number | null } | undefined,
   actors: Actor[],
   tags: Tag[],
   setSelectedActors: React.Dispatch<React.SetStateAction<Actor[]>>,
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>,
+  setMinRating: React.Dispatch<React.SetStateAction<number | null>>,
 ) {
   if (!initialRules) return;
 
@@ -50,6 +54,9 @@ function initializeSelections(
     const presetTags = tags.filter((t) => tagIds.includes(String(t.id)));
     setSelectedTags(presetTags);
   }
+  if (initialRules.minRating !== undefined) {
+    setMinRating(initialRules.minRating);
+  }
 }
 
 export default function SmartPlaylistRuleBuilder({
@@ -60,6 +67,7 @@ export default function SmartPlaylistRuleBuilder({
   const [actors, setActors] = useState<Actor[]>([]);
   const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [minRating, setMinRating] = useState<number | null>(null);
 
   // Track whether we've applied the initial selections
   const hasInitializedRef = useRef(false);
@@ -68,7 +76,8 @@ export default function SmartPlaylistRuleBuilder({
   const initKey = useMemo(() => {
     const a = (initialRules?.actorIds ?? []).map(String).join(',');
     const t = (initialRules?.tagIds ?? []).map(String).join(',');
-    return `${a}|${t}`;
+    const r = String(initialRules?.minRating ?? '');
+    return `${a}|${t}|${r}`;
   }, [initialRules]);
   const lastInitKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -110,7 +119,7 @@ export default function SmartPlaylistRuleBuilder({
     if (!actors.length) return;           // wait for actors
     if (!tags.length) return;             // wait for tags
 
-    initializeSelections(initialRules, actors, tags, setSelectedActors, setSelectedTags);
+    initializeSelections(initialRules, actors, tags, setSelectedActors, setSelectedTags, setMinRating);
     hasInitializedRef.current = true;
   }, [initialRules, actors, tags]);
 
@@ -130,9 +139,10 @@ export default function SmartPlaylistRuleBuilder({
     onChangeRef.current({
       actorIds: selectedActors.map((a) => String(a.id)),
       tagIds: selectedTags.map((t) => String(t.id)),
+      minRating,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedActors, selectedTags]);
+  }, [selectedActors, selectedTags, minRating]);
 
   const sortedActors = useMemo(
     () => [...actors].sort((a, b) => a.name.localeCompare(b.name)),
@@ -141,7 +151,7 @@ export default function SmartPlaylistRuleBuilder({
 
   return (
     <Grid container spacing={3} sx={{ width: '100%' }}>
-      <Grid xs={12} md={6}>
+      <Grid xs={12} md={4}>
         <Box>
           <Typography level="title-md" mb={1}>Actors</Typography>
           <Autocomplete
@@ -166,7 +176,7 @@ export default function SmartPlaylistRuleBuilder({
         </Box>
       </Grid>
 
-      <Grid xs={12} md={6}>
+      <Grid xs={12} md={4}>
         <Box>
           <Typography level="title-md" mb={1}>Tags</Typography>
           <Autocomplete<Tag, true, false, false>
@@ -188,6 +198,39 @@ export default function SmartPlaylistRuleBuilder({
             }
             placeholder="Search tags..."
           />
+        </Box>
+      </Grid>
+
+      <Grid xs={12} md={4}>
+        <Box>
+          <Typography level="title-md" mb={1}>Minimum Rating</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Select
+              value={minRating}
+              onChange={(_, value) => setMinRating(value)}
+              placeholder="Any rating"
+              size="md"
+            >
+              <Option value={null}>Any rating</Option>
+              <Option value={1}>1+ stars</Option>
+              <Option value={2}>2+ stars</Option>
+              <Option value={3}>3+ stars</Option>
+              <Option value={4}>4+ stars</Option>
+              <Option value={5}>5 stars only</Option>
+            </Select>
+            
+            {minRating && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                <Typography level="body-sm" color="neutral">
+                  Preview:
+                </Typography>
+                <StarRating value={minRating} readonly size="sm" showClearButton={false} />
+                <Typography level="body-sm" color="neutral">
+                  and higher
+                </Typography>
+              </Box>
+            )}
+          </Box>
         </Box>
       </Grid>
     </Grid>

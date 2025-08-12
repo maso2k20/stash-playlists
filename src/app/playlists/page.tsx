@@ -37,6 +37,7 @@ import {
   User,
   Tag as TagIcon,
   RefreshCcw,
+  Star,
 } from "lucide-react";
 import { useStashTags } from "@/context/StashTagsContext"; // ensure this path matches your project
 
@@ -57,6 +58,7 @@ type PlaylistStats = {
 type ParsedConds = {
   actors: string[]; // names
   tags: string[];   // names
+  minRating: number | null;
 };
 
 export default function PlaylistsPage() {
@@ -155,7 +157,8 @@ export default function PlaylistsPage() {
           const tagNames = (data.conditionsResolved?.tagIds ?? [])
             .map((id: string) => tagNameById(id))
             .filter(Boolean);
-          return [p.id, { actors: actorNames, tags: tagNames } as ParsedConds] as const;
+          const minRating = data.conditionsResolved?.minRating ?? null;
+          return [p.id, { actors: actorNames, tags: tagNames, minRating } as ParsedConds] as const;
         })
       );
 
@@ -201,7 +204,7 @@ export default function PlaylistsPage() {
       setPlaylists((prev) => [created, ...prev]);
       // optimistic seeds
       setStats((prev) => ({ ...prev, [created.id]: { itemCount: 0, durationMs: 0 } }));
-      if (created.type === "SMART") setConds((prev) => ({ ...prev, [created.id]: { actors: [], tags: [] } }));
+      if (created.type === "SMART") setConds((prev) => ({ ...prev, [created.id]: { actors: [], tags: [], minRating: null } }));
       resetCreateForm();
       setIsCreateOpen(false);
     }
@@ -415,6 +418,18 @@ export default function PlaylistsPage() {
                           <Chip size="sm" variant="plain">{`+${moreTags} more`}</Chip>
                         )}
                         {tagNames.length === 0 && <Typography level="body-xs" color="neutral">No tags filter</Typography>}
+                      </Stack>
+
+                      {/* Rating */}
+                      <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                        <Star size={14} />
+                        {c?.minRating ? (
+                          <Chip size="sm" variant="soft" title={`Minimum rating: ${c.minRating} stars`}>
+                            {c.minRating}+ stars
+                          </Chip>
+                        ) : (
+                          <Typography level="body-xs" color="neutral">No rating filter</Typography>
+                        )}
                       </Stack>
                     </Stack>
                   )}

@@ -114,6 +114,7 @@ export async function stashGraph<T>(
 type SmartPlaylistConditions = {
   actorIds?: string[];
   tagIds?: string[];
+  minRating?: number | null;
   perPage?: number;
   clip?: { before?: number; after?: number };
 };
@@ -144,6 +145,7 @@ export async function buildItemsForPlaylist(
   const conditions: SmartPlaylistConditions = (playlist.conditions as any) || {};
   const actorIds = Array.isArray(conditions.actorIds) ? conditions.actorIds : [];
   const tagIds = Array.isArray(conditions.tagIds) ? conditions.tagIds : [];
+  const minRating = conditions.minRating;
   const perPage = Math.max(1, Number(conditions.perPage ?? 5000));
   const before = Math.max(0, Number(conditions.clip?.before ?? 3));
   const after = Math.max(1, Number(conditions.clip?.after ?? 27));
@@ -263,6 +265,22 @@ export async function buildItemsForPlaylist(
       };
     }
   );
+
+  // Apply rating filter if specified
+  if (minRating && minRating >= 1) {
+    const itemIds = items.map(item => item.id);
+    
+    const itemsWithRatings = await prisma.item.findMany({
+      where: {
+        id: { in: itemIds },
+        rating: { gte: minRating }
+      },
+      select: { id: true }
+    });
+
+    const ratedItemIds = new Set(itemsWithRatings.map(item => item.id));
+    return items.filter(item => ratedItemIds.has(item.id));
+  }
 
   return items;
 }

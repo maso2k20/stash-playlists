@@ -23,13 +23,14 @@ export const SMART_PLAYLIST_BUILDER = gql`
   }
 `;
 
-export type SmartRules = { actorIds: string[]; tagIds: string[] };
+export type SmartRules = { actorIds: string[]; tagIds: string[]; minRating?: number | null };
 
 // Build vars for the query (kept in one place)
 export function buildSmartVars(rules: SmartRules) {
   return {
     actorId: (rules.actorIds ?? []).map(String),
     tagID: (rules.tagIds ?? []).map(String),
+    minRating: rules.minRating ?? null,
   };
 }
 
@@ -51,4 +52,32 @@ export function mapMarkersToItems(markers: any[], opts: {
     preview: (m.preview ?? m.screenshot) ?? null,
     itemOrder: index,
   }));
+}
+
+// Filter items by rating (to be used after fetching from database)
+export async function filterItemsByRating(
+  items: any[], 
+  minRating: number | null,
+  prisma: any
+): Promise<any[]> {
+  if (!minRating || minRating < 1) {
+    return items;
+  }
+
+  // Get all item IDs
+  const itemIds = items.map(item => item.id);
+  
+  // Fetch ratings from database
+  const itemsWithRatings = await prisma.item.findMany({
+    where: {
+      id: { in: itemIds },
+      rating: { gte: minRating }
+    },
+    select: { id: true }
+  });
+
+  const ratedItemIds = new Set(itemsWithRatings.map((item: { id: string }) => item.id));
+  
+  // Filter items to only include those with sufficient rating
+  return items.filter(item => ratedItemIds.has(item.id));
 }

@@ -12,6 +12,7 @@ type IncomingItem = {
   screenshot?: string | null;
   stream?: string | null;
   preview?: string | null;
+  rating?: number | null;
   itemOrder?: number;
 };
 
@@ -64,6 +65,9 @@ function normalizeIncoming(items: any[]): IncomingItem[] {
       preview: Object.prototype.hasOwnProperty.call(raw, "preview")
         ? (raw.preview as string | null | undefined) ?? null
         : undefined,
+      rating: Object.prototype.hasOwnProperty.call(raw, "rating")
+        ? (raw.rating as number | null | undefined) ?? null
+        : undefined,
 
       itemOrder: typeof items[i]?.order === "number" ? items[i].order :
                  typeof raw.itemOrder === "number" ? raw.itemOrder : undefined,
@@ -112,6 +116,7 @@ async function syncItems(
         screenshot: it.screenshot,
         stream: it.stream,
         preview: it.preview,
+        rating: it.rating,
       });
 
       await tx.item.upsert({
@@ -125,6 +130,7 @@ async function syncItems(
           screenshot: it.screenshot ?? null,
           stream: it.stream ?? null,
           preview: it.preview ?? null,
+          rating: it.rating ?? null,
         },
       });
       upsertedItems++;
@@ -254,6 +260,7 @@ export async function GET(request: NextRequest) {
           screenshot: true,
           stream: true,
           preview: true,
+          rating: true,
         },
       },
     },
@@ -267,6 +274,7 @@ export async function GET(request: NextRequest) {
     screenshot: pi.item.screenshot ?? undefined,
     stream: pi.item.stream ?? undefined,
     preview: pi.item.preview ?? undefined,
+    rating: pi.item.rating ?? undefined,
     itemOrder: pi.itemOrder,
   }));
 

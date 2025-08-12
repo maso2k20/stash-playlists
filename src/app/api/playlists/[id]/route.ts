@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
 
     const actorIds: string[] = Array.isArray(rawConds?.actorIds) ? rawConds.actorIds.map(String) : [];
     const tagIds: string[] = Array.isArray(rawConds?.tagIds) ? rawConds.tagIds.map(String) : [];
+    const minRating: number | null = typeof rawConds?.minRating === 'number' ? rawConds.minRating : null;
 
     // Resolve actors from Prisma; tags will be resolved client-side via StashTagsContext
     const actors = actorIds.length
@@ -45,10 +46,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ...playlist,
-        conditions: { actorIds, tagIds }, // keep normalized
+        conditions: { actorIds, tagIds, minRating }, // keep normalized
         conditionsResolved: {
           actors,     // [{ id, name }]
           tagIds,     // pass through for client-side name lookup
+          minRating,  // include in resolved conditions
         },
       },
       { status: 200 }
