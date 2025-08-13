@@ -45,5 +45,8 @@ next-env.d.ts
 .next/
 dev.db
 
+# Local data storage (images, databases)
+/data/
+
 # Claude Code local settings
 .claude/

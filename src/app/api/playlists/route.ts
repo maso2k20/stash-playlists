@@ -47,10 +47,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { name, description, type, conditions } = data;
+    const { name, description, type, conditions, image } = data;
 
     const playlist = await prisma.playlist.create({
-      data: { name, description, type, conditions }
+      data: { name, description, type, conditions, image }
     });
 
     return NextResponse.json(playlist, { status: 201 });
@@ -90,6 +90,27 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    // Get playlist to check for image
+    const playlist = await prisma.playlist.findUnique({
+      where: { id },
+      select: { image: true }
+    });
+
+    // Delete image file if it exists
+    if (playlist?.image) {
+      try {
+        const { unlink } = await import('fs/promises');
+        const path = await import('path');
+        const IMAGES_DIR = process.env.NODE_ENV === 'production' 
+          ? '/data/playlist-images' 
+          : path.join(process.cwd(), 'data', 'playlist-images');
+        const filepath = path.join(IMAGES_DIR, playlist.image);
+        await unlink(filepath);
+      } catch (error) {
+        console.warn('Failed to delete playlist image:', error);
+      }
+    }
+
     // Delete all PlaylistItems for this playlist first
     await prisma.playlistItem.deleteMany({ where: { playlistId: id } });
 

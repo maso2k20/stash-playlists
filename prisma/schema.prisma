@@ -36,6 +36,7 @@ model Playlist {
   name        String
   description String?
   type        PlaylistType   @default(MANUAL)
+  image       String?
   items       PlaylistItem[]
   conditions  Json?
   createdAt   DateTime       @default(now())

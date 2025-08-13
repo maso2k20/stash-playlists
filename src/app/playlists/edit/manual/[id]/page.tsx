@@ -2,23 +2,38 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowUp, ArrowDown, Trash2 } from "lucide-react";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardActions,
+  Divider,
+  FormControl,
+  FormLabel,
+  Grid,
+  IconButton,
+  Input,
+  LinearProgress,
+  Sheet,
+  Stack,
+  Textarea,
+  Tooltip,
+  Typography,
+} from "@mui/joy";
+import { ArrowUp, ArrowDown, Trash2, Clock } from "lucide-react";
 import { formatLength } from "@/lib/formatLength";
-
+import PlaylistImageUpload from "@/components/PlaylistImageUpload";
 
 export default function EditManualPlaylistPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<any[]>([]);
-  const [savingOrder, setSavingOrder] = useState(false);
 
   // Fetch playlist details and items on mount
   useEffect(() => {
@@ -29,6 +44,7 @@ export default function EditManualPlaylistPage() {
         const playlist = await res.json();
         setName(playlist.name || "");
         setDescription(playlist.description || "");
+        setImage(playlist.image || null);
       }
       setLoading(false);
     }
@@ -46,29 +62,36 @@ export default function EditManualPlaylistPage() {
   // Save playlist name/description and item order
   async function handleSave() {
     setLoading(true);
-    // Save name and description
-    const res = await fetch(`/api/playlists/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
-    });
+    try {
+      // Save name and description
+      const res = await fetch(`/api/playlists/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description }),
+      });
 
-    // Save item order
-    const orderedItems = items.map((item, idx) => ({
-      id: item.id,
-      itemOrder: idx,
-    }));
-    const orderRes = await fetch(`/api/playlists/${id}/items/order`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderedItems }),
-    });
+      // Save item order
+      const orderedItems = items.map((item, idx) => ({
+        id: item.id,
+        itemOrder: idx,
+      }));
+      const orderRes = await fetch(`/api/playlists/${id}/items/order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedItems }),
+      });
 
-    setLoading(false);
-    if (res.ok && orderRes.ok) {
-      router.push("/playlists");
-    } else {
+      if (res.ok && orderRes.ok) {
+        router.push("/playlists");
+      } else {
+        throw new Error("Failed to save changes");
+      }
+    } catch (error) {
+      console.error("Save failed:", error);
+      // You could add a toast notification here instead of alert
       alert("Failed to save changes.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -89,123 +112,260 @@ export default function EditManualPlaylistPage() {
   // Remove item from playlist
   async function removeItem(itemId: string) {
     setLoading(true);
-    const res = await fetch(`/api/playlists/${id}/items`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemId }),
-    });
-    setLoading(false);
-    if (res.ok) {
-      setItems(items.filter(item => item.id !== itemId));
-    } else {
+    try {
+      const res = await fetch(`/api/playlists/${id}/items`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      });
+      
+      if (res.ok) {
+        setItems(items.filter(item => item.id !== itemId));
+      } else {
+        throw new Error("Failed to remove item");
+      }
+    } catch (error) {
+      console.error("Remove failed:", error);
       alert("Failed to remove item.");
-    }
-  }
-
-  // Save new order to backend
-  async function saveOrder() {
-    setSavingOrder(true);
-    const orderedItems = items.map((item, idx) => ({
-      id: item.id,
-      itemOrder: idx,
-    }));
-    const res = await fetch(`/api/playlists/${id}/items/order`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderedItems }),
-    });
-    setSavingOrder(false);
-    if (!res.ok) {
-      alert("Failed to save item order.");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Edit Manual Playlist</h1>
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Left: Playlist Info */}
-        <div className="md:w-1/3 space-y-4">
-          <div>
-            <Label htmlFor="playlist-name">Name</Label>
-            <Input
-              id="playlist-name"
-              placeholder="Playlist name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              disabled={loading}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="playlist-description">Description</Label>
-            <Input
-              id="playlist-description"
-              placeholder="Playlist description"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              disabled={loading}
-              className="mt-1"
-            />
-          </div>
-          <Button onClick={handleSave} disabled={loading || !name} className="w-full mt-2">
-            {loading ? "Saving..." : "Save"}
-          </Button>
-        </div>
+    <Sheet
+      variant="outlined"
+      sx={{
+        mx: 'auto',
+        my: 4,
+        p: { xs: 2, sm: 3, md: 4 },
+        borderRadius: 'lg',
+        bgcolor: 'background.body',
+      }}
+    >
+      <Box mb={2}>
+        <Typography level="h3">Edit Manual Playlist</Typography>
+        <Typography level="body-sm" color="neutral">
+          Manage playlist details and reorder items.
+        </Typography>
+      </Box>
 
-        {/* Right: Playlist Items */}
-        <div className="md:w-2/3">
-          <h2 className="text-xl font-semibold mb-2">Playlist Items</h2>
-          <div className="space-y-2">
-            {items.length === 0 && (
-              <p className="text-muted-foreground">No items in this playlist.</p>
-            )}
-            {items.map((item, idx) => (
-                <Card className="flex flex-row items-center w-full p-4 space-x-4">
-                    {/* 16:9 aspect image */}
-                    <div className="w-32 aspect-video flex-shrink-0">
-                        <img
-                        src={item.screenshot}
-                        alt={item.title}
-                        className="object-cover w-full h-full rounded-md"
-                        />
-                    </div>
+      {loading && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
 
-                    {/* Title and description */}
-                    <CardContent className="flex-1 p-0">
-                        <h3 className="text-lg font-semibold">{item.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {formatLength(item.endTime - item.startTime)}
-                        </p>
-                    </CardContent>
+      <Grid container spacing={3}>
+        {/* Left Column: Details */}
+        <Grid xs={12} lg={5}>
+          <Card variant="outlined" sx={{ height: 'fit-content' }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography level="title-lg" mb={2}>Details</Typography>
+              <Stack direction="row" spacing={3} sx={{ alignItems: 'stretch' }}>
+                {/* Left side - Form fields */}
+                <Stack spacing={2.5} sx={{ flex: 1, display: 'flex' }}>
+                  <FormControl>
+                    <FormLabel>Name</FormLabel>
+                    <Input
+                      placeholder="Playlist name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={loading}
+                      size="lg"
+                    />
+                  </FormControl>
+                  <FormControl sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <FormLabel>Description</FormLabel>
+                    <Textarea
+                      placeholder="Playlist description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      disabled={loading}
+                      size="lg"
+                      sx={{ 
+                        resize: 'vertical', 
+                        flex: 1,
+                        minHeight: 0
+                      }}
+                    />
+                  </FormControl>
+                </Stack>
+                
+                {/* Right side - Cover Image */}
+                <Box sx={{ width: 200, flexShrink: 0 }}>
+                  <FormControl>
+                    <FormLabel>Cover Image</FormLabel>
+                    <PlaylistImageUpload
+                      currentImage={image ? `/api/playlist-images/${image}` : null}
+                      onImageUploaded={(imageUrl, filename) => setImage(filename)}
+                      onImageDeleted={() => setImage(null)}
+                      playlistId={id}
+                      disabled={loading}
+                    />
+                  </FormControl>
+                </Box>
+              </Stack>
+            </CardContent>
 
+            <CardActions sx={{ justifyContent: 'flex-end', p: 3, pt: 2 }}>
+              <Button
+                size="lg"
+                color="primary"
+                onClick={handleSave}
+                disabled={loading || !name}
+                sx={{ minWidth: 120 }}
+              >
+                {loading ? 'Saving…' : 'Save Playlist'}
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
 
+        {/* Right Column: Playlist Items */}
+        <Grid xs={12} lg={7}>
+          <Card variant="outlined" sx={{ height: 'fit-content' }}>
+            <CardContent sx={{ p: 0 }}>
+              {/* Sticky Header */}
+              <Box sx={{ 
+                p: 3, 
+                pb: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.surface',
+                position: 'sticky',
+                top: 0,
+                zIndex: 1
+              }}>
+                <Typography level="title-lg">Playlist Items ({items.length})</Typography>
+                <Typography level="body-sm" color="neutral" sx={{ mt: 0.5 }}>
+                  Drag to reorder, or use the arrow buttons to move items up and down.
+                </Typography>
+              </Box>
 
-                    <div className="flex flex-col space-y-2">
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => removeItem(item.id)}
-                          aria-label="Remove from playlist"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                    </div>
+              {/* Items List */}
+              <Box sx={{ p: 3, pt: 2 }}>
+                {items.length === 0 ? (
+                  <Box sx={{ 
+                    textAlign: 'center', 
+                    py: 8,
+                    color: 'text.tertiary'
+                  }}>
+                    <Typography level="body-lg" sx={{ mb: 1 }}>
+                      No items in this playlist
+                    </Typography>
+                    <Typography level="body-sm">
+                      Add items from scenes to build your playlist.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Stack spacing={2}>
+                    {items.map((item, idx) => (
+                      <Card 
+                        key={item.id}
+                        variant="outlined"
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          p: 2,
+                          gap: 2,
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            bgcolor: 'background.level1',
+                            transform: 'translateY(-1px)',
+                            boxShadow: 'sm'
+                          }
+                        }}
+                      >
+                        {/* Thumbnail */}
+                        <Box sx={{ 
+                          width: 120, 
+                          height: 68, // 16:9 aspect ratio (120*9/16 ≈ 68)
+                          borderRadius: 'sm', 
+                          overflow: 'hidden', 
+                          bgcolor: 'neutral.softBg',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          flexShrink: 0
+                        }}>
+                          {item.screenshot ? (
+                            <img
+                              src={item.screenshot}
+                              alt={item.title}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Typography level="body-xs" color="neutral">No image</Typography>
+                            </Box>
+                          )}
+                        </Box>
 
-                    {/* Up/Down buttons */}
-                    <div className="flex flex-col space-y-2">
-                        <Button variant="outline" size="icon" onClick={() => moveItem(idx, "up")}>
-                        <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="icon" onClick={() => moveItem(idx, "down")}>
-                        <ArrowDown className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </Card>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+                        {/* Content */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography 
+                            level="title-md" 
+                            sx={{ 
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              mb: 0.5
+                            }}
+                            title={item.title}
+                          >
+                            {item.title}
+                          </Typography>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Clock size={14} />
+                            <Typography level="body-sm" color="neutral">
+                              {formatLength(item.endTime - item.startTime)}
+                            </Typography>
+                          </Stack>
+                        </Box>
+
+                        {/* Action Buttons */}
+                        <Stack direction="row" spacing={1}>
+                          <Stack direction="column" spacing={0.5}>
+                            <Tooltip title="Move up">
+                              <IconButton
+                                size="sm"
+                                variant="soft"
+                                onClick={() => moveItem(idx, "up")}
+                                disabled={idx === 0 || loading}
+                              >
+                                <ArrowUp size={16} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Move down">
+                              <IconButton
+                                size="sm"
+                                variant="soft"
+                                onClick={() => moveItem(idx, "down")}
+                                disabled={idx === items.length - 1 || loading}
+                              >
+                                <ArrowDown size={16} />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                          
+                          <Tooltip title="Remove from playlist">
+                            <IconButton
+                              size="sm"
+                              variant="soft"
+                              color="danger"
+                              onClick={() => removeItem(item.id)}
+                              disabled={loading}
+                            >
+                              <Trash2 size={16} />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Sheet>
   );
 }

@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
         name: true,
         description: true,
         type: true,
+        image: true,
         conditions: true,
       },
     });
@@ -101,11 +102,11 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Playlist ID is required' }, { status: 400 });
   }
 
-  const { name, description, conditions } = await request.json();
+  const { name, description, conditions, image } = await request.json();
 
   const updated = await prisma.playlist.update({
     where: { id: playlistId },
-    data: { name, description, conditions },
+    data: { name, description, conditions, image },
   });
 
   return NextResponse.json(updated, { status: 200 });

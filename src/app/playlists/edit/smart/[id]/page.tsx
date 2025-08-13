@@ -24,6 +24,7 @@ import LinearProgress from '@mui/joy/LinearProgress';
 import { formatLength } from "@/lib/formatLength";
 
 import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder';
+import PlaylistImageUpload from '@/components/PlaylistImageUpload';
 import { useSettings } from '@/app/context/SettingsContext';
 import { useStashTags } from '@/context/StashTagsContext';
 
@@ -41,6 +42,7 @@ export default function EditAutomaticPlaylistPage() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState<Rules>({ actorIds: [], tagIds: [], minRating: null });
 
@@ -67,6 +69,7 @@ export default function EditAutomaticPlaylistPage() {
 
         setName(playlist.name || '');
         setDescription(playlist.description || '');
+        setImage(playlist.image || null);
         let cond: any = {};
         if (playlist.conditions && typeof playlist.conditions === 'object') {
           cond = playlist.conditions;
@@ -226,28 +229,49 @@ export default function EditAutomaticPlaylistPage() {
             <Card variant="outlined" sx={{ minHeight: 'auto' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography level="title-lg" mb={2}>Details</Typography>
-                <Stack spacing={2.5}>
-                  <FormControl>
-                    <FormLabel>Name</FormLabel>
-                    <Input
-                      placeholder="Playlist name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      disabled={loading}
-                      size="lg"
-                    />
-                  </FormControl>
-                  <FormControl>
-                    <FormLabel>Description</FormLabel>
-                    <Textarea
-                      minRows={4}
-                      placeholder="Playlist description"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      disabled={loading}
-                      size="lg"
-                    />
-                  </FormControl>
+                <Stack direction="row" spacing={3} sx={{ alignItems: 'stretch' }}>
+                  {/* Left side - Form fields */}
+                  <Stack spacing={2.5} sx={{ flex: 1, display: 'flex' }}>
+                    <FormControl>
+                      <FormLabel>Name</FormLabel>
+                      <Input
+                        placeholder="Playlist name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        disabled={loading}
+                        size="lg"
+                      />
+                    </FormControl>
+                    <FormControl sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      <FormLabel>Description</FormLabel>
+                      <Textarea
+                        placeholder="Playlist description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        disabled={loading}
+                        size="lg"
+                        sx={{ 
+                          resize: 'vertical', 
+                          flex: 1,
+                          minHeight: 0
+                        }}
+                      />
+                    </FormControl>
+                  </Stack>
+                  
+                  {/* Right side - Cover Image */}
+                  <Box sx={{ width: 200, flexShrink: 0 }}>
+                    <FormControl>
+                      <FormLabel>Cover Image</FormLabel>
+                      <PlaylistImageUpload
+                        currentImage={image ? `/api/playlist-images/${image}` : null}
+                        onImageUploaded={(imageUrl, filename) => setImage(filename)}
+                        onImageDeleted={() => setImage(null)}
+                        playlistId={id}
+                        disabled={loading}
+                      />
+                    </FormControl>
+                  </Box>
                 </Stack>
               </CardContent>
             </Card>

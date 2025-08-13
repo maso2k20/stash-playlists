@@ -52,6 +52,7 @@ interface Playlist {
   name: string;
   description?: string;
   type: PlaylistType;
+  image?: string;
 }
 
 type PlaylistStats = {
@@ -476,9 +477,11 @@ export default function PlaylistsPage() {
           return (
             <Grid xs={12} sm={6} lg={6} key={playlist.id}>
               <Card variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                <CardContent sx={{ gap: 1, display: "flex", flexDirection: "column" }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                    <Box sx={{ minWidth: 0 }}>
+                <CardContent sx={{ gap: 1, display: "flex", flexDirection: "row", alignItems: "stretch" }}>
+                  {/* Left side content */}
+                  <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    {/* Header with title/description */}
+                    <Box sx={{ mb: 1 }}>
                       <Link href={`/playlists/${playlist.id}`} style={{ textDecoration: "none" }}>
                         <Typography
                           level="title-lg"
@@ -507,66 +510,94 @@ export default function PlaylistsPage() {
                         {playlist.description?.trim() || "No description"}
                       </Typography>
                     </Box>
-                    <Chip size="sm" variant="soft" color={typeColor[playlist.type]} sx={{ textTransform: "capitalize", flexShrink: 0 }}>
-                      {playlist.type.toLowerCase()}
-                    </Chip>
-                  </Stack>
 
-                  {/* Stats row */}
-                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <Chip size="sm" variant="outlined" startDecorator={<Film size={14} />}>
-                      {s ? `${s.itemCount} item${s.itemCount === 1 ? "" : "s"}` : "…"}
-                    </Chip>
-                    {durationLabel && (
-                      <Chip size="sm" variant="outlined" startDecorator={<Clock size={14} />}>
-                        {durationLabel}
+                    {/* Stats row with type chip first */}
+                    <Stack direction="row" spacing={1} sx={{ mb: isSmart ? 1 : 0 }}>
+                      <Chip size="sm" variant="soft" color={typeColor[playlist.type]} sx={{ textTransform: "capitalize" }}>
+                        {playlist.type.toLowerCase()}
                       </Chip>
-                    )}
-                  </Stack>
-
-                  {/* SMART conditions row */}
-                  {isSmart && (
-                    <Stack spacing={0.75} sx={{ mt: 1 }}>
-                      {/* Actors */}
-                      <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
-                        <User size={14} />
-                        {actorNames.slice(0, maxShow).map((name) => (
-                          <Chip key={name} size="sm" variant="soft" title={name}>
-                            {name}
-                          </Chip>
-                        ))}
-                        {moreActors > 0 && (
-                          <Chip size="sm" variant="plain">{`+${moreActors} more`}</Chip>
-                        )}
-                        {actorNames.length === 0 && <Typography level="body-xs" color="neutral">No actors filter</Typography>}
-                      </Stack>
-
-                      {/* Tags */}
-                      <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
-                        <TagIcon size={14} />
-                        {tagNames.slice(0, maxShow).map((name) => (
-                          <Chip key={name} size="sm" variant="soft" title={name}>
-                            {name}
-                          </Chip>
-                        ))}
-                        {moreTags > 0 && (
-                          <Chip size="sm" variant="plain">{`+${moreTags} more`}</Chip>
-                        )}
-                        {tagNames.length === 0 && <Typography level="body-xs" color="neutral">No tags filter</Typography>}
-                      </Stack>
-
-                      {/* Rating */}
-                      <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
-                        <Star size={14} />
-                        {c?.minRating ? (
-                          <Chip size="sm" variant="soft" title={`Minimum rating: ${c.minRating} stars`}>
-                            {c.minRating}+ stars
-                          </Chip>
-                        ) : (
-                          <Typography level="body-xs" color="neutral">No rating filter</Typography>
-                        )}
-                      </Stack>
+                      <Chip size="sm" variant="outlined" startDecorator={<Film size={14} />}>
+                        {s ? `${s.itemCount} item${s.itemCount === 1 ? "" : "s"}` : "…"}
+                      </Chip>
+                      {durationLabel && (
+                        <Chip size="sm" variant="outlined" startDecorator={<Clock size={14} />}>
+                          {durationLabel}
+                        </Chip>
+                      )}
                     </Stack>
+
+                    {/* SMART conditions row */}
+                    {isSmart && (
+                      <Stack spacing={0.75}>
+                        {/* Actors */}
+                        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                          <User size={14} />
+                          {actorNames.slice(0, maxShow).map((name) => (
+                            <Chip key={name} size="sm" variant="soft" title={name}>
+                              {name}
+                            </Chip>
+                          ))}
+                          {moreActors > 0 && (
+                            <Chip size="sm" variant="plain">{`+${moreActors} more`}</Chip>
+                          )}
+                          {actorNames.length === 0 && <Typography level="body-xs" color="neutral">No actors filter</Typography>}
+                        </Stack>
+
+                        {/* Tags */}
+                        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                          <TagIcon size={14} />
+                          {tagNames.slice(0, maxShow).map((name) => (
+                            <Chip key={name} size="sm" variant="soft" title={name}>
+                              {name}
+                            </Chip>
+                          ))}
+                          {moreTags > 0 && (
+                            <Chip size="sm" variant="plain">{`+${moreTags} more`}</Chip>
+                          )}
+                          {tagNames.length === 0 && <Typography level="body-xs" color="neutral">No tags filter</Typography>}
+                        </Stack>
+
+                        {/* Rating */}
+                        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
+                          <Star size={14} />
+                          {c?.minRating ? (
+                            <Chip size="sm" variant="soft" title={`Minimum rating: ${c.minRating} stars`}>
+                              {c.minRating}+ stars
+                            </Chip>
+                          ) : (
+                            <Typography level="body-xs" color="neutral">No rating filter</Typography>
+                          )}
+                        </Stack>
+                      </Stack>
+                    )}
+                  </Box>
+
+                  {/* Right side image */}
+                  {playlist.image && (
+                    <Box
+                      sx={{
+                        width: 96,
+                        height: 170, // 9:16 aspect ratio (96*16/9 ≈ 170)
+                        borderRadius: 'md',
+                        overflow: 'hidden',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        bgcolor: 'neutral.softBg',
+                        flexShrink: 0,
+                        boxShadow: 'sm',
+                        ml: 2,
+                      }}
+                    >
+                      <img
+                        src={`/api/playlist-images/${playlist.image}`}
+                        alt={`${playlist.name} cover`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    </Box>
                   )}
                 </CardContent>
 
@@ -669,6 +700,11 @@ export default function PlaylistsPage() {
                 <Radio value="SMART" label="Smart" />
               </RadioGroup>
             </FormControl>
+            <Box sx={{ p: 2, bgcolor: 'neutral.softBg', borderRadius: 'sm' }}>
+              <Typography level="body-sm" color="neutral">
+                💡 You can add a cover image after creating the playlist by using the edit button.
+              </Typography>
+            </Box>
           </Stack>
           <Stack direction="row" gap={1.5} justifyContent="flex-end" sx={{ pt: 2 }}>
             <Button variant="plain" onClick={() => setIsCreateOpen(false)}>
