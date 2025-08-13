@@ -98,6 +98,12 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
 - **Inline Marker Editing**: Create, edit, and delete markers with real-time validation
 - **Tag Management**: Primary tag and additional tags with autocomplete selection
 - **Time Controls**: Video player integration with jump-to-time and set-time-from-player functionality
+- **Enhanced Video Player**: Custom VideoJS implementation with timeline markers that preserve normal seeking behavior:
+  - Visual marker indicators on timeline for reference
+  - Hover tooltips showing marker names and information
+  - Non-intrusive markers that don't interfere with timeline seeking
+  - Range indicators for markers with duration
+  - VTT thumbnails integration for video preview
 - **Rating Integration**: Rate markers directly in the editing interface with auto-save
 - **Common Tags**: Bulk add/remove arbitrary tags to all markers with toggle for add/remove mode
 - **Performer Tags**: Pre-populated with all performer tags, allowing bulk application to markers:

@@ -50,7 +50,7 @@ const addCustomMarkers = (player, markers) => {
       markerEl.style.width = '3px';
       markerEl.style.backgroundColor = '#2196F3';
       markerEl.style.zIndex = '1000';
-      markerEl.style.cursor = 'pointer';
+      markerEl.style.cursor = 'default';
       markerEl.style.borderRadius = '2px';
       
       // Create custom tooltip
@@ -99,7 +99,7 @@ const addCustomMarkers = (player, markers) => {
         rangeEl.style.zIndex = '998';
         rangeEl.style.borderRadius = '2px';
         rangeEl.style.border = '1px solid rgba(33, 150, 243, 0.6)';
-        rangeEl.style.cursor = 'pointer';
+        rangeEl.style.cursor = 'default';
         
         // Create tooltip for range
         const rangeTooltipEl = document.createElement('div');
@@ -131,20 +131,12 @@ const addCustomMarkers = (player, markers) => {
           rangeTooltipEl.style.opacity = '0';
         });
         
-        // Click handler for range as well
-        rangeEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          player.currentTime(markerTime);
-        });
+        // Remove click handler - let normal timeline seeking work
         
         seekBar.el().appendChild(rangeEl);
       }
       
-      // Click handler to seek to marker
-      markerEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        player.currentTime(markerTime);
-      });
+      // Remove click handler - let normal timeline seeking work
       
       // Add to seekbar
       seekBar.el().appendChild(markerEl);
