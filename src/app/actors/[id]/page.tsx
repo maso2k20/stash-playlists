@@ -29,16 +29,26 @@ import {
   DialogContent,
   DialogActions,
   Skeleton,
+  Input,
+  Select,
+  Option,
+  FormControl,
+  Stack,
+  IconButton,
 } from "@mui/joy";
 
+import { Search, ArrowUpDown } from "lucide-react";
+
+import StarRating from "@/components/StarRating";
+
 const GET_ALL_MARKERS = gql`
-  query findActorsSceneMarkers($actorId: ID!, $tagID: [ID!]!, $pageNumber: Int, $perPage: Int) {
+  query findActorsSceneMarkers($actorId: ID!, $tagID: [ID!]!) {
     findSceneMarkers(
       scene_marker_filter: {
         performers: { modifier: INCLUDES, value: [$actorId] }
         tags: { modifier: INCLUDES, value: $tagID }
       }
-      filter: { page: $pageNumber, per_page: $perPage }
+      filter: { per_page: -1 }
     ) {
       scene_markers {
         id
@@ -55,6 +65,14 @@ const GET_ALL_MARKERS = gql`
 `;
 
 type Playlist = { id: string; name: string; type: string };
+
+type SortOption = 
+  | "title-asc" 
+  | "title-desc" 
+  | "duration-asc"
+  | "duration-desc"
+  | "rating-desc"
+  | "rating-asc";
 
 /** HoverPreview
  * - If preview is .webm: show <video> on hover, screenshot otherwise.
@@ -164,7 +182,10 @@ export default function Page() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [chosenPlaylistId, setChosenPlaylistId] = useState<string>("");
 
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("title-asc");
 
   const pathname = usePathname();
   const isMarkersPage = !pathname?.includes("/scenes");
@@ -175,21 +196,6 @@ export default function Page() {
 
   const { stashTags, loading: tagsLoading, error: tagsError } = useStashTags();
 
-  // Pagination state
-  const [pageNumber, setPageNumber] = useState(1);
-  const perPage = 60;
-
-  // Reset page to 1 whenever tag filter changes
-  useEffect(() => {
-    setPageNumber(1);
-  }, [selectedTagId]);
-
-  // Smooth-scroll to top on page change
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }, [pageNumber]);
 
   // Load playlists
   useEffect(() => {
@@ -207,25 +213,85 @@ export default function Page() {
     })();
   }, []);
 
-  // Tag options (no manual filtering; let Joy Autocomplete filter by label)
+  // Tag options for multi-select
   const tagOptions = useMemo(
     () => (stashTags || []).map((t: any) => ({ id: String(t.id), label: t.name as string })),
     [stashTags]
   );
-  const selectedTagOption =
-    selectedTagId ? tagOptions.find((t: any) => t.id === selectedTagId) ?? null : null;
+  const selectedTagOptions = selectedTagIds.map(id => 
+    tagOptions.find(t => t.id === id)
+  ).filter(Boolean);
 
-  // Query markers with either the chosen tag or all available tags
-  const tagIDsForFilter = selectedTagId
-    ? [selectedTagId]
+  // Query markers with either the chosen tags or all available tags
+  const tagIDsForFilter = selectedTagIds.length > 0
+    ? selectedTagIds
     : (stashTags || []).map((tag: any) => String(tag.id));
 
   const { data, loading, error } = useQuery(GET_ALL_MARKERS, {
-    variables: { actorId, tagID: tagIDsForFilter, pageNumber, perPage },
+    variables: { actorId, tagID: tagIDsForFilter },
     fetchPolicy: "cache-and-network",
   });
 
-  const scenes = data?.findSceneMarkers?.scene_markers ?? [];
+  const allScenes = data?.findSceneMarkers?.scene_markers ?? [];
+
+  // Filter and sort scenes
+  const scenes = useMemo(() => {
+    let filtered = allScenes;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter((marker: any) => 
+        marker.title.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a: any, b: any) => {
+      const ratingA = ratings[a.id] || 0;
+      const ratingB = ratings[b.id] || 0;
+      const durationA = (a.end_seconds || 0) - (a.seconds || 0);
+      const durationB = (b.end_seconds || 0) - (b.seconds || 0);
+
+      switch (sortOption) {
+        case "title-asc":
+          return a.title.localeCompare(b.title);
+        case "title-desc":
+          return b.title.localeCompare(a.title);
+        case "duration-asc":
+          return durationA - durationB;
+        case "duration-desc":
+          return durationB - durationA;
+        case "rating-desc":
+          return ratingB - ratingA;
+        case "rating-asc":
+          return ratingA - ratingB;
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [allScenes, searchQuery, sortOption, ratings]);
+
+  // Fetch ratings for current markers (use allScenes to avoid dependency loop)
+  useEffect(() => {
+    if (allScenes.length === 0) return;
+    
+    const markerIds = allScenes.map((marker: any) => marker.id);
+    const idsParam = markerIds.join(',');
+    
+    fetch(`/api/items/ratings?ids=${encodeURIComponent(idsParam)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.ratings) {
+          setRatings(data.ratings);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch ratings:', err);
+      });
+  }, [allScenes]);
 
   const toggleMarker = (markerId: string) => {
     setSelectedMarkers((prev) =>
@@ -278,10 +344,6 @@ export default function Page() {
   };
 
   const anyLoading = loading || tagsLoading || playlistsLoading;
-
-  // Simple "has next page" heuristic: if we got fewer than perPage, it's the last page
-  const hasNextPage = scenes.length === perPage;
-  const hasPrevPage = pageNumber > 1;
 
   return (
     <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
@@ -342,35 +404,74 @@ export default function Page() {
         </Button>
       </Box>
 
-      {/* Filters row */}
-      <Box
-        sx={{
-          display: "flex",
-          gap: 1,
-          alignItems: "center",
-          flexWrap: "wrap",
-          mb: 2,
-        }}
+      {/* Search and Filters */}
+      <Stack 
+        direction={{ xs: "column", lg: "row" }} 
+        spacing={2} 
+        alignItems={{ xs: "stretch", lg: "center" }}
+        sx={{ mb: 2 }}
       >
-        <Autocomplete
-          placeholder="Filter by tag…"
-          options={tagOptions}
-          value={selectedTagOption}
-          onChange={(_e, val) => setSelectedTagId(val?.id ?? null)}
-          getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
-          isOptionEqualToValue={(a, b) => a?.id === b?.id}
-          size="sm"
-          sx={{ minWidth: { xs: 220, sm: 300 }, flexGrow: 1 }}
-        />
+        <FormControl sx={{ flexGrow: 1, maxWidth: { lg: 300 } }}>
+          <Input
+            placeholder="Search markers..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            startDecorator={<Search size={16} />}
+            endDecorator={
+              searchQuery && (
+                <IconButton
+                  size="sm"
+                  variant="plain"
+                  onClick={() => setSearchQuery("")}
+                  sx={{ minHeight: 0, minWidth: 0 }}
+                >
+                  ×
+                </IconButton>
+              )
+            }
+            size="sm"
+          />
+        </FormControl>
+        
+        <FormControl sx={{ minWidth: { xs: "100%", lg: 180 } }}>
+          <Select
+            value={sortOption}
+            onChange={(_, value) => setSortOption(value as SortOption)}
+            startDecorator={<ArrowUpDown size={16} />}
+            size="sm"
+          >
+            <Option value="title-asc">Title (A-Z)</Option>
+            <Option value="title-desc">Title (Z-A)</Option>
+            <Option value="duration-asc">Shortest First</Option>
+            <Option value="duration-desc">Longest First</Option>
+            <Option value="rating-desc">Highest Rated</Option>
+            <Option value="rating-asc">Lowest Rated</Option>
+          </Select>
+        </FormControl>
+
+        <FormControl sx={{ flexGrow: 2, minWidth: { xs: "100%", lg: 250 } }}>
+          <Autocomplete
+            placeholder="Filter by tags..."
+            multiple
+            options={tagOptions}
+            value={selectedTagOptions}
+            onChange={(_e, val) => setSelectedTagIds(val.map(v => v.id))}
+            getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
+            isOptionEqualToValue={(a, b) => a?.id === b?.id}
+            size="sm"
+          />
+        </FormControl>
+
         <Button
           size="sm"
           variant="plain"
-          disabled={!selectedTagId}
-          onClick={() => setSelectedTagId(null)}
+          disabled={selectedTagIds.length === 0}
+          onClick={() => setSelectedTagIds([])}
+          sx={{ minWidth: "auto" }}
         >
-          Reset tag
+          Clear tags
         </Button>
-      </Box>
+      </Stack>
 
       {/* Loading / Errors */}
       {anyLoading && (
@@ -398,7 +499,7 @@ export default function Page() {
       )}
 
       {/* Empty state */}
-      {!anyLoading && scenes.length === 0 && (
+      {!anyLoading && allScenes.length === 0 && (
         <Sheet
           variant="soft"
           color="neutral"
@@ -408,28 +509,98 @@ export default function Page() {
         </Sheet>
       )}
 
+      {/* No results after filtering */}
+      {!anyLoading && allScenes.length > 0 && scenes.length === 0 && (
+        <Sheet
+          variant="soft"
+          color="neutral"
+          sx={{ p: 3, borderRadius: "lg", textAlign: "center" }}
+        >
+          <Typography level="title-md">No markers match your search or filters.</Typography>
+          <Typography level="body-sm" sx={{ mt: 1 }}>
+            Try adjusting your search terms or clearing filters.
+          </Typography>
+          {(searchQuery || selectedTagIds.length > 0) && (
+            <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 2 }}>
+              {searchQuery && (
+                <Button variant="plain" size="sm" onClick={() => setSearchQuery("")}>
+                  Clear search
+                </Button>
+              )}
+              {selectedTagIds.length > 0 && (
+                <Button variant="plain" size="sm" onClick={() => setSelectedTagIds([])}>
+                  Clear tags
+                </Button>
+              )}
+            </Stack>
+          )}
+        </Sheet>
+      )}
+
+      {/* Results count */}
+      {!anyLoading && allScenes.length > 0 && (
+        <Box sx={{ mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Typography level="body-sm" color="neutral">
+            {scenes.length === allScenes.length 
+              ? `${scenes.length} marker${scenes.length === 1 ? '' : 's'}`
+              : `${scenes.length} of ${allScenes.length} markers`
+            }
+          </Typography>
+          {loading && (
+            <Typography level="body-xs" color="neutral">
+              Loading...
+            </Typography>
+          )}
+        </Box>
+      )}
+
       {/* Scene Cards */}
       {!anyLoading && scenes.length > 0 && (
         <>
           <Grid container spacing={2}>
             {scenes.map((marker: any) => {
               const checked = selectedMarkers.includes(marker.id);
+              const rating = ratings[marker.id];
               return (
                 <Grid key={marker.id} xs={12} sm={6} md={4} lg={3} xl={2}>
                   <Card
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleMarker(marker.id);
+                      }
+                    }}
                     sx={{
                       p: 0,
                       overflow: "hidden",
                       borderRadius: "lg",
                       position: "relative",
                       boxShadow: "sm",
-                      transition: "transform 150ms ease, box-shadow 150ms ease",
-                      "&:hover": { transform: "translateY(-2px)", boxShadow: "md" },
+                      transition: "transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease",
+                      border: checked ? "2px solid" : "2px solid transparent",
+                      borderColor: checked ? "primary.500" : "transparent",
+                      "&:hover": { 
+                        transform: "translateY(-2px)", 
+                        boxShadow: "md",
+                        borderColor: checked ? "primary.600" : "neutral.300",
+                      },
+                      "&:focus": {
+                        outline: "2px solid",
+                        outlineColor: "primary.500",
+                        outlineOffset: "2px",
+                      },
+                      cursor: "pointer",
                     }}
+                    onClick={() => toggleMarker(marker.id)}
                   >
                     <AspectRatio ratio="16/9">
                       {/* Media (screenshot -> preview on hover) */}
-                      <CardCover sx={{ pointerEvents: "auto" }}>
+                      <CardCover 
+                        sx={{ 
+                          pointerEvents: "auto",
+                        }}
+                      >
                         <HoverPreview
                           screenshot={marker.screenshot}
                           preview={marker.preview}
@@ -437,17 +608,73 @@ export default function Page() {
                           stashBase={stashServer}
                           apiKey={stashAPI}
                         />
+                        
+                        {/* Selected overlay */}
+                        {checked && (
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              backgroundColor: "rgba(25, 118, 210, 0.2)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              pointerEvents: "none",
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                backgroundColor: "primary.500",
+                                borderRadius: "50%",
+                                p: 1,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="white"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="20,6 9,17 4,12"></polyline>
+                              </svg>
+                            </Box>
+                          </Box>
+                        )}
                       </CardCover>
 
-                      {/* Checkbox (top-right) */}
-                      <Box sx={{ position: "absolute", top: 8, right: 8 }}>
-                        <Checkbox
-                          checked={checked}
-                          onChange={() => toggleMarker(marker.id)}
-                          size="sm"
-                          variant="soft"
-                        />
-                      </Box>
+                      {/* Rating display (top-right) */}
+                      {rating && (
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            top: 8,
+                            right: 8,
+                            backgroundColor: "rgba(0, 0, 0, 0.7)",
+                            borderRadius: "6px",
+                            px: 0.75,
+                            py: 0.25,
+                            backdropFilter: "blur(4px)",
+                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.25,
+                          }}
+                        >
+                          <StarRating 
+                            value={rating} 
+                            readonly={true} 
+                            size="sm"
+                            showClearButton={false}
+                          />
+                        </Box>
+                      )}
 
                       {/* Bottom gradient + title/time */}
                       <Box
@@ -485,40 +712,6 @@ export default function Page() {
               );
             })}
           </Grid>
-
-          {/* Pagination controls */}
-          <Box
-            sx={{
-              mt: 2,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <Button
-              size="sm"
-              variant="outlined"
-              disabled={!hasPrevPage || loading}
-              onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-
-            <Chip size="sm" variant="soft">
-              Page {pageNumber}
-            </Chip>
-
-            <Button
-              size="sm"
-              variant="outlined"
-              disabled={!hasNextPage || loading}
-              onClick={() => setPageNumber((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </Box>
         </>
       )}
 
