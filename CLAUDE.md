@@ -78,6 +78,25 @@ Comprehensive 1-5 star rating system for markers/items:
 - **Database**: `rating` field in Item table (nullable integer)
 - **UI Component**: `src/components/StarRating.tsx` - Interactive star rating with MUI Joy
 - **Scene Management**: Rate markers directly on `/scenes/[id]` page
+- **Playlist Player**: Real-time rating of currently playing clips with auto-save
 - **Smart Playlist Integration**: Filter by minimum rating in rule builder
 - **Auto-creation**: Items are created automatically when rating non-existent markers
 - **API**: Full CRUD operations for ratings with validation and error handling
+
+### Playlist Player Features
+Enhanced playlist playback experience at `/playlists/[id]`:
+- **Current Item Display**: Shows title and rating component below video player
+- **Real-time Rating**: Star rating component with immediate persistence via API
+- **Progress Tracking**: Automatically hides completed items from playlist view
+- **Visual Feedback**: Current item highlighting with primary colors, played items at 50% opacity
+- **Shuffle Support**: Maintains play order consistency while filtering display
+- **Responsive Design**: Consistent JoyUI styling with proper spacing and typography
+- **Performance Optimized**: Uses React.memo, useCallback, and proper useEffect dependencies
+
+### Playlist Management Features
+Enhanced playlist browsing and organization at `/playlists`:
+- **Search Functionality**: Real-time filtering by playlist name and description
+- **Sorting Options**: Sort by name (A-Z/Z-A), item count (high/low), or duration (long/short)
+- **Responsive Layout**: Clean JoyUI header design with search and sort controls that stack on mobile
+- **Visual Feedback**: Proper loading states, empty states, and search result indicators
+- **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations

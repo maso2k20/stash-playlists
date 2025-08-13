@@ -1,7 +1,7 @@
 // file: src/app/playlists/page.tsx
 "use client";
 
-import { useState, useEffect, ChangeEvent } from "react";
+import { useState, useEffect, ChangeEvent, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -23,6 +23,8 @@ import {
   ModalDialog,
   Radio,
   RadioGroup,
+  Select,
+  Option,
   Sheet,
   Stack,
   Tooltip,
@@ -38,6 +40,8 @@ import {
   Tag as TagIcon,
   RefreshCcw,
   Star,
+  Search,
+  ArrowUpDown,
 } from "lucide-react";
 import { useStashTags } from "@/context/StashTagsContext"; // ensure this path matches your project
 
@@ -61,6 +65,14 @@ type ParsedConds = {
   minRating: number | null;
 };
 
+type SortOption = 
+  | "name-asc" 
+  | "name-desc" 
+  | "items-desc" 
+  | "items-asc" 
+  | "duration-desc" 
+  | "duration-asc";
+
 export default function PlaylistsPage() {
   const router = useRouter();
   const { stashTags } = useStashTags(); // [{id, name, ...}] from Stash GraphQL
@@ -76,6 +88,10 @@ export default function PlaylistsPage() {
 
   // Per-playlist "refreshing" state
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
+
+  // Search and sort state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("name-asc");
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -274,14 +290,100 @@ export default function PlaylistsPage() {
 
   const maxShow = 3;
 
+  // Filtered and sorted playlists
+  const filteredAndSortedPlaylists = useMemo(() => {
+    let filtered = playlists;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(playlist => 
+        playlist.name.toLowerCase().includes(query) ||
+        (playlist.description && playlist.description.toLowerCase().includes(query))
+      );
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      const statsA = stats[a.id] || { itemCount: 0, durationMs: 0 };
+      const statsB = stats[b.id] || { itemCount: 0, durationMs: 0 };
+
+      switch (sortOption) {
+        case "name-asc":
+          return a.name.localeCompare(b.name);
+        case "name-desc":
+          return b.name.localeCompare(a.name);
+        case "items-desc":
+          return statsB.itemCount - statsA.itemCount;
+        case "items-asc":
+          return statsA.itemCount - statsB.itemCount;
+        case "duration-desc":
+          return (statsB.durationMs || 0) - (statsA.durationMs || 0);
+        case "duration-asc":
+          return (statsA.durationMs || 0) - (statsB.durationMs || 0);
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [playlists, stats, searchQuery, sortOption]);
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1280, mx: "auto" }}>
-      {/* Header: title left, button right */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography level="h3">Playlists</Typography>
-        <Button startDecorator={<Plus size={16} />} color="primary" variant="solid" onClick={() => setIsCreateOpen(true)}>
-          Add Playlist
-        </Button>
+      {/* Header with title, search, sort, and add button */}
+      <Stack spacing={2} sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Typography level="h3">Playlists</Typography>
+          <Button startDecorator={<Plus size={16} />} color="primary" variant="solid" onClick={() => setIsCreateOpen(true)}>
+            Add Playlist
+          </Button>
+        </Stack>
+        
+        {/* Search and Sort Controls */}
+        <Stack 
+          direction={{ xs: "column", sm: "row" }} 
+          spacing={2} 
+          alignItems={{ xs: "stretch", sm: "center" }}
+        >
+          <FormControl sx={{ flexGrow: 1, maxWidth: { sm: 400 } }}>
+            <Input
+              placeholder="Search playlists..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              startDecorator={<Search size={16} />}
+              endDecorator={
+                searchQuery && (
+                  <IconButton
+                    size="sm"
+                    variant="plain"
+                    onClick={() => setSearchQuery("")}
+                    sx={{ minHeight: 0, minWidth: 0 }}
+                  >
+                    ×
+                  </IconButton>
+                )
+              }
+              size="lg"
+            />
+          </FormControl>
+          
+          <FormControl sx={{ minWidth: 200 }}>
+            <Select
+              value={sortOption}
+              onChange={(_, value) => setSortOption(value as SortOption)}
+              startDecorator={<ArrowUpDown size={16} />}
+              size="lg"
+            >
+              <Option value="name-asc">Name (A-Z)</Option>
+              <Option value="name-desc">Name (Z-A)</Option>
+              <Option value="items-desc">Most Items</Option>
+              <Option value="items-asc">Fewest Items</Option>
+              <Option value="duration-desc">Longest Duration</Option>
+              <Option value="duration-asc">Shortest Duration</Option>
+            </Select>
+          </FormControl>
+        </Stack>
       </Stack>
 
       {loading && (
@@ -313,7 +415,7 @@ export default function PlaylistsPage() {
           }}
         >
           <Typography level="title-lg" sx={{ mb: 1 }}>
-            You haven’t added any playlists yet.
+            You haven&apos;t added any playlists yet.
           </Typography>
           <Typography level="body-sm" sx={{ mb: 2 }}>
             Create your first manual or smart playlist to get started.
@@ -324,8 +426,41 @@ export default function PlaylistsPage() {
         </Sheet>
       )}
 
+      {!loading && playlists.length > 0 && filteredAndSortedPlaylists.length === 0 && (
+        <Sheet
+          variant="outlined"
+          sx={{
+            borderRadius: "lg",
+            p: 4,
+            textAlign: "center",
+            borderStyle: "dashed",
+            color: "neutral.500",
+            mb: 2,
+          }}
+        >
+          <Typography level="title-lg" sx={{ mb: 1 }}>
+            No playlists match your search.
+          </Typography>
+          <Typography level="body-sm" sx={{ mb: 2 }}>
+            Try adjusting your search terms or create a new playlist.
+          </Typography>
+          {searchQuery && (
+            <Button 
+              variant="plain" 
+              onClick={() => setSearchQuery("")}
+              sx={{ mr: 2 }}
+            >
+              Clear Search
+            </Button>
+          )}
+          <Button startDecorator={<Plus size={16} />} onClick={() => setIsCreateOpen(true)}>
+            Add Playlist
+          </Button>
+        </Sheet>
+      )}
+
       <Grid container spacing={2}>
-        {playlists.map((playlist) => {
+        {filteredAndSortedPlaylists.map((playlist) => {
           const s = stats[playlist.id];
           const durationLabel = formatDuration(s?.durationMs);
 
