@@ -1,7 +1,7 @@
 'use client'
 import * as React from 'react';
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Grid, Container, Sheet, Box, Typography } from '@mui/joy';
 import VideoJS from "@/components/videojs/VideoJS";
 import { PlaylistDetail } from '@/components/PlaylistDetail';
@@ -27,6 +27,7 @@ type Playlist = {
 
 export default function PlaylistPlayer() {
   const { id } = useParams();
+  const searchParams = useSearchParams();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0); // index within playOrder
   const [hasStarted, setHasStarted] = useState(false);
@@ -82,13 +83,31 @@ export default function PlaylistPlayer() {
 
   const items = useMemo(() => playlist?.items ?? [], [playlist?.items]);
 
+  // Helper function to shuffle an array
+  const shuffleArray = useCallback(<T>(array: T[]): T[] => {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, []);
+
   // Reset index/order when items change
   useEffect(() => {
-    setPlayOrder(items.map((_, i) => i));
+    const shouldShuffle = searchParams.get('shuffle') === 'true';
+    const initialOrder = items.map((_, i) => i);
+    
+    if (shouldShuffle && items.length > 0) {
+      setPlayOrder(shuffleArray(initialOrder));
+    } else {
+      setPlayOrder(initialOrder);
+    }
+    
     setCurrentIndex(0);
     setHasStarted(false);
     setPlayedItemIndices(new Set()); // Reset played items when playlist changes
-  }, [items.length]);
+  }, [items.length, searchParams, shuffleArray]);
 
   // Current item derived from playOrder
   const currentItemIndex = playOrder[currentIndex] ?? 0;

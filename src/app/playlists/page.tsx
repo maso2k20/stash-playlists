@@ -43,6 +43,8 @@ import {
   Star,
   Search,
   ArrowUpDown,
+  Play,
+  Shuffle,
 } from "lucide-react";
 import { useStashTags } from "@/context/StashTagsContext"; // ensure this path matches your project
 
@@ -328,7 +330,7 @@ export default function PlaylistsPage() {
   }, [playlists, stats, searchQuery, sortOption]);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1280, mx: "auto" }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
       {/* Header with title, search, sort, and add button */}
       <Stack spacing={2} sx={{ mb: 3 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -472,7 +474,7 @@ export default function PlaylistsPage() {
           const isBusy = !!refreshing[playlist.id];
 
           return (
-            <Grid xs={12} sm={6} lg={6} key={playlist.id}>
+            <Grid xs={12} sm={6} lg={4} key={playlist.id}>
               <Card variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
                 <CardContent sx={{ gap: 1, display: "flex", flexDirection: "row", alignItems: "stretch" }}>
                   {/* Left side content */}
@@ -599,9 +601,28 @@ export default function PlaylistsPage() {
                 <Divider />
 
                 <CardActions sx={{ mt: "auto", justifyContent: "space-between" }}>
-                  <Button size="sm" variant="plain" onClick={() => router.push(`/playlists/${playlist.id}`)}>
-                    Open
-                  </Button>
+                  <Stack direction="row" spacing={0.5}>
+                    <Tooltip title="Play playlist">
+                      <IconButton 
+                        size="sm" 
+                        variant="plain" 
+                        onClick={() => router.push(`/playlists/${playlist.id}`)}
+                        aria-label="Play playlist"
+                      >
+                        <Play size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Shuffle and play">
+                      <IconButton 
+                        size="sm" 
+                        variant="plain" 
+                        onClick={() => router.push(`/playlists/${playlist.id}?shuffle=true`)}
+                        aria-label="Shuffle and play playlist"
+                      >
+                        <Shuffle size={16} />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
 
                   <Stack direction="row" spacing={0.5}>
                     {/* 🔁 Refresh (SMART only) */}

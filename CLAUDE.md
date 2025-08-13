@@ -130,6 +130,11 @@ Enhanced playlist browsing and organization at `/playlists`:
 - **Search Functionality**: Real-time filtering by playlist name and description
 - **Sorting Options**: Sort by name (A-Z/Z-A), item count (high/low), or duration (long/short)
 - **Cover Images**: Optional 9:16 portrait images displayed on playlist cards
+- **Expanded Layout**: Three-column grid layout with increased page width (1600px) for better space utilization
+- **Playback Controls**: Direct play and shuffle buttons on each playlist card:
+  - Play button (▶️) for normal sequential playback
+  - Shuffle button (🔀) for randomized playback order
+  - URL-based shuffle state via `?shuffle=true` parameter
 - **Responsive Layout**: Clean JoyUI header design with search and sort controls that stack on mobile
 - **Visual Feedback**: Proper loading states, empty states, and search result indicators
 - **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations
