@@ -8,9 +8,9 @@ function jsonError(status: number, message: string, extra?: Record<string, unkno
 // PATCH /api/items/[id]/rating
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const itemId = params.id;
+  const { id: itemId } = await params;
   
   if (!itemId) {
     return jsonError(400, 'Item ID is required');
@@ -68,9 +68,9 @@ export async function PATCH(
 // GET /api/items/[id]/rating
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const itemId = params.id;
+  const { id: itemId } = await params;
   
   if (!itemId) {
     return jsonError(400, 'Item ID is required');

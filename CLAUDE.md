@@ -92,6 +92,23 @@ Comprehensive 1-5 star rating system for markers/items:
 - **API**: Full CRUD operations for ratings with validation and error handling
 - **Bulk Operations**: Efficient rating lookup for multiple markers via `/api/items/ratings`
 
+### Scene Marker Management System
+Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
+- **Performer Display**: Scene performers shown as highlighted chips in header for immediate context
+- **Inline Marker Editing**: Create, edit, and delete markers with real-time validation
+- **Tag Management**: Primary tag and additional tags with autocomplete selection
+- **Time Controls**: Video player integration with jump-to-time and set-time-from-player functionality
+- **Rating Integration**: Rate markers directly in the editing interface with auto-save
+- **Common Tags**: Bulk add/remove arbitrary tags to all markers with toggle for add/remove mode
+- **Performer Tags**: Pre-populated with all performer tags, allowing bulk application to markers:
+  - Auto-populated from scene performers with deduplication
+  - Remove-only interface (cannot add arbitrary tags)
+  - Bulk apply/remove to all markers with mode toggle
+  - Reset functionality to restore full performer tag list
+- **Bulk Operations**: Save All, Reset All functionality for efficient marker management
+- **Auto-tagging**: Automatically adds "Markers Organised" tag to scene when markers are saved
+- **Draft System**: Changes tracked as drafts with unsaved indicators and individual save/reset options
+
 ### Playlist Player Features
 Enhanced playlist playback experience at `/playlists/[id]`:
 - **Current Item Display**: Shows title and rating component below video player

@@ -50,6 +50,14 @@ const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
         primary_tag { id name }
         tags { id name }
       }
+      performers {
+        id
+        name
+        tags {
+          id
+          name
+        }
+      }
     }
   }
 `;
@@ -149,6 +157,23 @@ export default function SceneTagManagerPage() {
         [stashTags]
     );
 
+    // Performer tags - collect and deduplicate all tags from scene performers
+    const performerTags: Tag[] = useMemo(() => {
+        if (!scene?.performers) {
+            console.log('No performers in scene');
+            return [];
+        }
+        console.log('Processing performers:', scene.performers);
+        const allTags = scene.performers.flatMap((p: any) => {
+            console.log('Performer:', p.name, 'tags:', p.tags);
+            return (p.tags || []) as Tag[];
+        });
+        console.log('All tags before dedup:', allTags);
+        const dedupedTags = Array.from(new Map(allTags.map((t: Tag) => [t.id, t])).values()) as Tag[];
+        console.log('Deduped tags:', dedupedTags);
+        return dedupedTags;
+    }, [scene?.performers]);
+
     // Settings for stream URL
     const settings = useSettings();
     const stashServer = String(settings["STASH_SERVER"] || "").replace(/\/+$/, "");
@@ -178,6 +203,10 @@ export default function SceneTagManagerPage() {
     // Common Tags state
     const [commonTagIds, setCommonTagIds] = useState<string[]>([]);
     const [removeCommonMode, setRemoveCommonMode] = useState<boolean>(false);
+
+    // Performer Tags state
+    const [selectedPerformerTagIds, setSelectedPerformerTagIds] = useState<string[]>([]);
+    const [removePerformerMode, setRemovePerformerMode] = useState<boolean>(false);
 
     // VideoJS refs
     const playerRef = useRef<any>(null);
@@ -246,6 +275,13 @@ export default function SceneTagManagerPage() {
             loadRatings();
         }
     }, [markers]);
+
+    // Initialize performer tags when performer data loads
+    useEffect(() => {
+        console.log('Scene performers:', scene?.performers);
+        console.log('Performer tags:', performerTags);
+        setSelectedPerformerTagIds(performerTags.map(t => t.id));
+    }, [performerTags, scene?.performers]);
 
 
     const setDraft = (id: string, patch: Partial<Draft>) =>
@@ -686,6 +722,30 @@ export default function SceneTagManagerPage() {
         });
     };
 
+    // Performer tags apply (Add or Remove) — apply to both existing + new rows
+    const handleApplyPerformerToAll = () => {
+        if (selectedPerformerTagIds.length === 0) return;
+        setDrafts((prev) => {
+            const next: typeof prev = { ...prev };
+            const allIds = new Set<string>([...newIds, ...markers.map((m) => m.id)]);
+            for (const id of allIds) {
+                const d = next[id];
+                if (!d) continue;
+                if (removePerformerMode) {
+                    d.tag_ids = d.tag_ids.filter((tid) => !selectedPerformerTagIds.includes(tid));
+                } else {
+                    d.tag_ids = Array.from(new Set([...d.tag_ids, ...selectedPerformerTagIds]));
+                }
+            }
+            return next;
+        });
+    };
+
+    // Reset performer tags to full list
+    const handleResetPerformerTags = () => {
+        setSelectedPerformerTagIds(performerTags.map(t => t.id));
+    };
+
     // ---- VideoJS: options + ref ----
     const videoJsOptions = useMemo(
         () => ({
@@ -801,11 +861,24 @@ export default function SceneTagManagerPage() {
                         <Card variant="outlined" sx={{ p: 1.25, borderRadius: "lg" }}>
                             {/* Row: header + bulk actions */}
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75, flexWrap: "wrap" }}>
-                                <Typography level="title-sm">Markers</Typography>
-                                {!loading && (
-                                    <Chip size="sm" variant="soft">
-                                        {markers.length + newIds.length}
-                                    </Chip>
+                                {!loading && scene?.performers && scene.performers.length > 0 && (
+                                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                                        {scene.performers.map((performer: any) => (
+                                            <Chip 
+                                                key={performer.id} 
+                                                size="sm" 
+                                                variant="outlined" 
+                                                color="primary"
+                                                sx={{ 
+                                                    fontWeight: 500,
+                                                    borderStyle: "solid",
+                                                    borderWidth: 1.5
+                                                }}
+                                            >
+                                                {performer.name}
+                                            </Chip>
+                                        ))}
+                                    </Box>
                                 )}
                                 <Box sx={{ flexGrow: 1 }} />
                                 <Button size="sm" variant="outlined" onClick={addNewInline}>
@@ -1155,10 +1228,76 @@ export default function SceneTagManagerPage() {
 
                                 <Typography level="body-xs" sx={{ opacity: 0.8 }}>
                                     {removeCommonMode
-                                        ? "Removes these tags from each marker’s draft. Primary tag (if set) is preserved when saving."
-                                        : "Adds these tags to each marker’s draft (keeps existing tags and primary)."}
+                                        ? "Removes these tags from each marker's draft. Primary tag (if set) is preserved when saving."
+                                        : "Adds these tags to each marker's draft (keeps existing tags and primary)."}
                                 </Typography>
                             </Box>
+
+                            {/* Performer Tags (bulk add/remove from performer tags) */}
+                            {console.log('Performer tags length:', performerTags.length) || performerTags.length > 0 && (
+                                <Box
+                                    sx={{
+                                        borderTop: "1px solid",
+                                        borderColor: "divider",
+                                        pt: 1.5,
+                                        mt: 2,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: 1,
+                                    }}
+                                >
+                                    <Typography level="title-sm">Performer Tags</Typography>
+
+                                    <Autocomplete
+                                        multiple
+                                        size="sm"
+                                        options={performerTags}
+                                        value={selectedPerformerTagIds
+                                            .map((id) => performerTags.find((t) => t.id === id))
+                                            .filter(Boolean) as Tag[]}
+                                        onChange={(_e, vals) =>
+                                            setSelectedPerformerTagIds(vals.map((v) => v.id))
+                                        }
+                                        getOptionLabel={(o) => (typeof o === "string" ? o : (o as Tag).name)}
+                                        isOptionEqualToValue={(a, b) => a?.id === b?.id}
+                                        sx={{ minWidth: 320, maxWidth: 720 }}
+                                        placeholder="Remove unwanted performer tags..."
+                                        limitTags={6}
+                                    />
+
+                                    <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                                        <Checkbox
+                                            size="sm"
+                                            label="Remove instead of add"
+                                            checked={removePerformerMode}
+                                            onChange={(e) => setRemovePerformerMode(e.target.checked)}
+                                        />
+                                        <Box sx={{ flexGrow: 1 }} />
+                                        <Button
+                                            size="sm"
+                                            variant="plain"
+                                            disabled={selectedPerformerTagIds.length === 0 || savingAll}
+                                            onClick={handleResetPerformerTags}
+                                        >
+                                            Reset
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outlined"
+                                            disabled={selectedPerformerTagIds.length === 0 || savingAll}
+                                            onClick={handleApplyPerformerToAll}
+                                        >
+                                            Apply to all (drafts)
+                                        </Button>
+                                    </Box>
+
+                                    <Typography level="body-xs" sx={{ opacity: 0.8 }}>
+                                        {removePerformerMode
+                                            ? "Removes selected performer tags from each marker's draft. Primary tag (if set) is preserved when saving."
+                                            : "Adds selected performer tags to each marker's draft (keeps existing tags and primary)."}
+                                    </Typography>
+                                </Box>
+                            )}
                         </Card>
                     </Grid>
 
