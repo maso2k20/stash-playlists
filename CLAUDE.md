@@ -59,6 +59,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - `/api/playlist-images/[filename]` - Serve playlist images from persistent storage
 - `/api/items` - Item creation and management
 - `/api/items/[id]/rating` - Individual item rating GET/PATCH operations
+- `/api/items/ratings` - Bulk rating lookup for multiple markers by ID
 - `/api/items/filter` - Filter items by minimum rating
 - `/api/settings` - Configuration management with auto-initialization and validation
 - `/api/settings/test-connection` - Test Stash server connectivity and authentication
@@ -85,9 +86,11 @@ Comprehensive 1-5 star rating system for markers/items:
 - **UI Component**: `src/components/StarRating.tsx` - Interactive star rating with MUI Joy
 - **Scene Management**: Rate markers directly on `/scenes/[id]` page
 - **Playlist Player**: Real-time rating of currently playing clips with auto-save
+- **Actor Pages**: Display existing ratings via bulk lookup API for visual feedback
 - **Smart Playlist Integration**: Filter by minimum rating in rule builder
 - **Auto-creation**: Items are created automatically when rating non-existent markers
 - **API**: Full CRUD operations for ratings with validation and error handling
+- **Bulk Operations**: Efficient rating lookup for multiple markers via `/api/items/ratings`
 
 ### Playlist Player Features
 Enhanced playlist playback experience at `/playlists/[id]`:
@@ -107,6 +110,18 @@ Enhanced playlist browsing and organization at `/playlists`:
 - **Responsive Layout**: Clean JoyUI header design with search and sort controls that stack on mobile
 - **Visual Feedback**: Proper loading states, empty states, and search result indicators
 - **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations
+
+### Actor Browsing System
+Enhanced marker browsing and selection on `/actors/[id]` pages:
+- **Advanced Filtering**: Multi-select tag filtering with real-time search across marker titles
+- **Comprehensive Sorting**: Sort by title (A-Z/Z-A), duration (shortest/longest), and rating (highest/lowest)
+- **Visual Selection**: Full-card clickable interface with selection overlays and hover effects
+- **Rating Display**: Shows existing star ratings for previously rated markers via bulk API lookup
+- **Efficient Data Loading**: Loads all markers at once for proper client-side filtering and sorting
+- **Responsive Controls**: Search, sort, and tag filter controls in single row layout that stacks on mobile
+- **Smart Empty States**: Different messages for no data vs filtered results with quick clear actions
+- **Performance Optimized**: Uses useMemo for instant filtering/sorting with proper dependency tracking
+- **Playlist Integration**: Selected markers can be bulk-added to manual playlists with dialog interface
 
 ### Playlist Cover Image System
 Comprehensive image management for playlist personalization:
