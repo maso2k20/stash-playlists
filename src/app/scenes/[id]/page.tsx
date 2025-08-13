@@ -1225,7 +1225,7 @@ export default function SceneTagManagerPage() {
                     <DialogTitle>Delete Marker</DialogTitle>
                     <DialogContent>
                         <Typography level="body-sm">
-                            Are you sure you want to delete "{markerToDelete?.title}"?
+                            Are you sure you want to delete &quot;{markerToDelete?.title}&quot;?
                         </Typography>
                         <Typography level="body-xs" sx={{ mt: 1, opacity: 0.8 }}>
                             This action cannot be undone.

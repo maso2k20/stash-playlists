@@ -23,30 +23,6 @@ import {
     Checkbox,
 } from "@mui/joy";
 
-/* Base query: NO tag filter */
-const GET_ACTOR_SCENES_BASE = gql`
-  query findActorScenesBase(
-    $actorId: ID!
-    $hasMarkers: String
-    $pageNumber: Int
-    $perPage: Int
-  ) {
-    findScenes(
-      scene_filter: {
-        performers: { modifier: INCLUDES, value: [$actorId] }
-        has_markers: $hasMarkers
-      }
-      filter: { page: $pageNumber, per_page: $perPage }
-    ) {
-      scenes {
-        id
-        title
-        paths { screenshot vtt }
-      }
-    }
-  }
-`;
-
 /* Tag-filtered query: includes tags: INCLUDES $markersOrganisedIds */
 const GET_ACTOR_SCENES_WITH_TAG = gql`
   query findActorScenesWithTag(
@@ -221,7 +197,6 @@ export default function ActorScenesPage() {
     }, [pageNumber]);
 
     // Query selection: run exactly one
-    const baseVars = { actorId, hasMarkers, pageNumber, perPage };
     const withTagVars = {
         actorId,
         hasMarkers,

@@ -8,7 +8,6 @@ import {
   Card,
   CardContent,
   CardActions,
-  Divider,
   FormControl,
   FormLabel,
   Grid,
@@ -24,6 +23,7 @@ import {
 import { ArrowUp, ArrowDown, Trash2, Clock } from "lucide-react";
 import { formatLength } from "@/lib/formatLength";
 import PlaylistImageUpload from "@/components/PlaylistImageUpload";
+import Image from "next/image";
 
 export default function EditManualPlaylistPage() {
   const { id } = useParams<{ id: string }>();
@@ -276,6 +276,7 @@ export default function EditManualPlaylistPage() {
                       >
                         {/* Thumbnail */}
                         <Box sx={{ 
+                          position: 'relative',
                           width: 120, 
                           height: 68, // 16:9 aspect ratio (120*9/16 ≈ 68)
                           borderRadius: 'sm', 
@@ -286,10 +287,11 @@ export default function EditManualPlaylistPage() {
                           flexShrink: 0
                         }}>
                           {item.screenshot ? (
-                            <img
+                            <Image
                               src={item.screenshot}
                               alt={item.title}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              fill
+                              style={{ objectFit: 'cover' }}
                             />
                           ) : (
                             <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

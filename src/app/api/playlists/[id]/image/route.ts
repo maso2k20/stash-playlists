@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update database
-    const updatedPlaylist = await prisma.playlist.update({
+    await prisma.playlist.update({
       where: { id: playlistId },
       data: { image: filename }
     });

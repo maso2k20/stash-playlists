@@ -3,6 +3,7 @@
 
 import { useState, useEffect, ChangeEvent, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -227,10 +228,6 @@ export default function PlaylistsPage() {
     }
   };
 
-  const confirmDelete = (id: string) => {
-    setToDeleteId(id);
-    setIsDeleteOpen(true);
-  };
 
   const deletePlaylist = async () => {
     if (!toDeleteId) return;
@@ -576,6 +573,7 @@ export default function PlaylistsPage() {
                   {playlist.image && (
                     <Box
                       sx={{
+                        position: 'relative',
                         width: 96,
                         height: 170, // 9:16 aspect ratio (96*16/9 ≈ 170)
                         borderRadius: 'md',
@@ -588,14 +586,11 @@ export default function PlaylistsPage() {
                         ml: 2,
                       }}
                     >
-                      <img
+                      <Image
                         src={`/api/playlist-images/${playlist.image}`}
                         alt={`${playlist.name} cover`}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
+                        fill
+                        style={{ objectFit: 'cover' }}
                       />
                     </Box>
                   )}

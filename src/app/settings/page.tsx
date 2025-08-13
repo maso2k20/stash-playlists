@@ -16,9 +16,21 @@ import {
   Tooltip,
   Select,
   Option,
+  Accordion,
+  AccordionDetails,
+  AccordionGroup,
+  AccordionSummary,
+  FormControl,
+  FormLabel,
+  FormHelperText,
 } from "@mui/joy";
 import { useColorScheme } from "@mui/joy/styles";
-import { Check, RotateCcw, Save, RefreshCw } from "lucide-react";
+import { Check, RotateCcw, Save, RefreshCw, ChevronDown, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { 
+  getSettingsByCategory, 
+  getSettingDefinition, 
+  type SettingDefinition 
+} from "@/lib/settingsDefinitions";
 
 type Setting = {
   id: string;
@@ -38,6 +50,14 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionResult, setConnectionResult] = useState<{
+    success?: boolean;
+    message?: string;
+    details?: string;
+    version?: string;
+  } | null>(null);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
     msg: "",
@@ -63,8 +83,9 @@ export default function SettingsPage() {
       if (themeRow && THEME_OPTIONS.includes(themeRow.value as ThemeMode)) {
         setMode(themeRow.value as ThemeMode);
       }
-    } catch (e: any) {
-      setError(e.message ?? "Failed to load settings");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to load settings";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -84,6 +105,16 @@ export default function SettingsPage() {
 
   const updateOne = (key: string, value: string) => {
     setSettings((prev) => (prev ? prev.map((s) => (s.key === key ? { ...s, value } : s)) : prev));
+    
+    // Validate the new value
+    const definition = getSettingDefinition(key);
+    if (definition?.validation) {
+      const error = definition.validation(value);
+      setValidationErrors(prev => ({
+        ...prev,
+        [key]: error || ''
+      }));
+    }
   };
 
   const resetAll = () => {
@@ -102,13 +133,77 @@ export default function SettingsPage() {
     const orig = original.find((o) => o.key === key);
     if (!orig) return;
     setSettings(settings.map((s) => (s.key === key ? { ...s, value: orig.value ?? "" } : s)));
+    
+    // Clear validation error
+    setValidationErrors(prev => ({ ...prev, [key]: '' }));
+    
     if (key === THEME_KEY && THEME_OPTIONS.includes(orig.value as ThemeMode)) {
       setMode(orig.value as ThemeMode);
+    }
+  };
+  
+  const resetToDefault = (key: string) => {
+    const definition = getSettingDefinition(key);
+    if (!definition) return;
+    
+    updateOne(key, definition.defaultValue);
+    if (key === THEME_KEY && THEME_OPTIONS.includes(definition.defaultValue as ThemeMode)) {
+      setMode(definition.defaultValue as ThemeMode);
+    }
+  };
+
+  const testConnection = async () => {
+    setTestingConnection(true);
+    setConnectionResult(null);
+    
+    try {
+      const response = await fetch('/api/settings/test-connection', {
+        method: 'POST',
+      });
+      
+      const result = await response.json();
+      setConnectionResult(result);
+      
+      if (result.success) {
+        setSnack({ 
+          open: true, 
+          msg: `Connected to Stash ${result.version}`, 
+          color: "success" 
+        });
+      } else {
+        setSnack({ 
+          open: true, 
+          msg: `Connection failed: ${result.error}`, 
+          color: "danger" 
+        });
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      setConnectionResult({
+        success: false,
+        message: 'Failed to test connection',
+        details: errorMsg,
+      });
+      setSnack({ 
+        open: true, 
+        msg: 'Failed to test connection', 
+        color: "danger" 
+      });
+    } finally {
+      setTestingConnection(false);
     }
   };
 
   const save = async () => {
     if (!hasChanges || !settings) return;
+    
+    // Check for validation errors
+    const hasValidationErrors = Object.values(validationErrors).some(error => error);
+    if (hasValidationErrors) {
+      setSnack({ open: true, msg: "Please fix validation errors before saving", color: "danger" });
+      return;
+    }
+    
     setSaving(true);
     setError(null);
     try {
@@ -121,58 +216,85 @@ export default function SettingsPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.message || `HTTP ${res.status}`);
 
+      // Clear validation errors on successful save
+      setValidationErrors({});
+      
       // Refresh to sync updatedAt, also re-apply theme from server source of truth
       await load();
       setSnack({ open: true, msg: "Settings saved", color: "success" });
-    } catch (e: any) {
-      setError(e.message ?? "Failed to save");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to save";
+      setError(message);
       setSnack({ open: true, msg: "Failed to save settings", color: "danger" });
     } finally {
       setSaving(false);
     }
   };
 
-  // Renders the appropriate editor for a row
-  const renderEditor = (s: Setting) => {
-    if (s.key === THEME_KEY) {
-      const current = THEME_OPTIONS.includes(s.value as ThemeMode)
-        ? (s.value as ThemeMode)
-        : ("system" as ThemeMode);
-
+  // Renders the appropriate editor for a setting
+  const renderEditor = (s: Setting, definition: SettingDefinition) => {
+    const hasError = !!validationErrors[s.key];
+    
+    if (definition.type === 'select' && definition.options) {
       return (
         <Select
-          value={current}
+          value={s.value || definition.defaultValue}
           onChange={(_e, val) => {
-            const next = (val ?? "system") as ThemeMode;
-            updateOne(THEME_KEY, next);
-            setMode(next); // instant apply
+            const next = val ?? definition.defaultValue;
+            updateOne(s.key, next);
+            if (s.key === THEME_KEY && THEME_OPTIONS.includes(next as ThemeMode)) {
+              setMode(next as ThemeMode); // instant apply
+            }
           }}
           size="sm"
           sx={{ minWidth: 200 }}
+          color={hasError ? 'danger' : undefined}
         >
-          <Option value="light">Light</Option>
-          <Option value="dark">Dark</Option>
-          <Option value="system">System (match OS)</Option>
+          {definition.options.map(option => (
+            <Option key={option} value={option}>
+              {option === 'system' ? 'System (match OS)' : 
+               option.charAt(0).toUpperCase() + option.slice(1)}
+            </Option>
+          ))}
         </Select>
       );
     }
 
-    // default text input for other keys
+    // text/url/number inputs
     return (
       <Input
+        type={definition.type === 'number' ? 'number' : 'text'}
         value={s.value ?? ""}
         onChange={(e) => updateOne(s.key, e.target.value)}
-        placeholder="Enter value…"
+        placeholder={definition.type === 'url' ? 'http://192.168.1.17:6969' : 'Enter value…'}
         size="sm"
         sx={{ width: "100%" }}
+        error={hasError || undefined}
       />
     );
   };
 
+  // Group settings by category for display
+  const groupedSettings = useMemo(() => {
+    if (!settings) return {};
+    
+    const categorized = getSettingsByCategory();
+    const result: Record<string, Array<{ setting: Setting; definition: SettingDefinition }>> = {};
+    
+    Object.entries(categorized).forEach(([category, definitions]) => {
+      result[category] = definitions.map(def => {
+        const setting = settings.find(s => s.key === def.key);
+        return { setting: setting!, definition: def };
+      }).filter(item => item.setting);
+    });
+    
+    return result;
+  }, [settings]);
+
   return (
-    <Sheet sx={{ p: 2, maxWidth: 900, mx: "auto" }}>
+    <Sheet sx={{ p: 2, maxWidth: 1000, mx: "auto" }}>
       {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, flexWrap: "wrap" }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 3, flexWrap: "wrap" }}>
         <Typography level="h2" sx={{ flexGrow: 1 }}>
           Settings
         </Typography>
@@ -190,7 +312,7 @@ export default function SettingsPage() {
           onClick={resetAll}
           disabled={!hasChanges || saving || loading}
         >
-          Reset changes
+          Reset all changes
         </Button>
 
         <Button
@@ -205,92 +327,159 @@ export default function SettingsPage() {
 
       {/* Error */}
       {error && (
-        <Typography color="danger" level="body-sm" sx={{ mb: 1 }}>
+        <Typography color="danger" level="body-sm" sx={{ mb: 2 }}>
           {error}
         </Typography>
       )}
 
-      {/* Table */}
+      {/* Settings by Category */}
       {loading ? (
-        <Box>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Box
-              key={i}
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "220px 1fr 170px",
-                gap: 1,
-                alignItems: "center",
-                py: 1,
-              }}
-            >
-              <Skeleton variant="text" level="body-sm" />
-              <Skeleton />
-              <Skeleton variant="text" level="body-sm" />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Box key={i} sx={{ p: 2, border: '1px solid', borderColor: 'neutral.200', borderRadius: 'lg' }}>
+              <Skeleton variant="text" width="200px" height="24px" sx={{ mb: 2 }} />
+              {Array.from({ length: 2 }).map((_, j) => (
+                <Box key={j} sx={{ mb: 2 }}>
+                  <Skeleton variant="text" width="150px" height="20px" sx={{ mb: 1 }} />
+                  <Skeleton variant="rectangular" height="40px" />
+                </Box>
+              ))}
             </Box>
           ))}
         </Box>
       ) : (
-        <Table
-          borderAxis="xBetween"
-          size="sm"
-          sx={{
-            "--TableCell-paddingY": "10px",
-            "--TableCell-paddingX": "10px",
-            borderRadius: "lg",
-            boxShadow: "sm",
-          }}
-        >
-          <thead>
-            <tr>
-              <th style={{ width: 240 }}>Key</th>
-              <th>Value</th>
-              <th style={{ width: 170 }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(settings ?? []).map((s) => {
-              const origVal = original?.find((o) => o.key === s.key)?.value ?? "";
-              const dirty = (s.value ?? "") !== (origVal ?? "");
-              return (
-                <tr key={s.id}>
-                  <td>
-                    <Typography level="title-sm">{s.key}</Typography>
-                    <Typography level="body-xs" sx={{ color: "neutral.500" }}>
-                      Updated: {fmt(s.updatedAt)}
-                    </Typography>
-                    {s.key === THEME_KEY && (
-                      <Typography level="body-xs" sx={{ color: "neutral.500", mt: 0.5 }}>
-                        Controls the site theme. Choose Light, Dark, or System to match your OS.
-                      </Typography>
-                    )}
-                  </td>
-                  <td>{renderEditor(s)}</td>
-                  <td>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                      {dirty ? (
-                        <Chip size="sm" color="warning" variant="soft">
-                          Modified
-                        </Chip>
-                      ) : (
-                        <Chip size="sm" color="success" variant="soft" startDecorator={<Check size={14} />}>
-                          Saved
-                        </Chip>
-                      )}
-                      {dirty && (
-                        <Tooltip title="Revert this row">
-                          <IconButton size="sm" variant="plain" onClick={() => resetOne(s.key)}>
-                            <RotateCcw size={16} />
-                          </IconButton>
-                        </Tooltip>
+        <AccordionGroup size="lg">
+          {Object.entries(groupedSettings).map(([category, items]) => (
+            <Accordion key={category} defaultExpanded>
+              <AccordionSummary indicator={<ChevronDown />}>
+                <Typography level="title-lg">{category}</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {items.map(({ setting, definition }) => {
+                    const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                    const dirty = (setting.value ?? "") !== origVal;
+                    const hasError = !!validationErrors[setting.key];
+                    
+                    return (
+                      <FormControl key={setting.key} error={hasError || undefined}>
+                        <FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {definition.label}
+                            {definition.required && (
+                              <Typography color="danger" level="body-sm">*</Typography>
+                            )}
+                            {dirty && (
+                              <Chip size="sm" color="warning" variant="soft">
+                                Modified
+                              </Chip>
+                            )}
+                          </Box>
+                        </FormLabel>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                          <Box sx={{ flexGrow: 1 }}>
+                            {renderEditor(setting, definition)}
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={16} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            
+                            <Tooltip title="Reset to default value">
+                              <IconButton size="sm" variant="plain" onClick={() => resetToDefault(setting.key)}>
+                                <RefreshCw size={16} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </Box>
+                        
+                        {hasError ? (
+                          <FormHelperText>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <AlertCircle size={16} />
+                              {validationErrors[setting.key]}
+                            </Box>
+                          </FormHelperText>
+                        ) : (
+                          <FormHelperText>{definition.description}</FormHelperText>
+                        )}
+                        
+                        <Typography level="body-xs" sx={{ color: "neutral.500", mt: 0.5 }}>
+                          Last updated: {fmt(setting.updatedAt)}
+                        </Typography>
+                      </FormControl>
+                    );
+                  })}
+                  
+                  {/* Add test connection for Stash Integration category */}
+                  {category === 'Stash Integration' && (
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                        <Button
+                          startDecorator={testingConnection ? <RefreshCw className="animate-spin" size={16} /> : <Wifi size={16} />}
+                          onClick={testConnection}
+                          disabled={testingConnection}
+                          variant="soft"
+                          color="primary"
+                        >
+                          {testingConnection ? 'Testing...' : 'Test Connection'}
+                        </Button>
+                        
+                        {connectionResult && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {connectionResult.success ? (
+                              <Chip
+                                startDecorator={<Wifi size={14} />}
+                                color="success"
+                                variant="soft"
+                              >
+                                Connected
+                              </Chip>
+                            ) : (
+                              <Chip
+                                startDecorator={<WifiOff size={14} />}
+                                color="danger"
+                                variant="soft"
+                              >
+                                Failed
+                              </Chip>
+                            )}
+                          </Box>
+                        )}
+                      </Box>
+                      
+                      {connectionResult && (
+                        <Box sx={{ p: 2, borderRadius: 'md', bgcolor: connectionResult.success ? 'success.50' : 'danger.50' }}>
+                          <Typography level="body-sm" fontWeight="lg" sx={{ mb: 1 }}>
+                            {connectionResult.success ? connectionResult.message : connectionResult.message || 'Connection failed'}
+                          </Typography>
+                          
+                          {connectionResult.success && connectionResult.version && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                              Stash Version: {connectionResult.version}
+                            </Typography>
+                          )}
+                          
+                          {!connectionResult.success && connectionResult.details && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mt: 0.5 }}>
+                              {connectionResult.details}
+                            </Typography>
+                          )}
+                        </Box>
                       )}
                     </Box>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </Table>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          ))}
+        </AccordionGroup>
       )}
 
       <Snackbar

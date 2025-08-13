@@ -1,5 +1,6 @@
 // filepath: src/lib/smartPlaylistServer.ts
 import prisma from "@/lib/prisma";
+import { getDefaultClipSettings } from "@/lib/settingsDefinitions";
 
 type StashConfig = { url: string; apiKey?: string };
 
@@ -87,7 +88,7 @@ export async function stashGraph<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (apiKey) headers["ApiKey"] = apiKey;
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -147,8 +148,11 @@ export async function buildItemsForPlaylist(
   const tagIds = Array.isArray(conditions.tagIds) ? conditions.tagIds : [];
   const minRating = conditions.minRating;
   const perPage = Math.max(1, Number(conditions.perPage ?? 5000));
-  const before = Math.max(0, Number(conditions.clip?.before ?? 3));
-  const after = Math.max(1, Number(conditions.clip?.after ?? 27));
+  
+  // Get default clip settings from database if not specified in playlist conditions
+  const defaultClipSettings = await getDefaultClipSettings();
+  const before = Math.max(0, Number(conditions.clip?.before ?? defaultClipSettings.before));
+  const after = Math.max(0, Number(conditions.clip?.after ?? defaultClipSettings.after));
 
   if (!actorIds.length && !tagIds.length) {
     return [];
