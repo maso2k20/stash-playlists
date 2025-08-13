@@ -12,11 +12,13 @@ import { formatLength } from "@/lib/formatLength";
 type PlaylistItem = {
   id: string; // content item id
   item: {
+    id: string;
     stream: string;
     title: string;
     startTime: number;
     endTime: number;
     screenshot?: string;
+    rating?: number | null;
   };
 };
 
@@ -40,6 +42,7 @@ export function PlaylistDetail({
   // NEW: parent-controlled play order (array of indices into `items`)
   playOrder,
   onOrderChange,           // called with new order (indices) on shuffle
+  playedItemIndices,       // set of indices for items that have been played
 }: {
   items: PlaylistItem[];
   currentIndex: number;
@@ -50,6 +53,7 @@ export function PlaylistDetail({
   showCounts?: boolean;
   playOrder?: number[];
   onOrderChange?: (order: number[]) => void;
+  playedItemIndices?: Set<number>;
 }) {
   const [q, setQ] = React.useState('');
 
@@ -65,13 +69,22 @@ export function PlaylistDetail({
 
   const order = playOrder ?? localOrder;
 
-  // Build ordered list, then filter by query; keep original indices (idx)
+  // Build ordered list, filter out played items, then filter by query; keep original indices (idx)
   const filtered = React.useMemo(() => {
     const query = q.trim().toLowerCase();
-    const base = order.map((idx) => ({ it: items[idx], idx }));
+    let base = order.map((idx) => ({ it: items[idx], idx }));
+    
+    // Filter out played items (but keep current item visible)
+    if (playedItemIndices && playedItemIndices.size > 0) {
+      const currentItemIndex = order[currentIndex] ?? -1;
+      base = base.filter(({ idx }) => 
+        !playedItemIndices.has(idx) || idx === currentItemIndex
+      );
+    }
+    
     if (!query) return base;
     return base.filter(({ it }) => it.item.title.toLowerCase().includes(query));
-  }, [items, order, q]);
+  }, [items, order, q, playedItemIndices, currentIndex]);
 
   const handleShuffle = () => {
     const newOrder = shuffleArray(order);
@@ -150,13 +163,13 @@ export function PlaylistDetail({
       >
         {filtered.map(({ it, idx }) => {
           const dur = Math.max(0, (it.item.endTime ?? 0) - (it.item.startTime ?? 0));
+          const isCurrentItem = idx === (order[currentIndex] ?? -1);
+          const isPlayedItem = playedItemIndices?.has(idx) && !isCurrentItem;
+          
           return (
             <ListItem key={`${it.id}-${idx}`} sx={{ px: 0 }}>
               <ListItemButton
-                selected={
-                  // highlight if this row's original index equals the current play-order index
-                  idx === (order[currentIndex] ?? -1)
-                }
+                selected={isCurrentItem}
                 onClick={() => {
                   // when user clicks a row, jump to its position IN THE ORDER
                   const orderPos = order.indexOf(idx);
@@ -172,7 +185,15 @@ export function PlaylistDetail({
                   py: 1.25,
                   width: '100%',
                   minWidth: 0,
-                  '&.Mui-selected': { backgroundColor: 'neutral.softBg' },
+                  opacity: isPlayedItem ? 0.5 : 1,
+                  '&.Mui-selected': { 
+                    backgroundColor: 'primary.softBg',
+                    borderLeft: 3,
+                    borderColor: 'primary.500',
+                  },
+                  '&:hover': {
+                    backgroundColor: isCurrentItem ? 'primary.softHoverBg' : 'neutral.softHoverBg',
+                  },
                 }}
               >
                 <ListItemDecorator sx={{ alignSelf: 'center', mr: 1.5 }}>

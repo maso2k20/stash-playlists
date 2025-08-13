@@ -1,19 +1,22 @@
 'use client'
 import * as React from 'react';
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
-import { Grid, Container, Sheet, Box } from '@mui/joy';
+import { Grid, Container, Sheet, Box, Typography } from '@mui/joy';
 import VideoJS from "@/components/videojs/VideoJS";
 import { PlaylistDetail } from '@/components/PlaylistDetail';
+import StarRating from '@/components/StarRating';
 
 type PlaylistItem = {
   id: string;
   item: {
+    id: string;
     stream: string;
     title: string;
     startTime: number;
     endTime: number;
     screenshot?: string;
+    rating?: number | null;
   };
 };
 
@@ -26,14 +29,49 @@ export default function PlaylistPlayer() {
   const { id } = useParams();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0); // index within playOrder
-  const [isMuted, setIsMuted] = useState(true);
   const [hasStarted, setHasStarted] = useState(false);
 
   // NEW: order of indices into `items` used for playback (so shuffle affects play)
   const [playOrder, setPlayOrder] = useState<number[]>([]);
+  
+  // Track which items have been played (by their original index in items array)
+  const [playedItemIndices, setPlayedItemIndices] = useState<Set<number>>(new Set());
 
-  const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
+
+  // Handle rating changes
+  const handleRatingChange = useCallback(async (itemId: string, rating: number | null) => {
+    try {
+      const response = await fetch(`/api/items/${itemId}/rating`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rating }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update rating');
+      }
+
+      await response.json();
+      
+      // Update local state
+      setPlaylist(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          items: prev.items.map(playlistItem => 
+            playlistItem.item.id === itemId
+              ? { ...playlistItem, item: { ...playlistItem.item, rating } }
+              : playlistItem
+          ),
+        };
+      });
+    } catch (error) {
+      console.error('Failed to update rating:', error);
+    }
+  }, []);
 
   // Fetch playlist
   useEffect(() => {
@@ -42,13 +80,14 @@ export default function PlaylistPlayer() {
       .then((data) => setPlaylist(data));
   }, [id]);
 
-  const items = playlist?.items ?? [];
+  const items = useMemo(() => playlist?.items ?? [], [playlist?.items]);
 
   // Reset index/order when items change
   useEffect(() => {
     setPlayOrder(items.map((_, i) => i));
     setCurrentIndex(0);
     setHasStarted(false);
+    setPlayedItemIndices(new Set()); // Reset played items when playlist changes
   }, [items.length]);
 
   // Current item derived from playOrder
@@ -74,11 +113,6 @@ export default function PlaylistPlayer() {
     player.on("dispose", () => console.log("dispose"));
   };
 
-  useEffect(() => {
-    if (playerRef.current) {
-      playerRef.current.muted(isMuted);
-    }
-  }, [isMuted]);
 
   if (!playlist) return <div>Loading...</div>;
 
@@ -92,23 +126,34 @@ export default function PlaylistPlayer() {
 
   return (
     <Container maxWidth={false} sx={{ py: 2, px: { xs: 1.5, sm: 2, lg: 3 } }}>
-      <Grid container spacing={2} sx={{ flexGrow: 1 }}>
-        <Grid xs={9} sx={{ display: 'flex' }}>
+      <Grid container spacing={3} sx={{ flexGrow: 1, height: '100%' }}>
+        <Grid xs={9} sx={{ display: 'flex', flexDirection: 'column' }}>
           <Sheet
-            variant="plain"
+            variant="outlined"
             sx={{
-              p: 0,
-              borderRadius: 0,
-              bgcolor: 'transparent',
+              p: 2,
+              borderRadius: 'lg',
+              bgcolor: 'background.surface',
               width: '100%',
               maxWidth: 1920,
               mx: 'auto',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
             <Box
               sx={{
                 width: '100%',
-                '& .video-js': { width: '100%', height: 'auto', borderRadius: 0, overflow: 'visible' },
+                borderRadius: 'md',
+                overflow: 'hidden',
+                bgcolor: 'neutral.900',
+                '& .video-js': { 
+                  width: '100%', 
+                  height: 'auto', 
+                  borderRadius: 'md',
+                  overflow: 'hidden',
+                },
                 '& .vjs-control-bar': { bottom: 0 },
               }}
             >
@@ -119,10 +164,43 @@ export default function PlaylistPlayer() {
                 hasStarted={hasStarted}
                 onEnded={() => {
                   setHasStarted(true);
+                  // Mark current item as played
+                  const currentItemIndex = playOrder[currentIndex] ?? 0;
+                  setPlayedItemIndices(prev => new Set(prev).add(currentItemIndex));
+                  // Move to next item
                   if (currentIndex < playOrder.length - 1) setCurrentIndex(i => i + 1);
                 }}
               />
             </Box>
+
+            {/* Current Item Info */}
+            {currentItem && (
+              <Sheet
+                variant="soft"
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  borderRadius: 'md',
+                  bgcolor: 'background.level1',
+                }}
+              >
+                <Typography level="title-lg" sx={{ mb: 1.5, fontWeight: 600 }}>
+                  {currentItem.item.title}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Typography level="body-md" sx={{ color: 'text.secondary' }}>
+                    Rate this clip:
+                  </Typography>
+                  <StarRating
+                    value={currentItem.item.rating}
+                    onChange={(rating) => {
+                      handleRatingChange(currentItem.item.id, rating);
+                    }}
+                    size="lg"
+                  />
+                </Box>
+              </Sheet>
+            )}
           </Sheet>
         </Grid>
 
@@ -140,6 +218,7 @@ export default function PlaylistPlayer() {
             currentIndex={currentIndex}
             setCurrentIndex={setCurrentIndex} // interpreted as index within playOrder
             onDoubleClickPlay={(i) => setCurrentIndex(i)}
+            playedItemIndices={playedItemIndices}
             // onRemoveItem={(id) => {/* DELETE /api/playlists/:id/items with { itemId: id } */}}
           />
         </Grid>
