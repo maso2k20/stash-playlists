@@ -13,7 +13,6 @@ import Card from '@mui/joy/Card';
 import CardContent from '@mui/joy/CardContent';
 import CardActions from '@mui/joy/CardActions';
 import Typography from '@mui/joy/Typography';
-import Divider from '@mui/joy/Divider';
 import FormControl from '@mui/joy/FormControl';
 import FormLabel from '@mui/joy/FormLabel';
 import Input from '@mui/joy/Input';
@@ -210,152 +209,209 @@ export default function EditAutomaticPlaylistPage() {
         bgcolor: 'background.body',
       }}
     >
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Box>
-          <Typography level="h3">Edit Automatic Playlist</Typography>
-          <Typography level="body-sm" color="neutral">
-            Define rules, preview matches, and save to update the playlist.
-          </Typography>
-        </Box>
-        <Chip size="lg" variant="soft" color="primary">
-          {(previewLoading || filteringLoading) ? 'Loading…' : `${filteredMarkers.length} match${filteredMarkers.length === 1 ? '' : 'es'}`}
-        </Chip>
-      </Stack>
+      <Box mb={2}>
+        <Typography level="h3">Edit Automatic Playlist</Typography>
+        <Typography level="body-sm" color="neutral">
+          Define rules, preview matches, and save to update the playlist.
+        </Typography>
+      </Box>
 
       {(loading || previewLoading || filteringLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
 
-      <Grid container spacing={2}>
-        {/* Left: Details */}
-        <Grid xs={12} md={4}>
-          <Card variant="outlined" sx={{ height: 300 }}>
-            <CardContent>
-              <Typography level="title-lg" mb={1}>Details</Typography>
-              <Stack spacing={2}>
-                <FormControl>
-                  <FormLabel>Name</FormLabel>
-                  <Input
-                    placeholder="Playlist name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={loading}
-                  />
-                </FormControl>
-                <FormControl>
-                  <FormLabel>Description</FormLabel>
-                  <Textarea
-                    minRows={5}
-                    placeholder="Playlist description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    disabled={loading}
-                  />
-                </FormControl>
-              </Stack>
-            </CardContent>
-          </Card>
+      <Grid container spacing={3}>
+        {/* Left Column: Details + Rules */}
+        <Grid xs={12} lg={5}>
+          <Stack spacing={3}>
+            {/* Details Card */}
+            <Card variant="outlined" sx={{ minHeight: 'auto' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography level="title-lg" mb={2}>Details</Typography>
+                <Stack spacing={2.5}>
+                  <FormControl>
+                    <FormLabel>Name</FormLabel>
+                    <Input
+                      placeholder="Playlist name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={loading}
+                      size="lg"
+                    />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel>Description</FormLabel>
+                    <Textarea
+                      minRows={4}
+                      placeholder="Playlist description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      disabled={loading}
+                      size="lg"
+                    />
+                  </FormControl>
+                </Stack>
+              </CardContent>
+            </Card>
+
+            {/* Rules Card */}
+            <Card variant="outlined" sx={{ minHeight: 'auto', flex: 1 }}>
+              <CardContent sx={{ p: 3, pb: 0 }}>
+                <Typography level="title-lg" mb={2}>Rules</Typography>
+                {tagsLoading && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
+                {tagsError && (
+                  <Alert color="danger" variant="soft" sx={{ mb: 2 }}>
+                    Failed to load tags.
+                  </Alert>
+                )}
+                {!tagsLoading && !tagsError && (
+                  <Box>
+                    <SmartPlaylistRuleBuilder
+                      tags={tags.map((t: { id: string; name: string }) => ({ id: t.id, label: t.name }))}
+                      onChange={setRules}
+                      initialRules={rules}
+                    />
+                  </Box>
+                )}
+              </CardContent>
+
+              <CardActions sx={{ justifyContent: 'flex-end', p: 3, pt: 2 }}>
+                <Button
+                  size="lg"
+                  color="primary"
+                  onClick={handleSave}
+                  disabled={loading || !name}
+                  sx={{ minWidth: 120 }}
+                >
+                  {loading ? 'Saving…' : 'Save Playlist'}
+                </Button>
+              </CardActions>
+            </Card>
+          </Stack>
         </Grid>
 
-        {/* Middle: Rules */}
-        <Grid xs={12} md={4}>
-          <Card variant="outlined" sx={{ height: 300 }}>
-            <CardContent>
-              <Typography level="title-lg" mb={1}>Rules</Typography>
-              {tagsLoading && <LinearProgress thickness={2} />}
-              {tagsError && (
-                <Alert color="danger" variant="soft" sx={{ mt: 1 }}>
-                  Failed to load tags.
-                </Alert>
-              )}
-              {!tagsLoading && !tagsError && (
-                <Box sx={{ mt: 1 }}>
-                  <SmartPlaylistRuleBuilder
-                    tags={tags.map((t: { id: string; name: string }) => ({ id: t.id, label: t.name }))}
-                    onChange={setRules}
-                    initialRules={rules}
-                  />
-                </Box>
-              )}
-            </CardContent>
+        {/* Right Column: Enhanced Preview */}
+        <Grid xs={12} lg={7}>
+          <Card variant="outlined" sx={{ height: 'fit-content', minHeight: 600 }}>
+            <CardContent sx={{ p: 0 }}>
+              {/* Sticky Header */}
+              <Box sx={{ 
+                p: 3, 
+                pb: 2,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.surface',
+                position: 'sticky',
+                top: 0,
+                zIndex: 1
+              }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography level="title-lg">Preview Matches</Typography>
+                  <Chip 
+                    size="lg" 
+                    variant="soft" 
+                    color={filteredMarkers.length > 0 ? "primary" : "neutral"}
+                  >
+                    {(previewLoading || filteringLoading) ? 'Loading…' : `${filteredMarkers.length} match${filteredMarkers.length === 1 ? '' : 'es'}`}
+                  </Chip>
+                </Stack>
+                <Typography level="body-sm" color="neutral" sx={{ mt: 0.5 }}>
+                  Preview shows up to 50 results that will be included in your playlist.
+                </Typography>
+              </Box>
 
-            <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 2 }}>
-              <Button
-                size="lg"
-                color="primary"
-                onClick={handleSave}
-                disabled={loading || !name}
-              >
-                {loading ? 'Saving…' : 'Save'}
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
-
-        {/* Right: Preview */}
-        <Grid xs={12} md={4}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography level="title-lg" mb={1}>Preview Matches</Typography>
-              {previewError && (
-                <Alert color="danger" variant="soft" sx={{ mb: 1 }}>
-                  Failed to load preview.
-                </Alert>
-              )}
-              {!previewError && (
-                <Stack spacing={1}>
-                  <Typography level="body-sm" color="neutral">
-                    {filteredMarkers.length} scene marker{filteredMarkers.length === 1 ? '' : 's'} match these rules.
-                  </Typography>
-                  <Divider sx={{ my: 1 }} />
-                  <Box sx={{ maxHeight: 900, overflow: 'auto', pr: 0.5 }}>
+              {/* Preview Content */}
+              <Box sx={{ p: 3, pt: 2 }}>
+                {previewError && (
+                  <Alert color="danger" variant="soft" sx={{ mb: 2 }}>
+                    Failed to load preview. Please check your Stash connection.
+                  </Alert>
+                )}
+                {!previewError && (
+                  <Box>
                     {filteredMarkers.length === 0 ? (
-                      <Typography level="body-sm" color="neutral">
-                        No matches yet. Adjust your rules to see results.
-                      </Typography>
+                      <Box sx={{ 
+                        textAlign: 'center', 
+                        py: 8,
+                        color: 'text.tertiary'
+                      }}>
+                        <Typography level="body-lg" sx={{ mb: 1 }}>
+                          No matches found
+                        </Typography>
+                        <Typography level="body-sm">
+                          Adjust your rules to see matching scene markers.
+                        </Typography>
+                      </Box>
                     ) : (
-                      <Stack spacing={1}>
-                        {filteredMarkers.slice(0, 50).map((m: any) => (
-                          <Sheet
-                            key={m.id}
-                            variant="soft"
-                            sx={{
-                              p: 1,
-                              borderRadius: 'md',
-                              display: 'grid',
-                              gridTemplateColumns: '80px 1fr',
-                              gap: 1,
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Box sx={{ width: 80, height: 45, borderRadius: 'sm', overflow: 'hidden', bgcolor: 'neutral.softBg' }}>
-                              {m.screenshot ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={m.screenshot}
-                                  alt={m.title ?? 'marker'}
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
-                              ) : <Box sx={{ width: '100%', height: '100%' }} />}
-                            </Box>
-                            <Box>
-                              <Typography level="body-md" sx={{ fontWeight: 600 }}>
-                                {m.title || 'Untitled marker'}
-                              </Typography>
-                              <Typography level="body-sm" color="neutral">
-                                {formatLength((Number(m.end_seconds ?? 0)) - (Number(m.seconds ?? 0)))}
-                              </Typography>
-                            </Box>
-                          </Sheet>
-                        ))}
+                      <Box>
+                        <Grid container spacing={2}>
+                          {filteredMarkers.slice(0, 50).map((m: any) => (
+                            <Grid xs={12} sm={6} key={m.id}>
+                              <Sheet
+                                variant="soft"
+                                sx={{
+                                  p: 2,
+                                  borderRadius: 'md',
+                                  display: 'grid',
+                                  gridTemplateColumns: '100px 1fr',
+                                  gap: 2,
+                                  alignItems: 'center',
+                                  transition: 'all 0.2s ease',
+                                  '&:hover': {
+                                    bgcolor: 'background.level1',
+                                    transform: 'translateY(-1px)',
+                                    boxShadow: 'sm'
+                                  }
+                                }}
+                              >
+                                <Box sx={{ 
+                                  width: 100, 
+                                  height: 56, 
+                                  borderRadius: 'sm', 
+                                  overflow: 'hidden', 
+                                  bgcolor: 'neutral.softBg',
+                                  border: '1px solid',
+                                  borderColor: 'divider'
+                                }}>
+                                  {m.screenshot ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={m.screenshot}
+                                      alt={m.title ?? 'marker'}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                  ) : <Box sx={{ width: '100%', height: '100%' }} />}
+                                </Box>
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography 
+                                    level="body-md" 
+                                    sx={{ 
+                                      fontWeight: 600,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    {m.title || 'Untitled marker'}
+                                  </Typography>
+                                  <Typography level="body-sm" color="neutral">
+                                    {formatLength((Number(m.end_seconds ?? 0)) - (Number(m.seconds ?? 0)))}
+                                  </Typography>
+                                </Box>
+                              </Sheet>
+                            </Grid>
+                          ))}
+                        </Grid>
                         {filteredMarkers.length > 50 && (
-                          <Typography level="body-sm" color="neutral">
-                            Showing 50 of {filteredMarkers.length} results…
-                          </Typography>
+                          <Box sx={{ mt: 3, textAlign: 'center' }}>
+                            <Chip variant="outlined" color="neutral">
+                              Showing 50 of {filteredMarkers.length} results
+                            </Chip>
+                          </Box>
                         )}
-                      </Stack>
+                      </Box>
                     )}
                   </Box>
-                </Stack>
-              )}
+                )}
+              </Box>
             </CardContent>
           </Card>
         </Grid>

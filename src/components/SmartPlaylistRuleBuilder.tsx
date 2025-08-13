@@ -150,89 +150,85 @@ export default function SmartPlaylistRuleBuilder({
   );
 
   return (
-    <Grid container spacing={3} sx={{ width: '100%' }}>
-      <Grid xs={12} md={4}>
-        <Box>
-          <Typography level="title-md" mb={1}>Actors</Typography>
-          <Autocomplete
-            multiple
-            options={sortedActors}
-            value={selectedActors}
-            isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
-            getOptionLabel={(opt) => opt.name}
-            onChange={(_, value) => setSelectedActors(value)}
-            renderTags={(value, getTagProps) =>
-              value.map((option, index) => {
-                const { key, ...tagProps } = getTagProps({ index });
-                return (
-                  <Chip key={`${option.id}-${index}`} {...tagProps}>
-                    {option.name}
-                  </Chip>
-                );
-              })
-            }
-            placeholder="Search actors..."
-          />
-        </Box>
-      </Grid>
-
-      <Grid xs={12} md={4}>
-        <Box>
-          <Typography level="title-md" mb={1}>Tags</Typography>
-          <Autocomplete<Tag, true, false, false>
-            multiple
-            options={tags}
-            getOptionLabel={(option) => option.label}
-            isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
-            value={selectedTags}
-            onChange={(_, newValue) => setSelectedTags(newValue)}
-            renderTags={(value, getTagProps) =>
-              value.map((option, index) => {
-                const { key, ...tagProps } = getTagProps({ index });
-                return (
-                  <Chip key={`${option.id}-${index}`} {...tagProps}>
-                    {option.label}
-                  </Chip>
-                );
-              })
-            }
-            placeholder="Search tags..."
-          />
-        </Box>
-      </Grid>
-
-      <Grid xs={12} md={4}>
-        <Box>
-          <Typography level="title-md" mb={1}>Minimum Rating</Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Select
-              value={minRating}
-              onChange={(_, value) => setMinRating(value)}
-              placeholder="Any rating"
-              size="md"
-            >
-              <Option value={null}>Any rating</Option>
-              <Option value={1}>1+ stars</Option>
-              <Option value={2}>2+ stars</Option>
-              <Option value={3}>3+ stars</Option>
-              <Option value={4}>4+ stars</Option>
-              <Option value={5}>5 stars only</Option>
-            </Select>
-            
-            {minRating && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                <Typography level="body-sm" color="neutral">
-                  Preview:
-                </Typography>
-                <StarRating value={minRating} readonly size="sm" showClearButton={false} />
-                <Typography level="body-sm" color="neutral">
-                  and higher
-                </Typography>
-              </Box>
-            )}
+    <Box sx={{ width: '100%' }}>
+      <Grid container spacing={2}>
+        {/* Actors and Tags in top row */}
+        <Grid xs={12} sm={6}>
+          <Box>
+            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Actors</Typography>
+            <Autocomplete
+              multiple
+              options={sortedActors}
+              value={selectedActors}
+              isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
+              getOptionLabel={(opt) => opt.name}
+              onChange={(_, value) => setSelectedActors(value)}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip key={`${option.id}-${index}`} {...tagProps} size="sm">
+                      {option.name}
+                    </Chip>
+                  );
+                })
+              }
+              placeholder="Search actors..."
+              size="sm"
+            />
           </Box>
-        </Box>
+        </Grid>
+
+        <Grid xs={12} sm={6}>
+          <Box>
+            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Tags</Typography>
+            <Autocomplete<Tag, true, false, false>
+              multiple
+              options={tags}
+              getOptionLabel={(option) => option.label}
+              isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
+              value={selectedTags}
+              onChange={(_, newValue) => setSelectedTags(newValue)}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip key={`${option.id}-${index}`} {...tagProps} size="sm">
+                      {option.label}
+                    </Chip>
+                  );
+                })
+              }
+              placeholder="Search tags..."
+              size="sm"
+            />
+          </Box>
+        </Grid>
+
+        {/* Rating in bottom row, full width */}
+        <Grid xs={12}>
+          <Box sx={{ mt: 1 }}>
+            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Minimum Rating</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Select
+                value={minRating}
+                onChange={(_, value) => setMinRating(value)}
+                placeholder="Any rating"
+                size="sm"
+                sx={{ maxWidth: 200 }}
+              >
+                <Option value={null}>Any rating</Option>
+                <Option value={1}>1+ stars</Option>
+                <Option value={2}>2+ stars</Option>
+                <Option value={3}>3+ stars</Option>
+                <Option value={4}>4+ stars</Option>
+                <Option value={5}>5 stars only</Option>
+              </Select>
+              
+            </Box>
+          </Box>
+        </Grid>
       </Grid>
-    </Grid>
+    </Box>
   );
 }
