@@ -53,6 +53,8 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - `/api/actors` - Actor management and scene retrieval
 - `/api/playlists` - CRUD operations and smart playlist generation
 - `/api/playlists/[id]/items` - Playlist item management with ordering
+- `/api/playlists/[id]/image` - Playlist cover image upload/delete operations
+- `/api/playlist-images/[filename]` - Serve playlist images from persistent storage
 - `/api/items` - Item creation and management
 - `/api/items/[id]/rating` - Individual item rating GET/PATCH operations
 - `/api/items/filter` - Filter items by minimum rating
@@ -62,6 +64,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 ### Docker Deployment
 - Multi-stage build with Prisma generation before Next.js build
 - Production database at `/data/prod.db` (mounted volume)
+- Playlist images stored at `/data/playlist-images/` (persistent storage)
 - Automatic migration deployment and seeding via `entrypoint.sh`
 - Port 3000 exposed
 
@@ -97,6 +100,24 @@ Enhanced playlist playback experience at `/playlists/[id]`:
 Enhanced playlist browsing and organization at `/playlists`:
 - **Search Functionality**: Real-time filtering by playlist name and description
 - **Sorting Options**: Sort by name (A-Z/Z-A), item count (high/low), or duration (long/short)
+- **Cover Images**: Optional 9:16 portrait images displayed on playlist cards
 - **Responsive Layout**: Clean JoyUI header design with search and sort controls that stack on mobile
 - **Visual Feedback**: Proper loading states, empty states, and search result indicators
 - **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations
+
+### Playlist Cover Image System
+Comprehensive image management for playlist personalization:
+- **Database Integration**: `image` field in Playlist model stores filename references
+- **File Storage**: Images stored in `/data/playlist-images/` for Docker persistence
+- **Image Processing**: Auto-resize to 270x480px (9:16 ratio) with Sharp optimization
+- **Upload Component**: `src/components/PlaylistImageUpload.tsx` with drag-and-drop interface
+- **Format Support**: JPEG, PNG, WebP with 5MB size limit and validation
+- **API Endpoints**: 
+  - `POST/DELETE /api/playlists/[id]/image` for upload/removal operations
+  - `GET /api/playlist-images/[filename]` for serving with cache headers
+- **UI Integration**: 
+  - Playlist cards display 96x170px thumbnails alongside content
+  - Both manual and smart playlist editors include image management
+  - Horizontal layout in editors with expandable description fields
+- **Automatic Cleanup**: Images automatically deleted when playlists are removed
+- **Security**: Path traversal protection and file type validation
