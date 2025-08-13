@@ -41,8 +41,10 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - Items represent video segments with start/end times, screenshots, stream URLs, and optional 1-5 star ratings
 
 **Stash Integration:**
-- Configuration via environment variables or Settings table (STASH_GRAPHQL_URL, STASH_API_KEY)
-- Automatic URL/API key swap detection for common configuration mistakes
+- Configuration via Settings table (STASH_SERVER, STASH_API) with automatic initialization
+- Consistent authentication using `Authorization: Bearer` headers for GraphQL endpoints
+- URL-based API key authentication for media/file endpoints (`?api_key=`)
+- Connection testing endpoint with detailed error reporting and version detection
 - Proxy endpoint at `/api/stash-graphql` for client-side GraphQL requests
 
 **State Management:**
@@ -58,7 +60,8 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - `/api/items` - Item creation and management
 - `/api/items/[id]/rating` - Individual item rating GET/PATCH operations
 - `/api/items/filter` - Filter items by minimum rating
-- `/api/settings` - Configuration management
+- `/api/settings` - Configuration management with auto-initialization and validation
+- `/api/settings/test-connection` - Test Stash server connectivity and authentication
 - `/api/stash-graphql` - Proxy to Stash server GraphQL
 
 ### Docker Deployment
@@ -72,7 +75,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 Located in `src/lib/smartPlaylistServer.ts:buildItemsForPlaylist()`:
 - Queries Stash for scene markers matching actor/tag conditions
 - Applies rating filters (minimum rating threshold) by checking database
-- Creates video clips with configurable before/after timing around markers
+- Creates video clips with configurable before/after timing around markers using settings defaults
 - Generates deduped titles combining scene and marker names
 - Provides preview, screenshot, and stream URLs with API key authentication
 
@@ -121,3 +124,19 @@ Comprehensive image management for playlist personalization:
   - Horizontal layout in editors with expandable description fields
 - **Automatic Cleanup**: Images automatically deleted when playlists are removed
 - **Security**: Path traversal protection and file type validation
+
+### Settings Management System
+Comprehensive configuration system with type safety and validation:
+- **Typed Definitions**: `src/lib/settingsDefinitions.ts` with validation, categories, and defaults
+- **Auto-Initialization**: Missing settings automatically created with defaults on first load
+- **Categorized UI**: Settings grouped by category (Stash Integration, Appearance, Playback) with accordion layout
+- **Real-time Validation**: Input validation with helpful error messages and visual feedback
+- **Connection Testing**: Built-in Stash server connectivity testing with detailed diagnostics
+- **Extensible Architecture**: Easy to add new settings by updating definitions file
+- **Setting Types**: Support for text, URL, number, and select input types with appropriate validation
+- **Default Values**: 
+  - `STASH_SERVER`: Empty (required for connection)
+  - `STASH_API`: Empty (required for authentication)  
+  - `THEME_MODE`: "system" (light/dark/system options)
+  - `DEFAULT_CLIP_BEFORE`: "0" (seconds before marker to start clips)
+  - `DEFAULT_CLIP_AFTER`: "0" (seconds after marker to end clips)
