@@ -160,7 +160,9 @@ export const VideoJS = (props) => {
       videoElement.classList.add('vjs-big-play-centered');
       videoRef.current.appendChild(videoElement);
 
-      const player = (playerRef.current = videojs(videoElement, options, () => {
+      const playerOptions = options;
+
+      const player = (playerRef.current = videojs(videoElement, playerOptions, () => {
         videojs.log('player is ready');
         if (offset) {
           player.offset(offset);
@@ -176,6 +178,8 @@ export const VideoJS = (props) => {
         // Add forward 30s button
         const forward30Button = new Forward30Button(player);
         controlBar.addChild(forward30Button);
+        
+        
         
         // Initialize VTT thumbnails if VTT path is provided
         if (vttPath && stashServer && stashAPI) {

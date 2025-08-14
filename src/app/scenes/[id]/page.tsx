@@ -283,6 +283,55 @@ export default function SceneTagManagerPage() {
         setSelectedPerformerTagIds(performerTags.map(t => t.id));
     }, [performerTags, scene?.performers]);
 
+    // Keyboard shortcuts for video navigation
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            // Only activate when not typing in input fields
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            const player = playerRef.current;
+            if (!player || !playerReady) return;
+            
+            let handled = false;
+            const currentTime = player.currentTime();
+            
+            switch (event.code) {
+                case 'ArrowLeft':
+                    // Go back 5 seconds
+                    player.currentTime(Math.max(0, currentTime - 5));
+                    handled = true;
+                    break;
+                case 'ArrowRight':
+                    // Go forward 5 seconds
+                    const duration = player.duration() || 0;
+                    player.currentTime(Math.min(duration, currentTime + 5));
+                    handled = true;
+                    break;
+                case 'KeyJ':
+                    // YouTube-style: J = back 10 seconds
+                    player.currentTime(Math.max(0, currentTime - 10));
+                    handled = true;
+                    break;
+                case 'KeyL':
+                    // YouTube-style: L = forward 10 seconds
+                    const dur = player.duration() || 0;
+                    player.currentTime(Math.min(dur, currentTime + 10));
+                    handled = true;
+                    break;
+            }
+            
+            if (handled) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [playerReady]);
+
 
     const setDraft = (id: string, patch: Partial<Draft>) =>
         setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || ({} as Draft)), ...patch } }));
