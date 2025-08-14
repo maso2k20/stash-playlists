@@ -18,6 +18,7 @@ export const SETTING_CATEGORIES = {
   STASH_INTEGRATION: 'Stash Integration',
   APPEARANCE: 'Appearance',
   PLAYBACK: 'Playback',
+  BACKUP: 'Database Backup',
 } as const;
 
 // URL validation helper
@@ -100,6 +101,47 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
       if (isNaN(num)) return 'Must be a number';
       if (num < 0) return 'Cannot be negative';
       if (num > 300) return 'Maximum 300 seconds (5 minutes)';
+      return null;
+    },
+  },
+  {
+    key: 'BACKUP_ENABLED',
+    defaultValue: 'true',
+    type: 'select',
+    category: SETTING_CATEGORIES.BACKUP,
+    label: 'Enable Automatic Backups',
+    description: 'Automatically create daily backups of your database',
+    required: false,
+    options: ['true', 'false'],
+  },
+  {
+    key: 'BACKUP_RETENTION_DAYS',
+    defaultValue: '7',
+    type: 'number',
+    category: SETTING_CATEGORIES.BACKUP,
+    label: 'Backup Retention (Days)',
+    description: 'How many daily backups to keep before deleting old ones',
+    required: false,
+    validation: (value) => {
+      const num = parseInt(value);
+      if (isNaN(num)) return 'Must be a number';
+      if (num < 1) return 'Must keep at least 1 backup';
+      if (num > 365) return 'Maximum 365 days retention';
+      return null;
+    },
+  },
+  {
+    key: 'BACKUP_HOUR',
+    defaultValue: '2',
+    type: 'number',
+    category: SETTING_CATEGORIES.BACKUP,
+    label: 'Backup Time (Hour)',
+    description: 'Hour of the day to run automatic backups (0-23, in server timezone)',
+    required: false,
+    validation: (value) => {
+      const num = parseInt(value);
+      if (isNaN(num)) return 'Must be a number';
+      if (num < 0 || num > 23) return 'Must be between 0-23 (24-hour format)';
       return null;
     },
   },

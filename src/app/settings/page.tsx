@@ -25,7 +25,7 @@ import {
   FormHelperText,
 } from "@mui/joy";
 import { useColorScheme } from "@mui/joy/styles";
-import { Check, RotateCcw, Save, RefreshCw, ChevronDown, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { Check, RotateCcw, Save, RefreshCw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload } from "lucide-react";
 import { 
   getSettingsByCategory, 
   getSettingDefinition, 
@@ -58,6 +58,20 @@ export default function SettingsPage() {
     details?: string;
     version?: string;
   } | null>(null);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{
+    enabled: boolean;
+    lastBackup?: string;
+    nextBackup?: string;
+    retentionDays: number;
+    backupHour: number;
+  } | null>(null);
+  const [backups, setBackups] = useState<{
+    filename: string;
+    size: number;
+    created: string;
+    sizeFormatted: string;
+  }[]>([]);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
     msg: "",
@@ -93,7 +107,21 @@ export default function SettingsPage() {
 
   useEffect(() => {
     load();
+    loadBackupInfo();
   }, []);
+
+  const loadBackupInfo = async () => {
+    try {
+      const res = await fetch("/api/backup", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setBackupStatus(data.status);
+        setBackups(data.backups);
+      }
+    } catch (error) {
+      console.error('Failed to load backup info:', error);
+    }
+  };
 
   const changed = useMemo(() => {
     if (!settings || !original) return [];
@@ -219,8 +247,26 @@ export default function SettingsPage() {
       // Clear validation errors on successful save
       setValidationErrors({});
       
+      // Update backup schedule if backup settings changed
+      const backupSettingsChanged = changed.some(c => 
+        ['BACKUP_ENABLED', 'BACKUP_RETENTION_DAYS', 'BACKUP_HOUR'].includes(c.key)
+      );
+      
+      if (backupSettingsChanged) {
+        try {
+          await fetch('/api/backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update-schedule' }),
+          });
+        } catch (error) {
+          console.error('Failed to update backup schedule:', error);
+        }
+      }
+      
       // Refresh to sync updatedAt, also re-apply theme from server source of truth
       await load();
+      await loadBackupInfo();
       setSnack({ open: true, msg: "Settings saved", color: "success" });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to save";
@@ -228,6 +274,42 @@ export default function SettingsPage() {
       setSnack({ open: true, msg: "Failed to save settings", color: "danger" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBackupAction = async (action: string, filename?: string) => {
+    setBackupLoading(true);
+    try {
+      const res = await fetch('/api/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, filename }),
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        setSnack({ 
+          open: true, 
+          msg: result.message, 
+          color: 'success' 
+        });
+        await loadBackupInfo();
+      } else {
+        setSnack({ 
+          open: true, 
+          msg: result.error || 'Operation failed', 
+          color: 'danger' 
+        });
+      }
+    } catch (error) {
+      setSnack({ 
+        open: true, 
+        msg: 'Operation failed', 
+        color: 'danger' 
+      });
+    } finally {
+      setBackupLoading(false);
     }
   };
 
@@ -471,6 +553,132 @@ export default function SettingsPage() {
                               {connectionResult.details}
                             </Typography>
                           )}
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                  
+                  {/* Add backup controls for Database Backup category */}
+                  {category === 'Database Backup' && (
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                      <Typography level="title-md" sx={{ mb: 2 }}>
+                        Backup Management
+                      </Typography>
+                      
+                      {/* Backup Status */}
+                      {backupStatus && (
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Database size={16} />
+                            <Typography level="body-sm" fontWeight="lg">
+                              Status: {backupStatus.enabled ? 'Enabled' : 'Disabled'}
+                            </Typography>
+                          </Box>
+                          
+                          {backupStatus.lastBackup && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                              Last backup: {new Date(backupStatus.lastBackup).toLocaleString()}
+                            </Typography>
+                          )}
+                          
+                          {backupStatus.nextBackup && backupStatus.enabled && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                              Next backup: {new Date(backupStatus.nextBackup).toLocaleString()}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      
+                      {/* Manual Backup Controls */}
+                      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                        <Button
+                          startDecorator={backupLoading ? <RefreshCw className="animate-spin" size={16} /> : <Database size={16} />}
+                          onClick={() => handleBackupAction('create')}
+                          disabled={backupLoading}
+                          variant="solid"
+                          color="primary"
+                        >
+                          {backupLoading ? 'Creating...' : 'Create Backup Now'}
+                        </Button>
+                        
+                        <Button
+                          startDecorator={<Trash2 size={16} />}
+                          onClick={() => handleBackupAction('cleanup')}
+                          disabled={backupLoading}
+                          variant="outlined"
+                          color="neutral"
+                        >
+                          Cleanup Old Backups
+                        </Button>
+                      </Box>
+                      
+                      {/* Backup Files List */}
+                      {backups.length > 0 && (
+                        <Box>
+                          <Typography level="title-sm" sx={{ mb: 2 }}>
+                            Available Backups ({backups.length})
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 300, overflowY: 'auto' }}>
+                            {backups.map((backup) => (
+                              <Box
+                                key={backup.filename}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 2,
+                                  p: 2,
+                                  border: '1px solid',
+                                  borderColor: 'neutral.200',
+                                  borderRadius: 'md',
+                                  bgcolor: 'background.surface',
+                                }}
+                              >
+                                <Box sx={{ flexGrow: 1 }}>
+                                  <Typography level="body-sm" fontWeight="lg">
+                                    {backup.filename}
+                                  </Typography>
+                                  <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                    {new Date(backup.created).toLocaleString()} • {backup.sizeFormatted}
+                                  </Typography>
+                                </Box>
+                                
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                  <Tooltip title="Restore from this backup">
+                                    <IconButton
+                                      size="sm"
+                                      variant="soft"
+                                      color="warning"
+                                      onClick={() => {
+                                        if (confirm(`Are you sure you want to restore from ${backup.filename}? This will replace your current database and cannot be undone.`)) {
+                                          handleBackupAction('restore', backup.filename);
+                                        }
+                                      }}
+                                      disabled={backupLoading}
+                                    >
+                                      <Upload size={16} />
+                                    </IconButton>
+                                  </Tooltip>
+                                  
+                                  <Tooltip title="Delete this backup">
+                                    <IconButton
+                                      size="sm"
+                                      variant="soft"
+                                      color="danger"
+                                      onClick={() => {
+                                        if (confirm(`Are you sure you want to delete ${backup.filename}? This cannot be undone.`)) {
+                                          handleBackupAction('delete', backup.filename);
+                                        }
+                                      }}
+                                      disabled={backupLoading}
+                                    >
+                                      <Trash2 size={16} />
+                                    </IconButton>
+                                  </Tooltip>
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
                         </Box>
                       )}
                     </Box>

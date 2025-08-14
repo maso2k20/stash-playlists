@@ -207,7 +207,7 @@ Comprehensive image management for playlist personalization:
 Comprehensive configuration system with type safety and validation:
 - **Typed Definitions**: `src/lib/settingsDefinitions.ts` with validation, categories, and defaults
 - **Auto-Initialization**: Missing settings automatically created with defaults on first load
-- **Categorized UI**: Settings grouped by category (Stash Integration, Appearance, Playback) with accordion layout
+- **Categorized UI**: Settings grouped by category (Stash Integration, Appearance, Playback, Database Backup) with accordion layout
 - **Real-time Validation**: Input validation with helpful error messages and visual feedback
 - **Connection Testing**: Built-in Stash server connectivity testing with detailed diagnostics
 - **Extensible Architecture**: Easy to add new settings by updating definitions file
@@ -218,3 +218,23 @@ Comprehensive configuration system with type safety and validation:
   - `THEME_MODE`: "system" (light/dark/system options)
   - `DEFAULT_CLIP_BEFORE`: "0" (seconds before marker to start clips)
   - `DEFAULT_CLIP_AFTER`: "0" (seconds after marker to end clips)
+  - `BACKUP_ENABLED`: "true" (enable automatic daily backups)
+  - `BACKUP_RETENTION_DAYS`: "7" (days to keep backups, 1-365)
+  - `BACKUP_HOUR`: "2" (hour to run backups, 0-23 UTC)
+
+### Database Backup System
+Automated backup solution with scheduled and manual backup capabilities:
+- **Automated Backups**: Daily scheduled backups using node-cron at configurable time
+- **Manual Backups**: On-demand backup creation via settings page interface
+- **Backup Management**: List, delete, and restore from backup files with confirmation dialogs
+- **Retention Policy**: Configurable retention period with automatic cleanup of old backups
+- **Storage Locations**: 
+  - Development: `./backups/` directory in project root
+  - Production: `/data/backups/` for persistent Docker storage
+- **Backup Format**: SQLite VACUUM INTO creates compact, clean database copies
+- **Safety Features**: Creates backup of current database before restore operations
+- **API Endpoints**: `/api/backup` with actions for create, delete, restore, cleanup, update-schedule
+- **Settings Integration**: Complete backup controls integrated into settings page with status display
+- **Initialization**: Backup service automatically starts with application via `AppInitializer` component
+- **Environment Aware**: Automatically detects development vs production database paths
+- **Error Handling**: Comprehensive error handling with user-friendly feedback messages

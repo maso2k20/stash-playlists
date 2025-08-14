@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v14-appRouter";
 import ClientProviders from "@/components/ClientProviders";
 import { Sheet, Button, Box } from "@mui/joy";
+import { AppInitializer } from "@/components/AppInitializer";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -14,6 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="antialiased">
         <AppRouterCacheProvider options={{ key: "mui", prepend: true }}>
           <ClientProviders>
+            <AppInitializer />
             <NavBar />
             {children}
           </ClientProviders>
