@@ -307,4 +307,21 @@ export const VideoJS = (props) => {
   );
 };
 
-export default VideoJS;
+// Custom comparison function for React.memo to prevent unnecessary re-renders
+const arePropsEqual = (prevProps, nextProps) => {
+  // Check if sources have changed (the main thing that should trigger a re-render)
+  const prevSources = prevProps.options?.sources;
+  const nextSources = nextProps.options?.sources;
+  
+  const sourcesEqual = JSON.stringify(prevSources) === JSON.stringify(nextSources);
+  
+  // Check other critical props
+  const offsetEqual = JSON.stringify(prevProps.offset) === JSON.stringify(nextProps.offset);
+  const hasStartedEqual = prevProps.hasStarted === nextProps.hasStarted;
+  const markersEqual = JSON.stringify(prevProps.markers) === JSON.stringify(nextProps.markers);
+  
+  // Only re-render if critical props have changed
+  return sourcesEqual && offsetEqual && hasStartedEqual && markersEqual;
+};
+
+export default React.memo(VideoJS, arePropsEqual);

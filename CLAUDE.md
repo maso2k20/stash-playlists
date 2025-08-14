@@ -50,6 +50,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 **State Management:**
 - `src/app/context/SettingsContext.tsx` - Global settings context
 - `src/components/ApolloProvider.tsx` - GraphQL client provider
+- `src/components/MarkerTagEditor.tsx` - Reusable tag editing component with compact mode
 
 ### API Endpoints Structure
 - `/api/actors` - Actor management and scene retrieval
@@ -141,9 +142,16 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Only appears when primary tag has children and recommendations are available
 
 ### Playlist Player Features
-Enhanced playlist playback experience at `/playlists/[id]`:
+Enhanced playlist playbook experience at `/playlists/[id]`:
 - **Current Item Display**: Shows title and rating component below video player
 - **Real-time Rating**: Star rating component with immediate persistence via API
+- **Marker Tag Editing**: Complete tag editing system integrated into playlist player:
+  - **In-line Tag Editor**: Edit primary tags and additional tags directly while playing
+  - **Tag Recommendations**: Smart tag suggestions based on primary tag children relationships
+  - **Auto-save**: Tag changes persist immediately with Apollo cache updates
+  - **Non-disruptive**: Video continues playing seamlessly during tag edits (React.memo optimized)
+  - **Reusable Component**: `src/components/MarkerTagEditor.tsx` with compact layout mode
+- **Auto-play**: Clicking playlist items automatically starts video playback
 - **Progress Tracking**: Automatically hides completed items from playlist view
 - **Visual Feedback**: Current item highlighting with primary colors, played items at 50% opacity
 - **Shuffle Support**: Maintains play order consistency while filtering display

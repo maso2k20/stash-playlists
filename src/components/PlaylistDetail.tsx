@@ -110,7 +110,7 @@ export function PlaylistDetail({
         width: '100%',
         display: 'flex',
         flexDirection: 'column',
-        height: '83.5vh', // or maxHeight: '80vh'
+        height: '100%',
         minHeight: 0,
       }}
     >
