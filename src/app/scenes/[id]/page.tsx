@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, gql } from "@apollo/client";
 import {
     Container,
@@ -28,6 +28,7 @@ import {
 } from "@mui/joy";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useStashTags } from "@/context/StashTagsContext";
 import { useSettings } from "@/app/context/SettingsContext";
 import VideoJS from "@/components/videojs/VideoJS";
@@ -135,6 +136,7 @@ function withApiKey(url: string, apiKey?: string) {
 
 export default function SceneTagManagerPage() {
     const params = useParams<{ id: string }>();
+    const router = useRouter();
     const sceneId = params.id;
 
     const { data, loading, error, refetch } = useQuery(GET_SCENE_FOR_TAG_MANAGEMENT, {
@@ -224,6 +226,31 @@ export default function SceneTagManagerPage() {
     // Ratings state
     const [ratings, setRatings] = useState<Record<string, number | null>>({});
     const [loadingRating, setLoadingRating] = useState<string | null>(null);
+    
+    // Back navigation logic
+    const [referrer, setReferrer] = useState<string | null>(null);
+    
+    useEffect(() => {
+        // Check if we came from an actors page
+        if (document.referrer) {
+            const referrerUrl = new URL(document.referrer);
+            const referrerPath = referrerUrl.pathname;
+            
+            // Check if referrer is an actors page
+            if (referrerPath.startsWith('/actors/') && !referrerPath.includes('/scenes')) {
+                setReferrer(document.referrer);
+            }
+        }
+    }, []);
+    
+    // Handle back navigation
+    const handleGoBack = () => {
+        if (referrer) {
+            router.push(referrer);
+        } else {
+            router.back();
+        }
+    };
 
     // Init drafts from server markers
     useEffect(() => {
@@ -939,9 +966,22 @@ export default function SceneTagManagerPage() {
                         {error.message}
                     </Typography>
                 ) : (
-                    <Typography level="h2" sx={{ mb: 1.5 }}>
-                        {scene?.title || "Scene"}
-                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                        <IconButton
+                            variant="soft"
+                            color="neutral"
+                            size="sm"
+                            onClick={handleGoBack}
+                            sx={{
+                                borderRadius: "50%",
+                            }}
+                        >
+                            <ArrowBackIcon />
+                        </IconButton>
+                        <Typography level="h2">
+                            {scene?.title || "Scene"}
+                        </Typography>
+                    </Box>
                 )}
 
                 <Grid container spacing={2}>

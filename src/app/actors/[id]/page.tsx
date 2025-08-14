@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, gql } from "@apollo/client";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
 import { formatLength } from "@/lib/formatLength";
@@ -37,7 +37,7 @@ import {
   IconButton,
 } from "@mui/joy";
 
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, Plus } from "lucide-react";
 
 import StarRating from "@/components/StarRating";
 
@@ -172,23 +172,71 @@ function HoverPreview({
 
 export default function Page() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const actorId = params.id;
 
-  const [selectedMarkers, setSelectedMarkers] = useState<string[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
-
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [chosenPlaylistId, setChosenPlaylistId] = useState<string>("");
+  
+  // Individual marker playlist dialog state
+  const [isSingleDialogOpen, setIsSingleDialogOpen] = useState(false);
+  const [singleMarker, setSingleMarker] = useState<any>(null);
+  const [singlePlaylistId, setSinglePlaylistId] = useState<string>("");
 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("title-asc");
+  
+  // Initialize filters from URL on mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Parse tag IDs from URL
+    const tagParam = urlParams.get('tags');
+    if (tagParam) {
+      const tagIds = tagParam.split(',').filter(Boolean);
+      setSelectedTagIds(tagIds);
+    }
+    
+    // Parse search query from URL
+    const searchParam = urlParams.get('search');
+    if (searchParam) {
+      setSearchQuery(searchParam);
+    }
+    
+    // Parse sort option from URL
+    const sortParam = urlParams.get('sort');
+    if (sortParam && ["title-asc", "title-desc", "duration-asc", "duration-desc", "rating-desc", "rating-asc"].includes(sortParam)) {
+      setSortOption(sortParam as SortOption);
+    }
+  }, []);
 
   const pathname = usePathname();
   const isMarkersPage = !pathname?.includes("/scenes");
+  
+  // Function to update URL with current filter state
+  const updateURLWithFilters = (tags?: string[], search?: string, sort?: SortOption) => {
+    const params = new URLSearchParams();
+    
+    const currentTags = tags || selectedTagIds;
+    const currentSearch = search !== undefined ? search : searchQuery;
+    const currentSort = sort || sortOption;
+    
+    if (currentTags.length > 0) {
+      params.set('tags', currentTags.join(','));
+    }
+    if (currentSearch.trim()) {
+      params.set('search', currentSearch);
+    }
+    if (currentSort !== 'title-asc') {
+      params.set('sort', currentSort);
+    }
+    
+    const newUrl = `${pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+    router.replace(newUrl, { scroll: false });
+  };
 
   const settings = useSettings();
   const stashServer = settings["STASH_SERVER"];
@@ -293,55 +341,53 @@ export default function Page() {
       });
   }, [allScenes]);
 
-  const toggleMarker = (markerId: string) => {
-    setSelectedMarkers((prev) =>
-      prev.includes(markerId) ? prev.filter((m) => m !== markerId) : [...prev, markerId]
-    );
-  };
 
   const manualPlaylists = useMemo(
     () => playlists.filter((pl) => pl.type === "MANUAL"),
     [playlists]
   );
 
-  const confirmAdd = async () => {
-    const items = selectedMarkers
-      .map((mId) => {
-        const marker = scenes.find((m: any) => m.id === mId);
-        if (!marker) return null;
+  // Handle opening single marker playlist dialog
+  const handleAddSingleToPlaylist = (marker: any, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent card click navigation
+    setSingleMarker(marker);
+    setIsSingleDialogOpen(true);
+  };
 
-        const preview = marker.preview ?? marker.screenshot ?? null;
+  // Confirm adding single marker to playlist
+  const confirmSingleAdd = async () => {
+    if (!singleMarker || !singlePlaylistId) return;
 
-        return {
-          id: marker.id,
-          title: marker.title,
-          startTime: marker.seconds,
-          endTime: marker.end_seconds,
-          screenshot: marker.screenshot,
-          stream: `${stashServer}/scene/${marker.scene.id}/stream?api_key=${stashAPI}`,
-          preview,
-        };
-      })
-      .filter(Boolean);
+    const preview = singleMarker.preview ?? singleMarker.screenshot ?? null;
+    const item = {
+      id: singleMarker.id,
+      title: singleMarker.title,
+      startTime: singleMarker.seconds,
+      endTime: singleMarker.end_seconds,
+      screenshot: singleMarker.screenshot,
+      stream: `${stashServer}/scene/${singleMarker.scene.id}/stream?api_key=${stashAPI}`,
+      preview,
+    };
 
     try {
-      const res = await fetch(`/api/playlists/${chosenPlaylistId}/items`, {
+      const res = await fetch(`/api/playlists/${singlePlaylistId}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items: [item] }),
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok) {
-        console.error("Add-to-playlist failed:", result);
+        console.error("Add single marker to playlist failed:", result);
       } else {
-        setSelectedMarkers([]);
-        setChosenPlaylistId("");
-        setIsDialogOpen(false);
+        setSingleMarker(null);
+        setSinglePlaylistId("");
+        setIsSingleDialogOpen(false);
       }
     } catch (err) {
       console.error("Network or code error:", err);
     }
   };
+
 
   const anyLoading = loading || tagsLoading || playlistsLoading;
 
@@ -358,50 +404,35 @@ export default function Page() {
         }}
       >
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1 }}>
-          <Link href={`/actors/${actorId}`} passHref>
-            <Button
-              size="sm"
-              variant={isMarkersPage ? "solid" : "soft"}
-            >
-              Markers
-            </Button>
-          </Link>
-          <Link href={`/actors/${actorId}/scenes`} passHref>
-            <Button
-              size="sm"
-              variant={isMarkersPage ? "soft" : "solid"}
-            >
-              Scenes
-            </Button>
-          </Link>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexGrow: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Link href={`/actors/${actorId}`} passHref>
+              <Button
+                size="sm"
+                variant={isMarkersPage ? "solid" : "soft"}
+              >
+                Markers
+              </Button>
+            </Link>
+            <Link href={`/actors/${actorId}/scenes`} passHref>
+              <Button
+                size="sm"
+                variant={isMarkersPage ? "soft" : "solid"}
+              >
+                Scenes
+              </Button>
+            </Link>
+          </Box>
+          {!anyLoading && allScenes.length > 0 && (
+            <Typography level="body-sm" color="neutral">
+              {scenes.length === allScenes.length 
+                ? `${scenes.length} marker${scenes.length === 1 ? '' : 's'}`
+                : `${scenes.length} of ${allScenes.length} markers`
+              }
+            </Typography>
+          )}
         </Box>
 
-        {/* Selected count */}
-        {selectedMarkers.length > 0 && (
-          <Chip color="primary" variant="solid" size="sm">
-            {selectedMarkers.length} selected
-          </Chip>
-        )}
-
-        {/* Add to playlist (opens dialog) */}
-        <Button
-          size="sm"
-          disabled={selectedMarkers.length === 0}
-          onClick={() => setIsDialogOpen(true)}
-        >
-          Add to Playlist
-        </Button>
-
-        {/* Clear selection */}
-        <Button
-          size="sm"
-          variant="plain"
-          disabled={selectedMarkers.length === 0}
-          onClick={() => setSelectedMarkers([])}
-        >
-          Clear
-        </Button>
       </Box>
 
       {/* Search and Filters */}
@@ -415,14 +446,21 @@ export default function Page() {
           <Input
             placeholder="Search markers..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              const newValue = e.target.value;
+              setSearchQuery(newValue);
+              updateURLWithFilters(undefined, newValue);
+            }}
             startDecorator={<Search size={16} />}
             endDecorator={
               searchQuery && (
                 <IconButton
                   size="sm"
                   variant="plain"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    updateURLWithFilters(undefined, "");
+                  }}
                   sx={{ minHeight: 0, minWidth: 0 }}
                 >
                   ×
@@ -436,7 +474,11 @@ export default function Page() {
         <FormControl sx={{ minWidth: { xs: "100%", lg: 180 } }}>
           <Select
             value={sortOption}
-            onChange={(_, value) => setSortOption(value as SortOption)}
+            onChange={(_, value) => {
+              const newSort = value as SortOption;
+              setSortOption(newSort);
+              updateURLWithFilters(undefined, undefined, newSort);
+            }}
             startDecorator={<ArrowUpDown size={16} />}
             size="sm"
           >
@@ -455,7 +497,11 @@ export default function Page() {
             multiple
             options={tagOptions}
             value={selectedTagOptions}
-            onChange={(_e, val) => setSelectedTagIds(val.map(v => v.id))}
+            onChange={(_e, val) => {
+              const newTagIds = val.map(v => v.id);
+              setSelectedTagIds(newTagIds);
+              updateURLWithFilters(newTagIds);
+            }}
             getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
             isOptionEqualToValue={(a, b) => a?.id === b?.id}
             size="sm"
@@ -466,7 +512,10 @@ export default function Page() {
           size="sm"
           variant="plain"
           disabled={selectedTagIds.length === 0}
-          onClick={() => setSelectedTagIds([])}
+          onClick={() => {
+            setSelectedTagIds([]);
+            updateURLWithFilters([]);
+          }}
           sx={{ minWidth: "auto" }}
         >
           Clear tags
@@ -523,12 +572,18 @@ export default function Page() {
           {(searchQuery || selectedTagIds.length > 0) && (
             <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 2 }}>
               {searchQuery && (
-                <Button variant="plain" size="sm" onClick={() => setSearchQuery("")}>
+                <Button variant="plain" size="sm" onClick={() => {
+                  setSearchQuery("");
+                  updateURLWithFilters(undefined, "");
+                }}>
                   Clear search
                 </Button>
               )}
               {selectedTagIds.length > 0 && (
-                <Button variant="plain" size="sm" onClick={() => setSelectedTagIds([])}>
+                <Button variant="plain" size="sm" onClick={() => {
+                  setSelectedTagIds([]);
+                  updateURLWithFilters([]);
+                }}>
                   Clear tags
                 </Button>
               )}
@@ -537,29 +592,12 @@ export default function Page() {
         </Sheet>
       )}
 
-      {/* Results count */}
-      {!anyLoading && allScenes.length > 0 && (
-        <Box sx={{ mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <Typography level="body-sm" color="neutral">
-            {scenes.length === allScenes.length 
-              ? `${scenes.length} marker${scenes.length === 1 ? '' : 's'}`
-              : `${scenes.length} of ${allScenes.length} markers`
-            }
-          </Typography>
-          {loading && (
-            <Typography level="body-xs" color="neutral">
-              Loading...
-            </Typography>
-          )}
-        </Box>
-      )}
 
       {/* Scene Cards */}
       {!anyLoading && scenes.length > 0 && (
         <>
           <Grid container spacing={2}>
             {scenes.map((marker: any) => {
-              const checked = selectedMarkers.includes(marker.id);
               const rating = ratings[marker.id];
               return (
                 <Grid key={marker.id} xs={12} sm={6} md={4} lg={3} xl={2}>
@@ -568,7 +606,7 @@ export default function Page() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        toggleMarker(marker.id);
+                        router.push(`/scenes/${marker.scene.id}`);
                       }
                     }}
                     sx={{
@@ -578,12 +616,11 @@ export default function Page() {
                       position: "relative",
                       boxShadow: "sm",
                       transition: "transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease",
-                      border: checked ? "2px solid" : "2px solid transparent",
-                      borderColor: checked ? "primary.500" : "transparent",
+                      border: "2px solid transparent",
                       "&:hover": { 
                         transform: "translateY(-2px)", 
                         boxShadow: "md",
-                        borderColor: checked ? "primary.600" : "neutral.300",
+                        borderColor: "primary.200",
                       },
                       "&:focus": {
                         outline: "2px solid",
@@ -592,7 +629,7 @@ export default function Page() {
                       },
                       cursor: "pointer",
                     }}
-                    onClick={() => toggleMarker(marker.id)}
+                    onClick={() => router.push(`/scenes/${marker.scene.id}`)}
                   >
                     <AspectRatio ratio="16/9">
                       {/* Media (screenshot -> preview on hover) */}
@@ -608,45 +645,6 @@ export default function Page() {
                           stashBase={stashServer}
                           apiKey={stashAPI}
                         />
-                        
-                        {/* Selected overlay */}
-                        {checked && (
-                          <Box
-                            sx={{
-                              position: "absolute",
-                              inset: 0,
-                              backgroundColor: "rgba(25, 118, 210, 0.2)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              pointerEvents: "none",
-                            }}
-                          >
-                            <Box
-                              sx={{
-                                backgroundColor: "primary.500",
-                                borderRadius: "50%",
-                                p: 1,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="white"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <polyline points="20,6 9,17 4,12"></polyline>
-                              </svg>
-                            </Box>
-                          </Box>
-                        )}
                       </CardCover>
 
                       {/* Rating display (top-right) */}
@@ -675,6 +673,36 @@ export default function Page() {
                           />
                         </Box>
                       )}
+
+                      {/* Add to playlist button (top-left) */}
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 8,
+                          left: 8,
+                          zIndex: 2,
+                        }}
+                      >
+                        <IconButton
+                          size="sm"
+                          variant="solid"
+                          color="primary"
+                          onClick={(e) => handleAddSingleToPlaylist(marker, e)}
+                          sx={{
+                            backgroundColor: "rgba(25, 118, 210, 0.9)",
+                            backdropFilter: "blur(4px)",
+                            border: "1px solid rgba(255, 255, 255, 0.2)",
+                            "&:hover": {
+                              backgroundColor: "rgba(25, 118, 210, 1)",
+                              transform: "scale(1.05)",
+                            },
+                            transition: "all 150ms ease",
+                          }}
+                          title="Add to playlist"
+                        >
+                          <Plus size={16} />
+                        </IconButton>
+                      </Box>
 
                       {/* Bottom gradient + title/time */}
                       <Box
@@ -715,28 +743,28 @@ export default function Page() {
         </>
       )}
 
-      {/* Add to Playlist Dialog */}
-      <Modal open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
+
+      {/* Single Marker Add to Playlist Dialog */}
+      <Modal open={isSingleDialogOpen} onClose={() => setIsSingleDialogOpen(false)}>
         <ModalDialog sx={{ minWidth: 360 }}>
-          <DialogTitle>Select Playlist</DialogTitle>
+          <DialogTitle>Add to Playlist</DialogTitle>
           <DialogContent>
             <Typography level="body-sm" sx={{ mb: 1 }}>
-              Choose a manual playlist to add {selectedMarkers.length} item
-              {selectedMarkers.length === 1 ? "" : "s"}.
+              Add "{singleMarker?.title}" to a manual playlist.
             </Typography>
 
             <Autocomplete
               placeholder="Choose playlist…"
               options={manualPlaylists.map((pl) => ({ id: pl.id, label: pl.name }))}
               value={
-                chosenPlaylistId
+                singlePlaylistId
                   ? {
-                    id: chosenPlaylistId,
-                    label: manualPlaylists.find((p) => p.id === chosenPlaylistId)?.name ?? "",
+                    id: singlePlaylistId,
+                    label: manualPlaylists.find((p) => p.id === singlePlaylistId)?.name ?? "",
                   }
                   : null
               }
-              onChange={(_e, val) => setChosenPlaylistId(val?.id ?? "")}
+              onChange={(_e, val) => setSinglePlaylistId(val?.id ?? "")}
               getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
               isOptionEqualToValue={(a, b) => a?.id === b?.id}
               size="sm"
@@ -744,11 +772,11 @@ export default function Page() {
             />
           </DialogContent>
           <DialogActions>
-            <Button variant="plain" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="plain" onClick={() => setIsSingleDialogOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!chosenPlaylistId} onClick={confirmAdd}>
-              Confirm
+            <Button disabled={!singlePlaylistId} onClick={confirmSingleAdd}>
+              Add to Playlist
             </Button>
           </DialogActions>
         </ModalDialog>

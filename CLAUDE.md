@@ -120,6 +120,7 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
     - Timer display repositioned after progress bar for better layout
     - Clean popup design with proper hover area to prevent flickering
 - **Rating Integration**: Rate markers directly in the editing interface with auto-save
+- **Back Navigation**: Smart back button that returns to referrer page (actors page) preserving filter state
 - **Common Tags**: Bulk add/remove arbitrary tags to all markers with toggle for add/remove mode
 - **Performer Tags**: Pre-populated with all performer tags, allowing bulk application to markers:
   - Auto-populated from scene performers with deduplication
@@ -175,14 +176,15 @@ Enhanced playlist browsing and organization at `/playlists`:
 ### Actor Browsing System
 Enhanced marker browsing and selection on `/actors/[id]` pages:
 - **Advanced Filtering**: Multi-select tag filtering with real-time search across marker titles
+- **URL Persistence**: Filter state (tags, search, sort) persisted in URL query parameters for seamless navigation
 - **Comprehensive Sorting**: Sort by title (A-Z/Z-A), duration (shortest/longest), and rating (highest/lowest)
-- **Visual Selection**: Full-card clickable interface with selection overlays and hover effects
+- **Direct Navigation**: Click any marker card to navigate to scene editing page for that marker's scene
+- **Individual Playlist Addition**: Plus button on each marker card opens dialog to add single marker to playlists
 - **Rating Display**: Shows existing star ratings for previously rated markers via bulk API lookup
 - **Efficient Data Loading**: Loads all markers at once for proper client-side filtering and sorting
-- **Responsive Controls**: Search, sort, and tag filter controls in single row layout that stacks on mobile
+- **Responsive Controls**: Search, sort, and tag filter controls with right-aligned marker count display
 - **Smart Empty States**: Different messages for no data vs filtered results with quick clear actions
 - **Performance Optimized**: Uses useMemo for instant filtering/sorting with proper dependency tracking
-- **Playlist Integration**: Selected markers can be bulk-added to manual playlists with dialog interface
 
 ### Playlist Cover Image System
 Comprehensive image management for playlist personalization:
