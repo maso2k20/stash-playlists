@@ -128,6 +128,11 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
 - **Bulk Operations**: Save All, Reset All functionality for efficient marker management
 - **Auto-tagging**: Automatically adds "Markers Organised" tag to scene when markers are saved
 - **Draft System**: Changes tracked as drafts with unsaved indicators and individual save/reset options
+- **Primary Tag Validation**: Prevents saving markers without primary tags:
+  - Individual save buttons disabled and styled red when primary tag missing
+  - Bulk Save All blocked with alert if any markers lack primary tags
+  - Visual feedback on required primary tag autocomplete field
+  - Preserves all edits when save is blocked (no page reload/data loss)
 
 ### Playlist Player Features
 Enhanced playlist playback experience at `/playlists/[id]`:

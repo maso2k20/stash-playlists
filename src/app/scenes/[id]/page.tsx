@@ -487,6 +487,12 @@ export default function SceneTagManagerPage() {
         const d = drafts[id];
         if (!d) return;
 
+        // Validate primary tag exists
+        if (!d.primary_tag_id) {
+            alert('Primary tag is required for all markers.');
+            return;
+        }
+
         if (isTemp(id)) {
             try {
                 setSavingId(id);
@@ -658,6 +664,16 @@ export default function SceneTagManagerPage() {
 
     const handleSaveAll = async () => {
         if (!dirtyCount) return;
+
+        // Check if any markers are missing primary tags
+        const allEntries = [...newEntries, ...dirtyExistingEntries];
+        const markersWithoutPrimaryTag = allEntries.filter(({ d }) => !d!.primary_tag_id);
+        
+        if (markersWithoutPrimaryTag.length > 0) {
+            alert(`Cannot save: ${markersWithoutPrimaryTag.length} marker(s) are missing primary tags. Please add primary tags to all markers before saving.`);
+            return;
+        }
+
         setSavingAll(true);
         try {
             // Handle all mutations sequentially 
@@ -946,7 +962,16 @@ export default function SceneTagManagerPage() {
                                 >
                                     Reset All
                                 </Button>
-                                <Button size="sm" disabled={!dirtyCount || savingAll} onClick={handleSaveAll}>
+                                <Button 
+                                    size="sm" 
+                                    disabled={!dirtyCount || savingAll} 
+                                    onClick={handleSaveAll}
+                                    color={(() => {
+                                        const allEntries = [...newEntries, ...dirtyExistingEntries];
+                                        const hasMarkersWithoutPrimaryTag = allEntries.some(({ d }) => !d!.primary_tag_id);
+                                        return hasMarkersWithoutPrimaryTag ? "danger" : "primary";
+                                    })()} 
+                                >
                                     {savingAll ? "Saving…" : "Save"}
                                 </Button>
                             </Box>
@@ -1129,8 +1154,16 @@ export default function SceneTagManagerPage() {
                                                         onChange={(_e, val) => setDraft(id, { primary_tag_id: val?.id ?? null })}
                                                         getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
-                                                        sx={{ minWidth: 200, flex: 1, maxWidth: 400 }}
-                                                        placeholder="Select primary tag…"
+                                                        sx={{ 
+                                                            minWidth: 200, 
+                                                            flex: 1, 
+                                                            maxWidth: 400,
+                                                            '& .MuiAutocomplete-input': {
+                                                                color: !d.primary_tag_id ? 'danger.plainColor' : 'inherit'
+                                                            }
+                                                        }}
+                                                        placeholder="Select primary tag… (Required)"
+                                                        color={!d.primary_tag_id ? "danger" : "neutral"}
                                                     />
                                                 </Box>
 
@@ -1204,6 +1237,16 @@ export default function SceneTagManagerPage() {
                                                             <DeleteIcon fontSize="small" />
                                                         </IconButton>
                                                     </Tooltip>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="solid"
+                                                        disabled={savingThis || savingAll || !d.primary_tag_id}
+                                                        onClick={() => handleSaveRow(id)}
+                                                        color={!d.primary_tag_id ? "danger" : "primary"}
+                                                        sx={{ minWidth: 60 }}
+                                                    >
+                                                        {savingThis ? "Saving..." : "Save"}
+                                                    </Button>
                                                     <Button
                                                         size="sm"
                                                         variant="plain"
