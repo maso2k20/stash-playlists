@@ -133,6 +133,12 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Bulk Save All blocked with alert if any markers lack primary tags
   - Visual feedback on required primary tag autocomplete field
   - Preserves all edits when save is blocked (no page reload/data loss)
+- **Tag Recommendations**: Smart tag suggestions based on primary tag relationships:
+  - Shows child tags of selected primary tag as clickable chips
+  - Automatically filters out already selected tags
+  - One-click addition to marker's tag collection
+  - Clean JoyUI chip design with hover effects
+  - Only appears when primary tag has children and recommendations are available
 
 ### Playlist Player Features
 Enhanced playlist playback experience at `/playlists/[id]`:

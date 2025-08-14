@@ -104,7 +104,7 @@ const UPDATE_SCENE = gql`
   }
 `;
 
-type Tag = { id: string; name: string };
+type Tag = { id: string; name: string; children?: Tag[] };
 type Marker = {
     id: string;
     title: string;
@@ -153,7 +153,11 @@ export default function SceneTagManagerPage() {
     // Tag options from context
     const { stashTags, loading: tagsLoading } = useStashTags();
     const tagOptions: Tag[] = useMemo(
-        () => (stashTags || []).map((t: any) => ({ id: String(t.id), name: String(t.name) })),
+        () => (stashTags || []).map((t: any) => ({ 
+            id: String(t.id), 
+            name: String(t.name),
+            children: (t.children || []).map((c: any) => ({ id: String(c.id), name: String(c.name) }))
+        })),
         [stashTags]
     );
 
@@ -452,6 +456,32 @@ export default function SceneTagManagerPage() {
         d.primary_tag_id ? Array.from(new Set([d.primary_tag_id, ...d.tag_ids])) : d.tag_ids;
 
     const isTemp = (id: string) => id.startsWith("tmp_");
+
+    // Get recommended tags based on primary tag children
+    const getRecommendedTags = (primaryTagId: string | null, currentTagIds: string[]): Tag[] => {
+        if (!primaryTagId) return [];
+        
+        const primaryTag = tagOptions.find(t => t.id === primaryTagId);
+        if (!primaryTag?.children) return [];
+        
+        // Filter out tags that are already selected
+        return primaryTag.children.filter(child => 
+            !currentTagIds.includes(child.id) && child.id !== primaryTagId
+        );
+    };
+
+    // Handle adding a recommended tag to the marker
+    const handleAddRecommendedTag = (markerId: string, tagId: string) => {
+        const d = drafts[markerId];
+        if (!d) return;
+        
+        // Add the tag if it's not already included
+        if (!d.tag_ids.includes(tagId)) {
+            setDraft(markerId, {
+                tag_ids: [...d.tag_ids, tagId]
+            });
+        }
+    };
 
     // Find tag ID by name from available tags
     const findTagIdByName = (tagName: string): string | null => {
@@ -1166,6 +1196,38 @@ export default function SceneTagManagerPage() {
                                                         color={!d.primary_tag_id ? "danger" : "neutral"}
                                                     />
                                                 </Box>
+
+                                                {/* Recommended tags */}
+                                                {(() => {
+                                                    const recommendedTags = getRecommendedTags(d.primary_tag_id, d.tag_ids);
+                                                    return recommendedTags.length > 0 ? (
+                                                        <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-start", flexWrap: "wrap" }}>
+                                                            <Typography level="body-sm" sx={{ minWidth: 84, mt: 0.6, fontSize: "0.75rem" }}>
+                                                                Recommended
+                                                            </Typography>
+                                                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, flex: 1 }}>
+                                                                {recommendedTags.map((tag) => (
+                                                                    <Chip
+                                                                        key={tag.id}
+                                                                        size="sm"
+                                                                        variant="soft"
+                                                                        color="primary"
+                                                                        onClick={() => handleAddRecommendedTag(id, tag.id)}
+                                                                        sx={{
+                                                                            cursor: "pointer",
+                                                                            "&:hover": {
+                                                                                transform: "translateY(-1px)",
+                                                                                boxShadow: "sm"
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {tag.name}
+                                                                    </Chip>
+                                                                ))}
+                                                            </Box>
+                                                        </Box>
+                                                    ) : null;
+                                                })()}
 
                                                 {/* Other tags */}
                                                 <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-start", flexWrap: "wrap" }}>
