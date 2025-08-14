@@ -517,12 +517,6 @@ export default function SceneTagManagerPage() {
         const d = drafts[id];
         if (!d) return;
 
-        // Validate primary tag exists
-        if (!d.primary_tag_id) {
-            alert('Primary tag is required for all markers.');
-            return;
-        }
-
         if (isTemp(id)) {
             try {
                 setSavingId(id);
@@ -1299,16 +1293,6 @@ export default function SceneTagManagerPage() {
                                                             <DeleteIcon fontSize="small" />
                                                         </IconButton>
                                                     </Tooltip>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="solid"
-                                                        disabled={savingThis || savingAll || !d.primary_tag_id}
-                                                        onClick={() => handleSaveRow(id)}
-                                                        color={!d.primary_tag_id ? "danger" : "primary"}
-                                                        sx={{ minWidth: 60 }}
-                                                    >
-                                                        {savingThis ? "Saving..." : "Save"}
-                                                    </Button>
                                                     <Button
                                                         size="sm"
                                                         variant="plain"
