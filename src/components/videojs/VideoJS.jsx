@@ -6,7 +6,9 @@ import vttThumbnails from 'videojs-vtt-thumbnails';
 import 'videojs-vtt-thumbnails/dist/videojs-vtt-thumbnails.css';
 import './vtt-thumbnails.css';
 import './custom-markers.css';
+import './custom-controls.css';
 import { processVttFile, cleanupVttBlob } from '../../lib/vttProcessor';
+import { Forward30Button, Backward30Button } from './CustomControls';
 
 videojs.registerPlugin('offset', videojsOffset);
 videojs.registerPlugin('vttThumbnails', vttThumbnails);
@@ -163,6 +165,17 @@ export const VideoJS = (props) => {
         if (offset) {
           player.offset(offset);
         }
+        
+        // Add custom skip controls to the control bar
+        const controlBar = player.controlBar;
+        
+        // Add backward 30s button 
+        const backward30Button = new Backward30Button(player);
+        controlBar.addChild(backward30Button);
+        
+        // Add forward 30s button
+        const forward30Button = new Forward30Button(player);
+        controlBar.addChild(forward30Button);
         
         // Initialize VTT thumbnails if VTT path is provided
         if (vttPath && stashServer && stashAPI) {

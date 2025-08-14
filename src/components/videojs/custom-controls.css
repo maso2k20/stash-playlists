@@ -1,0 +1,107 @@
+/* Custom Skip Controls Styles */
+.video-js .vjs-control-bar .vjs-forward-30-control,
+.video-js .vjs-control-bar .vjs-backward-30-control {
+  cursor: pointer !important;
+  flex: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 3em !important;
+  height: 100% !important;
+  text-align: center !important;
+}
+
+.video-js .vjs-control-bar .vjs-forward-30-control .vjs-icon-placeholder,
+.video-js .vjs-control-bar .vjs-backward-30-control .vjs-icon-placeholder {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  text-align: center !important;
+}
+
+.video-js .vjs-control-bar .vjs-forward-30-control .vjs-icon-placeholder span,
+.video-js .vjs-control-bar .vjs-backward-30-control .vjs-icon-placeholder span {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  text-align: center !important;
+}
+
+/* Button hover states */
+.video-js .vjs-forward-30-control:hover,
+.video-js .vjs-backward-30-control:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.video-js .vjs-forward-30-control:focus,
+.video-js .vjs-backward-30-control:focus {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* SVG icon styling */
+.video-js .vjs-control-bar .vjs-forward-30-control svg,
+.video-js .vjs-control-bar .vjs-backward-30-control svg {
+  width: 18px !important;
+  height: 18px !important;
+  fill: currentColor !important;
+  display: block !important;
+  margin: 0 auto !important;
+  vertical-align: middle !important;
+  text-align: center !important;
+}
+
+/* Ensure proper control bar ordering: Play, Mute, Back, Forward, Progress, Time, Fullscreen */
+.video-js .vjs-control-bar .vjs-play-control {
+  order: 1;
+}
+
+.video-js .vjs-control-bar .vjs-mute-control {
+  order: 2;
+}
+
+.video-js .vjs-control-bar .vjs-backward-30-control {
+  order: 3;
+}
+
+.video-js .vjs-control-bar .vjs-forward-30-control {
+  order: 4;
+}
+
+.video-js .vjs-control-bar .vjs-progress-control {
+  order: 5;
+}
+
+.video-js .vjs-control-bar .vjs-current-time,
+.video-js .vjs-control-bar .vjs-duration,
+.video-js .vjs-control-bar .vjs-time-divider {
+  order: 6;
+}
+
+.video-js .vjs-control-bar .vjs-volume-panel {
+  order: 7;
+}
+
+.video-js .vjs-control-bar .vjs-fullscreen-control {
+  order: 8;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .video-js .vjs-forward-30-control,
+  .video-js .vjs-backward-30-control {
+    width: 2.5em;
+  }
+  
+  .video-js .vjs-forward-30-control svg,
+  .video-js .vjs-backward-30-control svg {
+    width: 16px;
+    height: 16px;
+  }
+}

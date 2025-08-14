@@ -104,6 +104,11 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Non-intrusive markers that don't interfere with timeline seeking
   - Range indicators for markers with duration
   - VTT thumbnails integration for video preview
+  - **30-Second Skip Controls**: Custom rewind/fast-forward buttons in control bar
+    - Backward 30s button with counterclockwise arrow icon
+    - Forward 30s button with clockwise arrow icon  
+    - Positioned between mute and progress controls for optimal UX
+    - Respects video boundaries (won't skip before start or beyond end)
 - **Rating Integration**: Rate markers directly in the editing interface with auto-save
 - **Common Tags**: Bulk add/remove arbitrary tags to all markers with toggle for add/remove mode
 - **Performer Tags**: Pre-populated with all performer tags, allowing bulk application to markers:
