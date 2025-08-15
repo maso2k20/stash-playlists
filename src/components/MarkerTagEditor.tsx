@@ -75,8 +75,22 @@ export default function MarkerTagEditor({
 
   const recommendedTags = getRecommendedTags(draftPrimaryTagId, draftTagIds);
 
+  // Get primary tag recommendations - tags with children, for when no primary tag is selected
+  const getPrimaryTagRecommendations = (): Tag[] => {
+    return tagOptions.filter(tag => tag.children && tag.children.length > 0);
+  };
+
   // Handle adding a recommended tag
   const handleAddRecommendedTag = (tagId: string) => {
+    if (!draftTagIds.includes(tagId)) {
+      setDraftTagIds(prev => [...prev, tagId]);
+    }
+  };
+
+  // Handle selecting a primary tag from recommendations
+  const handleSelectPrimaryTag = (tagId: string) => {
+    setDraftPrimaryTagId(tagId);
+    // Also include primary tag in the tag IDs
     if (!draftTagIds.includes(tagId)) {
       setDraftTagIds(prev => [...prev, tagId]);
     }
@@ -151,6 +165,7 @@ export default function MarkerTagEditor({
             <Typography level="body-sm" sx={{ mb: 0.5, fontWeight: 500 }}>
               Primary Tag *
             </Typography>
+            
             <Autocomplete
               size="sm"
               options={tagOptions}
@@ -162,6 +177,39 @@ export default function MarkerTagEditor({
               color={!draftPrimaryTagId ? "danger" : "neutral"}
               disabled={loading || saving}
             />
+            
+            {/* Primary tag recommendations - only show when no primary tag selected */}
+            {!draftPrimaryTagId && (() => {
+              const primaryRecommendations = getPrimaryTagRecommendations();
+              return primaryRecommendations.length > 0 ? (
+                <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
+                  <Typography level="body-xs" sx={{ opacity: 0.8 }}>
+                    Recommended:
+                  </Typography>
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                    {primaryRecommendations.slice(0, 8).map((tag) => (
+                      <Chip
+                        key={tag.id}
+                        size="sm"
+                        variant="soft"
+                        color="success"
+                        onClick={() => handleSelectPrimaryTag(tag.id)}
+                        sx={{
+                          cursor: "pointer",
+                          fontSize: "0.75rem",
+                          "&:hover": {
+                            transform: "translateY(-1px)",
+                            boxShadow: "sm"
+                          }
+                        }}
+                      >
+                        {tag.name}
+                      </Chip>
+                    ))}
+                  </Box>
+                </Box>
+              ) : null;
+            })()}
           </Box>
 
           {/* Additional Tags with Recommended Tags */}

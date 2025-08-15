@@ -497,6 +497,11 @@ export default function SceneTagManagerPage() {
         );
     };
 
+    // Get primary tag recommendations - tags with children, for when no primary tag is selected
+    const getPrimaryTagRecommendations = (): Tag[] => {
+        return tagOptions.filter(tag => tag.children && tag.children.length > 0);
+    };
+
     // Handle adding a recommended tag to the marker
     const handleAddRecommendedTag = (markerId: string, tagId: string) => {
         const d = drafts[markerId];
@@ -508,6 +513,14 @@ export default function SceneTagManagerPage() {
                 tag_ids: [...d.tag_ids, tagId]
             });
         }
+    };
+
+    // Handle selecting a primary tag from recommendations
+    const handleSelectPrimaryTag = (markerId: string, tagId: string) => {
+        setDraft(markerId, { 
+            primary_tag_id: tagId,
+            tag_ids: [tagId] // Include primary tag in tag_ids as well
+        });
     };
 
     // Find tag ID by name from available tags
@@ -1231,22 +1244,22 @@ export default function SceneTagManagerPage() {
                                                     />
                                                 </Box>
 
-                                                {/* Recommended tags */}
-                                                {(() => {
-                                                    const recommendedTags = getRecommendedTags(d.primary_tag_id, d.tag_ids);
-                                                    return recommendedTags.length > 0 ? (
+                                                {/* Primary tag recommendations - only show when no primary tag selected */}
+                                                {!d.primary_tag_id && (() => {
+                                                    const primaryRecommendations = getPrimaryTagRecommendations();
+                                                    return primaryRecommendations.length > 0 ? (
                                                         <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-start", flexWrap: "wrap" }}>
                                                             <Typography level="body-sm" sx={{ minWidth: 84, mt: 0.6, fontSize: "0.75rem" }}>
                                                                 Recommended
                                                             </Typography>
                                                             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, flex: 1 }}>
-                                                                {recommendedTags.map((tag) => (
+                                                                {primaryRecommendations.slice(0, 10).map((tag) => (
                                                                     <Chip
                                                                         key={tag.id}
                                                                         size="sm"
                                                                         variant="soft"
-                                                                        color="primary"
-                                                                        onClick={() => handleAddRecommendedTag(id, tag.id)}
+                                                                        color="success"
+                                                                        onClick={() => handleSelectPrimaryTag(id, tag.id)}
                                                                         sx={{
                                                                             cursor: "pointer",
                                                                             "&:hover": {
@@ -1293,6 +1306,38 @@ export default function SceneTagManagerPage() {
                                                         placeholder="Add tags…"
                                                     />
                                                 </Box>
+
+                                                {/* Recommended tags */}
+                                                {(() => {
+                                                    const recommendedTags = getRecommendedTags(d.primary_tag_id, d.tag_ids);
+                                                    return recommendedTags.length > 0 ? (
+                                                        <Box sx={{ display: "flex", gap: 0.5, alignItems: "flex-start", flexWrap: "wrap" }}>
+                                                            <Typography level="body-sm" sx={{ minWidth: 84, mt: 0.6, fontSize: "0.75rem" }}>
+                                                                Recommended
+                                                            </Typography>
+                                                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, flex: 1 }}>
+                                                                {recommendedTags.map((tag) => (
+                                                                    <Chip
+                                                                        key={tag.id}
+                                                                        size="sm"
+                                                                        variant="soft"
+                                                                        color="primary"
+                                                                        onClick={() => handleAddRecommendedTag(id, tag.id)}
+                                                                        sx={{
+                                                                            cursor: "pointer",
+                                                                            "&:hover": {
+                                                                                transform: "translateY(-1px)",
+                                                                                boxShadow: "sm"
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {tag.name}
+                                                                    </Chip>
+                                                                ))}
+                                                            </Box>
+                                                        </Box>
+                                                    ) : null;
+                                                })()}
 
                                                 {/* Rating */}
                                                 <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>

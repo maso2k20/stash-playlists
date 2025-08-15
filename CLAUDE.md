@@ -51,6 +51,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - URL-based API key authentication for media/file endpoints (`?api_key=`)
 - Connection testing endpoint with detailed error reporting and version detection
 - Proxy endpoint at `/api/stash-graphql` for client-side GraphQL requests
+- **Enhanced Tag Context**: `src/context/StashTagsContext.tsx` with comprehensive tag data including `child_count` and nested children for smart recommendations
 
 **State Management:**
 - `src/app/context/SettingsContext.tsx` - Global settings context
@@ -141,11 +142,15 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Visual feedback on required primary tag autocomplete field
   - Preserves all edits when save is blocked (no page reload/data loss)
 - **Tag Recommendations**: Smart tag suggestions based on primary tag relationships:
-  - Shows child tags of selected primary tag as clickable chips
-  - Automatically filters out already selected tags
-  - One-click addition to marker's tag collection
-  - Clean JoyUI chip design with hover effects
-  - Only appears when primary tag has children and recommendations are available
+  - **Primary Tag Suggestions**: Shows tags with children as green "Recommended" chips when no primary tag is selected
+    - Helps users discover parent category tags quickly
+    - Only displays when primary tag field is empty
+    - One-click selection sets both primary tag and includes in tag collection
+  - **Child Tag Recommendations**: Shows child tags of selected primary tag as blue clickable chips
+    - Automatically filters out already selected tags
+    - One-click addition to marker's tag collection
+    - Only appears when primary tag has children and recommendations are available
+  - Clean JoyUI chip design with hover effects and consistent styling
 
 ### Playlist Player Features
 Enhanced playlist playbook experience at `/playlists/[id]`:

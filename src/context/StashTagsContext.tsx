@@ -10,9 +10,12 @@ const GET_STASH_TAGS = gql`
         name
         scene_count
         image_path
+        child_count
         children {
           id
           name
+          scene_count
+          child_count
         }
       }
     }
