@@ -50,21 +50,20 @@ export async function createBackup(): Promise<string> {
   const backupFilename = `stash-playlists-${timestamp}.db`;
   const backupPath = path.join(BACKUP_DIR, backupFilename);
   
-  // Use SQLite's VACUUM INTO command to create a compact backup
-  const Database = (await import('better-sqlite3')).default;
+  // Use Prisma to execute VACUUM INTO command (avoids database locking issues)
+  const prisma = new PrismaClient();
   
   try {
-    const db = new Database(DB_PATH, { readonly: true });
-    
     // Create backup using VACUUM INTO (creates a clean, compacted copy)
-    db.exec(`VACUUM INTO '${backupPath}'`);
-    db.close();
+    await prisma.$executeRaw`VACUUM INTO ${backupPath}`;
     
     console.log(`Backup created successfully: ${backupFilename}`);
     return backupFilename;
   } catch (error) {
     console.error('Backup failed:', error);
     throw new Error(`Backup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 

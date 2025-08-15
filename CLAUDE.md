@@ -231,10 +231,11 @@ Automated backup solution with scheduled and manual backup capabilities:
 - **Storage Locations**: 
   - Development: `./backups/` directory in project root
   - Production: `/data/backups/` for persistent Docker storage
-- **Backup Format**: SQLite VACUUM INTO creates compact, clean database copies
+- **Backup Format**: SQLite VACUUM INTO creates compact, clean database copies using Prisma for connection pooling
 - **Safety Features**: Creates backup of current database before restore operations
 - **API Endpoints**: `/api/backup` with actions for create, delete, restore, cleanup, update-schedule
 - **Settings Integration**: Complete backup controls integrated into settings page with status display
 - **Initialization**: Backup service automatically starts with application via `AppInitializer` component
 - **Environment Aware**: Automatically detects development vs production database paths
 - **Error Handling**: Comprehensive error handling with user-friendly feedback messages
+- **Database Compatibility**: Uses Prisma's `$executeRaw` instead of direct SQLite connections to prevent locking conflicts in production
