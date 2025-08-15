@@ -41,19 +41,27 @@ const addCustomMarkers = (player, markers) => {
       const markerTime = marker.time;
       const markerDuration = marker.duration || 0;
       const percentage = (markerTime / duration) * 100;
+      const isActive = marker.isActive || false;
       
       // Create marker element
       const markerEl = document.createElement('div');
-      markerEl.className = 'custom-video-marker';
+      markerEl.className = `custom-video-marker ${isActive ? 'active' : ''}`;
+      markerEl.setAttribute('data-marker-id', marker.id || '');
       markerEl.style.position = 'absolute';
       markerEl.style.left = percentage + '%';
       markerEl.style.top = '0';
       markerEl.style.bottom = '0';
-      markerEl.style.width = '3px';
-      markerEl.style.backgroundColor = '#2196F3';
-      markerEl.style.zIndex = '1000';
+      markerEl.style.width = isActive ? '5px' : '3px';
+      markerEl.style.backgroundColor = isActive ? '#42A5F5' : '#2196F3';
+      markerEl.style.zIndex = isActive ? '1001' : '1000';
       markerEl.style.cursor = 'default';
       markerEl.style.borderRadius = '2px';
+      markerEl.style.transition = 'all 0.2s ease';
+      
+      // Add subtle glow effect for active marker
+      if (isActive) {
+        markerEl.style.boxShadow = '0 0 8px rgba(66, 165, 245, 0.8)';
+      }
       
       // Create custom tooltip
       const tooltipEl = document.createElement('div');
@@ -91,17 +99,19 @@ const addCustomMarkers = (player, markers) => {
         const widthPercentage = Math.max(0.5, endPercentage - percentage); // Minimum width
         
         const rangeEl = document.createElement('div');
-        rangeEl.className = 'custom-video-marker-range';
+        rangeEl.className = `custom-video-marker-range ${isActive ? 'active' : ''}`;
+        rangeEl.setAttribute('data-marker-id', marker.id || '');
         rangeEl.style.position = 'absolute';
         rangeEl.style.left = percentage + '%';
         rangeEl.style.top = '0';
         rangeEl.style.bottom = '0';
         rangeEl.style.width = widthPercentage + '%';
-        rangeEl.style.backgroundColor = 'rgba(33, 150, 243, 0.4)';
-        rangeEl.style.zIndex = '998';
+        rangeEl.style.backgroundColor = isActive ? 'rgba(66, 165, 245, 0.3)' : 'rgba(33, 150, 243, 0.4)';
+        rangeEl.style.zIndex = isActive ? '999' : '998';
         rangeEl.style.borderRadius = '2px';
-        rangeEl.style.border = '1px solid rgba(33, 150, 243, 0.6)';
+        rangeEl.style.border = isActive ? '1px solid rgba(66, 165, 245, 0.8)' : '1px solid rgba(33, 150, 243, 0.6)';
         rangeEl.style.cursor = 'default';
+        rangeEl.style.transition = 'all 0.2s ease';
         
         // Create tooltip for range
         const rangeTooltipEl = document.createElement('div');

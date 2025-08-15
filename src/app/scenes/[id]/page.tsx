@@ -1,7 +1,7 @@
 // filepath: src/app/scenes/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, gql } from "@apollo/client";
 import {
@@ -218,6 +218,9 @@ export default function SceneTagManagerPage() {
     const playerRef = useRef<any>(null);
     const [playerReady, setPlayerReady] = useState(false);
     const [hasStarted, setHasStarted] = useState(false);
+    
+    // Active marker tracking
+    const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
 
     // Delete confirmation dialog
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -557,6 +560,19 @@ export default function SceneTagManagerPage() {
         const d = drafts[id];
         if (!d) return;
 
+        // Check if marker has both start and end times
+        if (typeof d.seconds !== "number" || d.seconds < 0 || 
+            d.end_seconds === null || typeof d.end_seconds !== "number" || d.end_seconds < 0) {
+            alert("Cannot save marker: Both start time and end time are required.");
+            return;
+        }
+
+        // Validate that end time is after start time
+        if (d.end_seconds <= d.seconds) {
+            alert("Cannot save marker: End time must be after start time.");
+            return;
+        }
+
         if (isTemp(id)) {
             try {
                 setSavingId(id);
@@ -735,6 +751,27 @@ export default function SceneTagManagerPage() {
         
         if (markersWithoutPrimaryTag.length > 0) {
             alert(`Cannot save: ${markersWithoutPrimaryTag.length} marker(s) are missing primary tags. Please add primary tags to all markers before saving.`);
+            return;
+        }
+
+        // Check if any markers are missing start or end times
+        const markersWithoutTimes = allEntries.filter(({ d }) => 
+            typeof d!.seconds !== "number" || d!.seconds < 0 ||
+            d!.end_seconds === null || typeof d!.end_seconds !== "number" || d!.end_seconds < 0
+        );
+        
+        if (markersWithoutTimes.length > 0) {
+            alert(`Cannot save: ${markersWithoutTimes.length} marker(s) are missing start or end times. Please add both start and end times to all markers before saving.`);
+            return;
+        }
+
+        // Check if any markers have end time before or equal to start time
+        const markersWithInvalidTimes = allEntries.filter(({ d }) => 
+            typeof d!.seconds === "number" && typeof d!.end_seconds === "number" && d!.end_seconds <= d!.seconds
+        );
+        
+        if (markersWithInvalidTimes.length > 0) {
+            alert(`Cannot save: ${markersWithInvalidTimes.length} marker(s) have end times that are not after start times. Please ensure end times are after start times for all markers.`);
             return;
         }
 
@@ -922,6 +959,78 @@ export default function SceneTagManagerPage() {
         }
     };
 
+    // Find closest marker to current time
+    const findClosestMarker = useCallback((currentTime: number): string | null => {
+        if (!markers || markers.length === 0) return null;
+        
+        let closestId: string | null = null;
+        let closestDistance = Infinity;
+        
+        // Include both existing markers and new markers in drafts
+        const allMarkerIds = [...markers.map(m => m.id), ...newIds];
+        
+        for (const id of allMarkerIds) {
+            const marker = markers.find(m => m.id === id);
+            const draft = drafts[id];
+            
+            if (!draft && !marker) continue;
+            
+            // Get marker time from draft or original marker
+            const markerTime = draft?.seconds ?? marker?.seconds ?? 0;
+            const distance = Math.abs(currentTime - markerTime);
+            
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestId = id;
+            }
+        }
+        
+        return closestId;
+    }, [markers, drafts, newIds]);
+
+    // Throttled update of active marker
+    const updateActiveMarker = useCallback(() => {
+        const currentTime = currentPlayerSecond();
+        const closestId = findClosestMarker(currentTime);
+        setActiveMarkerId(closestId);
+    }, [findClosestMarker]);
+
+    // Listen to video timeupdate to track closest marker with throttling
+    useEffect(() => {
+        const player = playerRef.current;
+        if (!player || !playerReady) return;
+
+        let throttleTimeout: NodeJS.Timeout | null = null;
+        
+        const throttledUpdate = () => {
+            if (throttleTimeout) return;
+            throttleTimeout = setTimeout(() => {
+                updateActiveMarker();
+                throttleTimeout = null;
+            }, 100); // Throttle to ~10fps
+        };
+
+        const immediateUpdate = () => {
+            updateActiveMarker();
+        };
+
+        player.on('timeupdate', throttledUpdate);
+        player.on('seeked', immediateUpdate);
+        
+        return () => {
+            player.off('timeupdate', throttledUpdate);
+            player.off('seeked', immediateUpdate);
+            if (throttleTimeout) {
+                clearTimeout(throttleTimeout);
+            }
+        };
+    }, [playerReady, updateActiveMarker]);
+
+    // Update active marker when drafts change (like when new markers are added)
+    useEffect(() => {
+        updateActiveMarker();
+    }, [drafts, newIds, updateActiveMarker]);
+
     // Removed handleCardClick - only the Jump button should trigger video seeking
 
     // Add a new inline marker row
@@ -942,14 +1051,31 @@ export default function SceneTagManagerPage() {
         setNewIds((prev) => [id, ...prev]);
     };
 
-    // Build render order: new drafts first, then server markers
+    // Build render order: sort all markers by time (chronological order)
     const markerMap = useMemo(() => {
         const m = new Map<string, Marker>();
         for (const mk of markers) m.set(mk.id, mk);
         return m;
     }, [markers]);
     const newIdsSet = useMemo(() => new Set(newIds), [newIds]);
-    const renderIds = [...newIds, ...markers.map((m) => m.id)];
+    
+    const renderIds = useMemo(() => {
+        // Combine all marker IDs (existing + new)
+        const allIds = [...newIds, ...markers.map((m) => m.id)];
+        
+        // Sort by time (seconds)
+        return allIds.sort((a, b) => {
+            const aMarker = markers.find(m => m.id === a);
+            const aDraft = drafts[a];
+            const aTime = aDraft?.seconds ?? aMarker?.seconds ?? 0;
+            
+            const bMarker = markers.find(m => m.id === b);
+            const bDraft = drafts[b];
+            const bTime = bDraft?.seconds ?? bMarker?.seconds ?? 0;
+            
+            return aTime - bTime;
+        });
+    }, [newIds, markers, drafts]);
 
     // Can the clock buttons read time?
     const canReadPlayerTime = playerReady && !!playerRef.current?.currentTime;
@@ -961,12 +1087,14 @@ export default function SceneTagManagerPage() {
         return markers
             .filter(marker => typeof marker.seconds === 'number' && marker.seconds >= 0)
             .map(marker => ({
+                id: marker.id,
                 time: marker.seconds,
                 text: marker.primary_tag?.name || marker.title || 'Untitled Marker',
-                duration: marker.end_seconds ? Math.max(0, marker.end_seconds - marker.seconds) : undefined
+                duration: marker.end_seconds ? Math.max(0, marker.end_seconds - marker.seconds) : undefined,
+                isActive: marker.id === activeMarkerId
             }))
             .sort((a, b) => a.time - b.time);
-    }, [markers]);
+    }, [markers, activeMarkerId]);
 
     return (
         <Container maxWidth={false} sx={{ px: { xs: 1, sm: 1.5, lg: 2 }, py: 1.5 }}>
@@ -1103,6 +1231,8 @@ export default function SceneTagManagerPage() {
                                         const savingThis = savingId === id;
                                         const otherTagIds = d.tag_ids.filter((tid) => tid !== d.primary_tag_id);
 
+                                        const isActiveMarker = id === activeMarkerId;
+
                                         return (
                                             <Card
                                                 key={id}
@@ -1111,8 +1241,12 @@ export default function SceneTagManagerPage() {
                                                     p: 1,
                                                     display: "grid",
                                                     gap: 0.5,
-                                                    transition: "transform 120ms ease, box-shadow 120ms ease",
+                                                    transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
                                                     "&:hover": { transform: "translateY(-1px)", boxShadow: "md" },
+                                                    // Active marker styling - subtle outline only
+                                                    ...(isActiveMarker && {
+                                                        boxShadow: "0 0 0 2px #42A5F5",
+                                                    }),
                                                 }}
                                             >
                                                 {/* Title row (stable widths) */}
@@ -1144,6 +1278,11 @@ export default function SceneTagManagerPage() {
                                                             alignItems: "center",
                                                         }}
                                                     >
+                                                        {isActiveMarker && (
+                                                            <Chip size="sm" variant="soft" color="primary" sx={{ fontWeight: 600 }}>
+                                                                ● Active
+                                                            </Chip>
+                                                        )}
                                                         {isNew && (
                                                             <Chip size="sm" variant="soft" color="primary">
                                                                 New

@@ -126,6 +126,11 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
     - Hover-activated horizontal volume slider popup
     - Timer display repositioned after progress bar for better layout
     - Clean popup design with proper hover area to prevent flickering
+  - **Active Marker Highlighting**: Real-time visual feedback for closest marker to current timeline position
+    - Timeline markers highlight in bright blue when closest to playback position
+    - Marker cards show subtle blue outline for active marker with "● Active" chip
+    - Automatic updates during timeline scrubbing and video playback
+    - Throttled performance optimization (~10fps) for smooth operation
 - **Rating Integration**: Rate markers directly in the editing interface with auto-save
 - **Back Navigation**: Smart back button that returns to referrer page (actors page) preserving filter state
 - **Common Tags**: Bulk add/remove arbitrary tags to all markers with toggle for add/remove mode
@@ -137,11 +142,20 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
 - **Bulk Operations**: Save All, Reset All functionality for efficient marker management
 - **Auto-tagging**: Automatically adds "Markers Organised" tag to scene when markers are saved
 - **Draft System**: Changes tracked as drafts with unsaved indicators and individual save/reset options
+- **Chronological Ordering**: Markers automatically sorted by timestamp in editing interface
+  - New markers placed in correct chronological position based on start time
+  - Real-time reordering when marker times are modified
+  - Mixed sorting of both existing and new markers for intuitive workflow
 - **Primary Tag Validation**: Prevents saving markers without primary tags:
   - Bulk Save All blocked with alert if any markers lack primary tags
   - Save All button styled red when any markers missing primary tags
   - Visual feedback on required primary tag autocomplete field
   - Preserves all edits when save is blocked (no page reload/data loss)
+- **Time Validation**: Comprehensive validation for marker timing:
+  - Prevents saving markers without both start and end times
+  - Validates that end time is after start time
+  - Applies to both individual saves and bulk Save All operations
+  - Clear error messages guide users to fix timing issues
 - **Tag Recommendations**: Smart tag suggestions based on primary tag relationships:
   - **Primary Tag Suggestions**: Shows tags with children as green "Recommended" chips when no primary tag is selected
     - Helps users discover parent category tags quickly

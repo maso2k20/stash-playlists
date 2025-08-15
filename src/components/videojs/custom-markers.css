@@ -9,6 +9,20 @@
   box-shadow: 0 0 8px rgba(33, 150, 243, 0.6);
 }
 
+/* Active marker styles */
+.custom-video-marker.active {
+  width: 5px !important;
+  background-color: #42A5F5 !important;
+  box-shadow: 0 0 8px rgba(66, 165, 245, 0.8) !important;
+  z-index: 1001 !important;
+}
+
+.custom-video-marker.active:hover {
+  width: 6px !important;
+  background-color: #29B6F6 !important;
+  box-shadow: 0 0 12px rgba(66, 165, 245, 1.0) !important;
+}
+
 .custom-video-marker-range {
   transition: all 0.2s ease;
 }
@@ -16,6 +30,18 @@
 .custom-video-marker-range:hover {
   background-color: rgba(33, 150, 243, 0.6) !important;
   border-color: rgba(33, 150, 243, 0.8) !important;
+}
+
+/* Active marker range styles */
+.custom-video-marker-range.active {
+  background-color: rgba(66, 165, 245, 0.3) !important;
+  border-color: rgba(66, 165, 245, 0.8) !important;
+  z-index: 999 !important;
+}
+
+.custom-video-marker-range.active:hover {
+  background-color: rgba(66, 165, 245, 0.5) !important;
+  border-color: rgba(66, 165, 245, 1.0) !important;
 }
 
 .custom-video-marker-tooltip {
