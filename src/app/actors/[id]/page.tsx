@@ -1,8 +1,9 @@
 // src/app/actors/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useQuery, gql } from "@apollo/client";
+import { useSmartMarkerCache } from "@/hooks/useSmartMarkerCache";
 import { useParams, useRouter } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
@@ -41,15 +42,16 @@ import { Search, ArrowUpDown, Plus } from "lucide-react";
 
 import StarRating from "@/components/StarRating";
 
-const GET_ALL_MARKERS = gql`
-  query findActorsSceneMarkers($actorId: ID!, $tagID: [ID!]!) {
+// Paginated queries for browsing (fast initial load)
+const GET_MARKERS_PAGINATED = gql`
+  query getActorMarkersPaginated($actorId: ID!, $pageNumber: Int!, $perPage: Int!) {
     findSceneMarkers(
       scene_marker_filter: {
         performers: { modifier: INCLUDES, value: [$actorId] }
-        tags: { modifier: INCLUDES, value: $tagID }
       }
-      filter: { per_page: -1 }
+      filter: { page: $pageNumber, per_page: $perPage }
     ) {
+      count
       scene_markers {
         id
         title
@@ -60,6 +62,59 @@ const GET_ALL_MARKERS = gql`
         preview
         scene { id }
       }
+    }
+  }
+`;
+
+// Filtered queries for search/tag filtering (all results)
+const GET_MARKERS_FILTERED = gql`
+  query getActorMarkersFiltered($actorId: ID!, $tagID: [ID!]!) {
+    findSceneMarkers(
+      scene_marker_filter: {
+        performers: { modifier: INCLUDES, value: [$actorId] }
+        tags: { modifier: INCLUDES, value: $tagID }
+      }
+      filter: { per_page: -1 }
+    ) {
+      count
+      scene_markers {
+        id
+        title
+        seconds
+        end_seconds
+        screenshot
+        stream
+        preview
+        scene { id }
+      }
+    }
+  }
+`;
+
+// Legacy queries for count-only checks (still needed for smart cache)
+const GET_MARKER_COUNT_FILTERED = gql`
+  query getActorMarkerCountFiltered($actorId: ID!, $tagID: [ID!]!) {
+    findSceneMarkers(
+      scene_marker_filter: {
+        performers: { modifier: INCLUDES, value: [$actorId] }
+        tags: { modifier: INCLUDES, value: $tagID }
+      }
+      filter: { per_page: 1 }
+    ) {
+      count
+    }
+  }
+`;
+
+const GET_MARKER_COUNT_UNFILTERED = gql`
+  query getActorMarkerCountUnfiltered($actorId: ID!) {
+    findSceneMarkers(
+      scene_marker_filter: {
+        performers: { modifier: INCLUDES, value: [$actorId] }
+      }
+      filter: { per_page: 1 }
+    ) {
+      count
     }
   }
 `;
@@ -90,6 +145,59 @@ function withApiKey(url: string, apiKey?: string) {
   if (!url || !apiKey) return url;
   if (/[?&]api_key=/.test(url)) return url;
   return url.includes("?") ? `${url}&api_key=${apiKey}` : `${url}?api_key=${apiKey}`;
+}
+
+// Reusable pagination controls component
+function PaginationControls({ 
+  pageNumber, 
+  perPage, 
+  allScenesLength, 
+  onPageChange, 
+  sx = {} 
+}: {
+  pageNumber: number;
+  perPage: number;
+  allScenesLength: number;
+  onPageChange: (page: number) => void;
+  sx?: any;
+}) {
+  return (
+    <Box sx={{ display: "flex", justifyContent: "center", gap: 1, alignItems: "center", ...sx }}>
+      <Button
+        size="sm"
+        variant="plain"
+        disabled={pageNumber <= 1}
+        onClick={() => onPageChange(pageNumber - 1)}
+      >
+        Previous
+      </Button>
+      
+      {/* Page numbers */}
+      {[pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2]
+        .filter((n) => n >= 1)
+        .map((n) => (
+          <Chip
+            key={n}
+            variant={n === pageNumber ? "solid" : "soft"}
+            color={n === pageNumber ? "primary" : "neutral"}
+            size="sm"
+            onClick={() => onPageChange(n)}
+            sx={{ cursor: "pointer" }}
+          >
+            {n}
+          </Chip>
+        ))}
+      
+      <Button
+        size="sm"
+        variant="plain"
+        disabled={allScenesLength < perPage} // Disable if current page has fewer items than perPage
+        onClick={() => onPageChange(pageNumber + 1)}
+      >
+        Next
+      </Button>
+    </Box>
+  );
 }
 
 function HoverPreview({
@@ -189,6 +297,14 @@ export default function Page() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("title-asc");
   
+  // Pagination state
+  const [pageNumber, setPageNumber] = useState(1);
+  const perPage = 42;
+  
+  // Track if we've already applied cached ratings to avoid loops
+  const hasAppliedCachedRatings = useRef(false);
+  const cachedRatingsRef = useRef<Record<string, number>>({});
+  
   // Initialize filters from URL on mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -211,18 +327,28 @@ export default function Page() {
     if (sortParam && ["title-asc", "title-desc", "duration-asc", "duration-desc", "rating-desc", "rating-asc"].includes(sortParam)) {
       setSortOption(sortParam as SortOption);
     }
+    
+    // Parse page number from URL
+    const pageParam = urlParams.get('page');
+    if (pageParam) {
+      const page = parseInt(pageParam, 10);
+      if (page > 0) {
+        setPageNumber(page);
+      }
+    }
   }, []);
 
   const pathname = usePathname();
   const isMarkersPage = !pathname?.includes("/scenes");
   
   // Function to update URL with current filter state
-  const updateURLWithFilters = (tags?: string[], search?: string, sort?: SortOption) => {
+  const updateURLWithFilters = (tags?: string[], search?: string, sort?: SortOption, page?: number) => {
     const params = new URLSearchParams();
     
     const currentTags = tags || selectedTagIds;
     const currentSearch = search !== undefined ? search : searchQuery;
     const currentSort = sort || sortOption;
+    const currentPage = page !== undefined ? page : pageNumber;
     
     if (currentTags.length > 0) {
       params.set('tags', currentTags.join(','));
@@ -232,6 +358,9 @@ export default function Page() {
     }
     if (currentSort !== 'title-asc') {
       params.set('sort', currentSort);
+    }
+    if (currentPage > 1) {
+      params.set('page', currentPage.toString());
     }
     
     const newUrl = `${pathname}${params.toString() ? `?${params.toString()}` : ''}`;
@@ -267,20 +396,64 @@ export default function Page() {
     [stashTags]
   );
   const selectedTagOptions = selectedTagIds.map(id => 
-    tagOptions.find(t => t.id === id)
+    tagOptions.find((t: any) => t.id === id)
   ).filter(Boolean);
 
-  // Query markers with either the chosen tags or all available tags
-  const tagIDsForFilter = selectedTagIds.length > 0
-    ? selectedTagIds
-    : (stashTags || []).map((tag: any) => String(tag.id));
+  // Stable empty array reference to prevent cache misses
+  const EMPTY_ARRAY: string[] = useMemo(() => [], []);
+  
+  // Determine if we're filtering (search or tags selected)
+  const isFiltering = useMemo(() => {
+    return searchQuery.trim() !== '' || selectedTagIds.length > 0;
+  }, [searchQuery, selectedTagIds]);
+  
+  // Query markers with chosen tags, or empty array for all markers
+  const tagIDsForFilter = useMemo(() => {
+    // Only use specific tags if selected, otherwise use stable empty array (= all markers)
+    return selectedTagIds.length > 0 ? selectedTagIds : EMPTY_ARRAY;
+  }, [selectedTagIds, EMPTY_ARRAY]);
 
-  const { data, loading, error } = useQuery(GET_ALL_MARKERS, {
-    variables: { actorId, tagID: tagIDsForFilter },
-    fetchPolicy: "cache-and-network",
+  // Choose query and parameters based on filtering state
+  const { query, variables } = useMemo(() => {
+    if (isFiltering) {
+      // When filtering: get all matching results
+      return {
+        query: GET_MARKERS_FILTERED,
+        variables: { actorId, tagID: tagIDsForFilter }
+      };
+    } else {
+      // When browsing: use pagination
+      return {
+        query: GET_MARKERS_PAGINATED,
+        variables: { actorId, pageNumber, perPage }
+      };
+    }
+  }, [isFiltering, actorId, tagIDsForFilter, pageNumber, perPage]);
+
+  // Use smart cache hook with dynamic query
+  const { 
+    data: allScenes, 
+    ratings: cachedRatings,
+    loading, 
+    error, 
+    isFromCache,
+    cacheAge,
+    refetch: refetchMarkers,
+    clearCache,
+    updateCachedRatings
+  } = useSmartMarkerCache({
+    actorId,
+    tagIds: tagIDsForFilter,
+    pageNumber: isFiltering ? undefined : pageNumber,
+    perPage: isFiltering ? undefined : perPage,
+    dataQuery: query,
+    enabled: !!actorId
   });
 
-  const allScenes = data?.findSceneMarkers?.scene_markers ?? [];
+  // Update ref when cachedRatings changes
+  useEffect(() => {
+    cachedRatingsRef.current = cachedRatings;
+  }, [cachedRatings]);
 
   // Filter and sort scenes
   const scenes = useMemo(() => {
@@ -322,23 +495,59 @@ export default function Page() {
     return sorted;
   }, [allScenes, searchQuery, sortOption, ratings]);
 
-  // Fetch ratings for current markers (use allScenes to avoid dependency loop)
+  // Fetch ratings for current markers (only if not from cache)
   useEffect(() => {
     if (allScenes.length === 0) return;
+    
+    // Skip if we just loaded from cache (even if ratings are empty - avoid refetching empty results)
+    if (isFromCache) {
+      console.log(`⚡ Cache: Using cached data, skipping ratings API (${Object.keys(cachedRatingsRef.current).length} cached ratings)`);
+      return;
+    }
     
     const markerIds = allScenes.map((marker: any) => marker.id);
     const idsParam = markerIds.join(',');
     
+    console.log(`📡 Fetching fresh ratings for ${markerIds.length} markers`);
+    // Fetch fresh ratings (they change more frequently than marker data)
     fetch(`/api/items/ratings?ids=${encodeURIComponent(idsParam)}`)
       .then(res => res.json())
       .then(data => {
+        console.log(`📊 Ratings API response:`, { success: data.success, ratingsCount: Object.keys(data.ratings || {}).length, sampleData: data });
         if (data.success && data.ratings) {
           setRatings(data.ratings);
+          
+          // Only update cache if we actually have ratings (avoid spamming with empty objects)
+          const ratingsCount = Object.keys(data.ratings).length;
+          if (ratingsCount > 0) {
+            console.log(`💾 Updating cache with fresh ratings for ${ratingsCount} items`);
+            updateCachedRatings(data.ratings);
+          } else {
+            // Still cache the empty ratings to avoid repeated API calls
+            updateCachedRatings(data.ratings);
+          }
         }
       })
       .catch(err => {
         console.error('Failed to fetch ratings:', err);
       });
+  }, [allScenes, isFromCache, updateCachedRatings]);
+
+  // Set initial cached ratings once when they become available
+  useEffect(() => {
+    if (
+      Object.keys(cachedRatings).length > 0 && 
+      !hasAppliedCachedRatings.current
+    ) {
+      console.log(`⚡ Applied cached ratings for ${Object.keys(cachedRatings).length} items`);
+      setRatings(cachedRatings);
+      hasAppliedCachedRatings.current = true;
+    }
+  }, [cachedRatings]);
+
+  // Reset the cached ratings flag when allScenes changes (new data set)
+  useEffect(() => {
+    hasAppliedCachedRatings.current = false;
   }, [allScenes]);
 
 
@@ -424,12 +633,21 @@ export default function Page() {
             </Link>
           </Box>
           {!anyLoading && allScenes.length > 0 && (
-            <Typography level="body-sm" color="neutral">
-              {scenes.length === allScenes.length 
-                ? `${scenes.length} marker${scenes.length === 1 ? '' : 's'}`
-                : `${scenes.length} of ${allScenes.length} markers`
-              }
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography level="body-sm" color="neutral">
+                {isFiltering 
+                  ? (scenes.length === allScenes.length 
+                      ? `${scenes.length} marker${scenes.length === 1 ? '' : 's'}`
+                      : `${scenes.length} of ${allScenes.length} markers`)
+                  : `Page ${pageNumber} • ${allScenes.length} marker${allScenes.length === 1 ? '' : 's'}`
+                }
+              </Typography>
+              {isFromCache && (
+                <Chip size="sm" variant="soft" color="success">
+                  {cacheAge !== undefined ? `Cached (${cacheAge}m)` : 'Cached'}
+                </Chip>
+              )}
+            </Box>
           )}
         </Box>
 
@@ -449,7 +667,8 @@ export default function Page() {
             onChange={(e) => {
               const newValue = e.target.value;
               setSearchQuery(newValue);
-              updateURLWithFilters(undefined, newValue);
+              setPageNumber(1); // Reset to first page on search
+              updateURLWithFilters(undefined, newValue, undefined, 1);
             }}
             startDecorator={<Search size={16} />}
             endDecorator={
@@ -459,7 +678,8 @@ export default function Page() {
                   variant="plain"
                   onClick={() => {
                     setSearchQuery("");
-                    updateURLWithFilters(undefined, "");
+                    setPageNumber(1);
+                    updateURLWithFilters(undefined, "", undefined, 1);
                   }}
                   sx={{ minHeight: 0, minWidth: 0 }}
                 >
@@ -471,25 +691,28 @@ export default function Page() {
           />
         </FormControl>
         
-        <FormControl sx={{ minWidth: { xs: "100%", lg: 180 } }}>
-          <Select
-            value={sortOption}
-            onChange={(_, value) => {
-              const newSort = value as SortOption;
-              setSortOption(newSort);
-              updateURLWithFilters(undefined, undefined, newSort);
-            }}
-            startDecorator={<ArrowUpDown size={16} />}
-            size="sm"
-          >
-            <Option value="title-asc">Title (A-Z)</Option>
-            <Option value="title-desc">Title (Z-A)</Option>
-            <Option value="duration-asc">Shortest First</Option>
-            <Option value="duration-desc">Longest First</Option>
-            <Option value="rating-desc">Highest Rated</Option>
-            <Option value="rating-asc">Lowest Rated</Option>
-          </Select>
-        </FormControl>
+        {/* Only show sorting when filtering (not when paginating) */}
+        {isFiltering && (
+          <FormControl sx={{ minWidth: { xs: "100%", lg: 180 } }}>
+            <Select
+              value={sortOption}
+              onChange={(_, value) => {
+                const newSort = value as SortOption;
+                setSortOption(newSort);
+                updateURLWithFilters(undefined, undefined, newSort);
+              }}
+              startDecorator={<ArrowUpDown size={16} />}
+              size="sm"
+            >
+              <Option value="title-asc">Title (A-Z)</Option>
+              <Option value="title-desc">Title (Z-A)</Option>
+              <Option value="duration-asc">Shortest First</Option>
+              <Option value="duration-desc">Longest First</Option>
+              <Option value="rating-desc">Highest Rated</Option>
+              <Option value="rating-asc">Lowest Rated</Option>
+            </Select>
+          </FormControl>
+        )}
 
         <FormControl sx={{ flexGrow: 2, minWidth: { xs: "100%", lg: 250 } }}>
           <Autocomplete
@@ -500,7 +723,8 @@ export default function Page() {
             onChange={(_e, val) => {
               const newTagIds = val.map(v => v.id);
               setSelectedTagIds(newTagIds);
-              updateURLWithFilters(newTagIds);
+              setPageNumber(1); // Reset to first page on filter change
+              updateURLWithFilters(newTagIds, undefined, undefined, 1);
             }}
             getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
             isOptionEqualToValue={(a, b) => a?.id === b?.id}
@@ -514,13 +738,42 @@ export default function Page() {
           disabled={selectedTagIds.length === 0}
           onClick={() => {
             setSelectedTagIds([]);
-            updateURLWithFilters([]);
+            setPageNumber(1);
+            updateURLWithFilters([], undefined, undefined, 1);
           }}
           sx={{ minWidth: "auto" }}
         >
           Clear tags
         </Button>
+        
+        {/* Debug: Cache controls */}
+        {isFromCache && (
+          <Button
+            size="sm"
+            variant="outlined"
+            color="neutral"
+            onClick={clearCache}
+            sx={{ minWidth: "auto" }}
+            title="Clear cache and refresh data"
+          >
+            Refresh Cache
+          </Button>
+        )}
       </Stack>
+
+      {/* Top Pagination Controls - only show when not filtering */}
+      {!isFiltering && !anyLoading && (
+        <PaginationControls 
+          pageNumber={pageNumber}
+          perPage={perPage}
+          allScenesLength={allScenes.length}
+          onPageChange={(newPage) => {
+            setPageNumber(newPage);
+            updateURLWithFilters(undefined, undefined, undefined, newPage);
+          }}
+          sx={{ mb: 2 }}
+        />
+      )}
 
       {/* Loading / Errors */}
       {anyLoading && (
@@ -574,7 +827,8 @@ export default function Page() {
               {searchQuery && (
                 <Button variant="plain" size="sm" onClick={() => {
                   setSearchQuery("");
-                  updateURLWithFilters(undefined, "");
+                  setPageNumber(1);
+                  updateURLWithFilters(undefined, "", undefined, 1);
                 }}>
                   Clear search
                 </Button>
@@ -582,7 +836,8 @@ export default function Page() {
               {selectedTagIds.length > 0 && (
                 <Button variant="plain" size="sm" onClick={() => {
                   setSelectedTagIds([]);
-                  updateURLWithFilters([]);
+                  setPageNumber(1);
+                  updateURLWithFilters([], undefined, undefined, 1);
                 }}>
                   Clear tags
                 </Button>
@@ -743,6 +998,19 @@ export default function Page() {
         </>
       )}
 
+      {/* Bottom Pagination Controls - only show when not filtering */}
+      {!isFiltering && !anyLoading && allScenes.length > 0 && (
+        <PaginationControls 
+          pageNumber={pageNumber}
+          perPage={perPage}
+          allScenesLength={allScenes.length}
+          onPageChange={(newPage) => {
+            setPageNumber(newPage);
+            updateURLWithFilters(undefined, undefined, undefined, newPage);
+          }}
+          sx={{ mt: 3 }}
+        />
+      )}
 
       {/* Single Marker Add to Playlist Dialog */}
       <Modal open={isSingleDialogOpen} onClose={() => setIsSingleDialogOpen(false)}>
