@@ -170,7 +170,7 @@ export default function ActorScenesPage() {
     const [markersOrganised, setMarkersOrganised] = useState<boolean>(false);
     
     // Get tag options from context
-    const { stashTags } = useStashTags();
+    const { stashTags, refetch: refetchTags } = useStashTags();
     
     // Find tag ID by name (same pattern as scenes detail page)
     const findTagIdByName = (tagName: string): string | null => {
@@ -289,6 +289,15 @@ export default function ActorScenesPage() {
                     disabled={!markersTagId}
                     onChange={(e) => setMarkersOrganised(e.target.checked)}
                 />
+                <Button
+                    size="sm"
+                    variant="outlined"
+                    color="neutral"
+                    onClick={() => refetchTags()}
+                    sx={{ ml: 'auto' }}
+                >
+                    Refresh Tags
+                </Button>
             </Box>
 
             {/* Loading skeletons */}

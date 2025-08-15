@@ -52,6 +52,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - Connection testing endpoint with detailed error reporting and version detection
 - Proxy endpoint at `/api/stash-graphql` for client-side GraphQL requests
 - **Enhanced Tag Context**: `src/context/StashTagsContext.tsx` with comprehensive tag data including `child_count` and nested children for smart recommendations
+- **Tag Refresh**: Manual refresh buttons available on scene editing and actor scenes pages to reload tags from Stash server without app restart
 
 **State Management:**
 - `src/app/context/SettingsContext.tsx` - Global settings context
@@ -151,6 +152,7 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
     - One-click addition to marker's tag collection
     - Only appears when primary tag has children and recommendations are available
   - Clean JoyUI chip design with hover effects and consistent styling
+- **Tag Refresh Button**: "Refresh Tags" button in page header allows manual reload of tag data from Stash server to update recommendations without restarting the application
 
 ### Playlist Player Features
 Enhanced playlist playbook experience at `/playlists/[id]`:
@@ -202,6 +204,7 @@ Enhanced marker browsing and selection on `/actors/[id]` pages with dual-query p
 - **Individual Playlist Addition**: Plus button on each marker card opens dialog to add single marker to playlists
 - **Rating Display**: Shows existing star ratings for previously rated markers via bulk API lookup
 - **Smart Empty States**: Different messages for no data vs filtered results with quick clear actions
+- **Tag Refresh Button**: "Refresh Tags" button in filter controls to reload tag data from Stash server without app restart
 
 ### Playlist Cover Image System
 Comprehensive image management for playlist personalization:

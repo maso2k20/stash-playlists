@@ -25,13 +25,13 @@ const GET_STASH_TAGS = gql`
 const StashTagsContext = createContext<any>(null);
 
 export const StashTagsProvider = ({ children }: { children: React.ReactNode }) => {
-  const { data, loading, error } = useQuery(GET_STASH_TAGS);
+  const { data, loading, error, refetch } = useQuery(GET_STASH_TAGS);
 
   // You can shape the value as needed
   const stashTags = data?.findTags?.tags ?? [];
 
   return (
-    <StashTagsContext.Provider value={{ stashTags, loading, error }}>
+    <StashTagsContext.Provider value={{ stashTags, loading, error, refetch }}>
       {children}
     </StashTagsContext.Provider>
   );

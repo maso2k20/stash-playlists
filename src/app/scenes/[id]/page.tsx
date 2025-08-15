@@ -153,7 +153,7 @@ export default function SceneTagManagerPage() {
     const markers: Marker[] = (scene?.scene_markers ?? []) as any;
 
     // Tag options from context
-    const { stashTags, loading: tagsLoading } = useStashTags();
+    const { stashTags, loading: tagsLoading, refetch: refetchTags } = useStashTags();
     const tagOptions: Tag[] = useMemo(
         () => (stashTags || []).map((t: any) => ({ 
             id: String(t.id), 
@@ -994,6 +994,15 @@ export default function SceneTagManagerPage() {
                         <Typography level="h2">
                             {scene?.title || "Scene"}
                         </Typography>
+                        <Box sx={{ flexGrow: 1 }} />
+                        <Button
+                            size="sm"
+                            variant="outlined"
+                            color="neutral"
+                            onClick={() => refetchTags()}
+                        >
+                            Refresh Tags
+                        </Button>
                     </Box>
                 )}
 
@@ -1457,7 +1466,7 @@ export default function SceneTagManagerPage() {
                             </Box>
 
                             {/* Performer Tags (bulk add/remove from performer tags) */}
-                            {console.log('Performer tags length:', performerTags.length) || performerTags.length > 0 && (
+                            {performerTags.length > 0 && (
                                 <Box
                                     sx={{
                                         borderTop: "1px solid",
