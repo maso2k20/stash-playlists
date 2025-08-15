@@ -155,8 +155,8 @@ export default function SceneTagManagerPage() {
     // Tag options from context
     const { stashTags, loading: tagsLoading, refetch: refetchTags } = useStashTags();
     const tagOptions: Tag[] = useMemo(
-        () => (stashTags || []).map((t: any) => ({ 
-            id: String(t.id), 
+        () => (stashTags || []).map((t: any) => ({
+            id: String(t.id),
             name: String(t.name),
             children: (t.children || []).map((c: any) => ({ id: String(c.id), name: String(c.name) }))
         })),
@@ -218,7 +218,7 @@ export default function SceneTagManagerPage() {
     const playerRef = useRef<any>(null);
     const [playerReady, setPlayerReady] = useState(false);
     const [hasStarted, setHasStarted] = useState(false);
-    
+
     // Active marker tracking
     const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
 
@@ -229,23 +229,23 @@ export default function SceneTagManagerPage() {
     // Ratings state
     const [ratings, setRatings] = useState<Record<string, number | null>>({});
     const [loadingRating, setLoadingRating] = useState<string | null>(null);
-    
+
     // Back navigation logic
     const [referrer, setReferrer] = useState<string | null>(null);
-    
+
     useEffect(() => {
         // Check if we came from an actors page
         if (document.referrer) {
             const referrerUrl = new URL(document.referrer);
             const referrerPath = referrerUrl.pathname;
-            
+
             // Check if referrer is an actors page
             if (referrerPath.startsWith('/actors/') && !referrerPath.includes('/scenes')) {
                 setReferrer(document.referrer);
             }
         }
     }, []);
-    
+
     // Handle back navigation
     const handleGoBack = () => {
         if (referrer) {
@@ -260,10 +260,10 @@ export default function SceneTagManagerPage() {
         const next: Record<string, Draft> = {};
         for (const m of markers) {
             const markerTagIds = (m.tags || []).map((t) => t.id);
-            const normalizedMarkerTagIds = m.primary_tag?.id 
+            const normalizedMarkerTagIds = m.primary_tag?.id
                 ? Array.from(new Set([m.primary_tag.id, ...markerTagIds]))
                 : markerTagIds;
-            
+
             next[m.id] = {
                 title: m.title || "",
                 seconds: Number(m.seconds || 0),
@@ -324,13 +324,13 @@ export default function SceneTagManagerPage() {
             if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
                 return;
             }
-            
+
             const player = playerRef.current;
             if (!player || !playerReady) return;
-            
+
             let handled = false;
             const currentTime = player.currentTime();
-            
+
             switch (event.code) {
                 case 'ArrowLeft':
                     // Go back 5 seconds
@@ -355,7 +355,7 @@ export default function SceneTagManagerPage() {
                     handled = true;
                     break;
             }
-            
+
             if (handled) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -395,7 +395,7 @@ export default function SceneTagManagerPage() {
             } else {
                 const errorText = await response.text();
                 console.error('Failed to update rating:', response.status, errorText);
-                
+
                 // If item doesn't exist (404), create it first
                 if (response.status === 404) {
                     const marker = markers.find(m => m.id === markerId);
@@ -456,10 +456,10 @@ export default function SceneTagManagerPage() {
 
     const isDirtyExisting = (m: Marker, d: Draft) => {
         const serverTagIds = (m.tags || []).map((t) => t.id);
-        const serverNormalizedTagIds = m.primary_tag?.id 
+        const serverNormalizedTagIds = m.primary_tag?.id
             ? Array.from(new Set([m.primary_tag.id, ...serverTagIds]))
             : serverTagIds;
-        
+
         const server = {
             title: m.title || "",
             seconds: Number(m.seconds || 0),
@@ -467,7 +467,7 @@ export default function SceneTagManagerPage() {
             primary_tag_id: m.primary_tag?.id ?? null,
             tag_ids: serverNormalizedTagIds,
         };
-        
+
         const draftNormalizedTags = normalizedTagIds(d);
         const isDirty = (
             d.title !== server.title ||
@@ -476,8 +476,8 @@ export default function SceneTagManagerPage() {
             d.primary_tag_id !== server.primary_tag_id ||
             !eqShallowSet(draftNormalizedTags, server.tag_ids)
         );
-        
-        
+
+
         return isDirty;
     };
 
@@ -490,12 +490,12 @@ export default function SceneTagManagerPage() {
     // Get recommended tags based on primary tag children
     const getRecommendedTags = (primaryTagId: string | null, currentTagIds: string[]): Tag[] => {
         if (!primaryTagId) return [];
-        
+
         const primaryTag = tagOptions.find(t => t.id === primaryTagId);
         if (!primaryTag?.children) return [];
-        
+
         // Filter out tags that are already selected
-        return primaryTag.children.filter(child => 
+        return primaryTag.children.filter(child =>
             !currentTagIds.includes(child.id) && child.id !== primaryTagId
         );
     };
@@ -509,7 +509,7 @@ export default function SceneTagManagerPage() {
     const handleAddRecommendedTag = (markerId: string, tagId: string) => {
         const d = drafts[markerId];
         if (!d) return;
-        
+
         // Add the tag if it's not already included
         if (!d.tag_ids.includes(tagId)) {
             setDraft(markerId, {
@@ -520,7 +520,7 @@ export default function SceneTagManagerPage() {
 
     // Handle selecting a primary tag from recommendations
     const handleSelectPrimaryTag = (markerId: string, tagId: string) => {
-        setDraft(markerId, { 
+        setDraft(markerId, {
             primary_tag_id: tagId,
             tag_ids: [tagId] // Include primary tag in tag_ids as well
         });
@@ -561,7 +561,7 @@ export default function SceneTagManagerPage() {
         if (!d) return;
 
         // Check if marker has both start and end times
-        if (typeof d.seconds !== "number" || d.seconds < 0 || 
+        if (typeof d.seconds !== "number" || d.seconds < 0 ||
             d.end_seconds === null || typeof d.end_seconds !== "number" || d.end_seconds < 0) {
             alert("Cannot save marker: Both start time and end time are required.");
             return;
@@ -748,28 +748,28 @@ export default function SceneTagManagerPage() {
         // Check if any markers are missing primary tags
         const allEntries = [...newEntries, ...dirtyExistingEntries];
         const markersWithoutPrimaryTag = allEntries.filter(({ d }) => !d!.primary_tag_id);
-        
+
         if (markersWithoutPrimaryTag.length > 0) {
             alert(`Cannot save: ${markersWithoutPrimaryTag.length} marker(s) are missing primary tags. Please add primary tags to all markers before saving.`);
             return;
         }
 
         // Check if any markers are missing start or end times
-        const markersWithoutTimes = allEntries.filter(({ d }) => 
+        const markersWithoutTimes = allEntries.filter(({ d }) =>
             typeof d!.seconds !== "number" || d!.seconds < 0 ||
             d!.end_seconds === null || typeof d!.end_seconds !== "number" || d!.end_seconds < 0
         );
-        
+
         if (markersWithoutTimes.length > 0) {
             alert(`Cannot save: ${markersWithoutTimes.length} marker(s) are missing start or end times. Please add both start and end times to all markers before saving.`);
             return;
         }
 
         // Check if any markers have end time before or equal to start time
-        const markersWithInvalidTimes = allEntries.filter(({ d }) => 
+        const markersWithInvalidTimes = allEntries.filter(({ d }) =>
             typeof d!.seconds === "number" && typeof d!.end_seconds === "number" && d!.end_seconds <= d!.seconds
         );
-        
+
         if (markersWithInvalidTimes.length > 0) {
             alert(`Cannot save: ${markersWithInvalidTimes.length} marker(s) have end times that are not after start times. Please ensure end times are after start times for all markers.`);
             return;
@@ -962,29 +962,29 @@ export default function SceneTagManagerPage() {
     // Find closest marker to current time
     const findClosestMarker = useCallback((currentTime: number): string | null => {
         if (!markers || markers.length === 0) return null;
-        
+
         let closestId: string | null = null;
         let closestDistance = Infinity;
-        
+
         // Include both existing markers and new markers in drafts
         const allMarkerIds = [...markers.map(m => m.id), ...newIds];
-        
+
         for (const id of allMarkerIds) {
             const marker = markers.find(m => m.id === id);
             const draft = drafts[id];
-            
+
             if (!draft && !marker) continue;
-            
+
             // Get marker time from draft or original marker
             const markerTime = draft?.seconds ?? marker?.seconds ?? 0;
             const distance = Math.abs(currentTime - markerTime);
-            
+
             if (distance < closestDistance) {
                 closestDistance = distance;
                 closestId = id;
             }
         }
-        
+
         return closestId;
     }, [markers, drafts, newIds]);
 
@@ -1001,7 +1001,7 @@ export default function SceneTagManagerPage() {
         if (!player || !playerReady) return;
 
         let throttleTimeout: NodeJS.Timeout | null = null;
-        
+
         const throttledUpdate = () => {
             if (throttleTimeout) return;
             throttleTimeout = setTimeout(() => {
@@ -1016,7 +1016,7 @@ export default function SceneTagManagerPage() {
 
         player.on('timeupdate', throttledUpdate);
         player.on('seeked', immediateUpdate);
-        
+
         return () => {
             player.off('timeupdate', throttledUpdate);
             player.off('seeked', immediateUpdate);
@@ -1058,21 +1058,21 @@ export default function SceneTagManagerPage() {
         return m;
     }, [markers]);
     const newIdsSet = useMemo(() => new Set(newIds), [newIds]);
-    
+
     const renderIds = useMemo(() => {
         // Combine all marker IDs (existing + new)
         const allIds = [...newIds, ...markers.map((m) => m.id)];
-        
+
         // Sort by time (seconds)
         return allIds.sort((a, b) => {
             const aMarker = markers.find(m => m.id === a);
             const aDraft = drafts[a];
             const aTime = aDraft?.seconds ?? aMarker?.seconds ?? 0;
-            
+
             const bMarker = markers.find(m => m.id === b);
             const bDraft = drafts[b];
             const bTime = bDraft?.seconds ?? bMarker?.seconds ?? 0;
-            
+
             return aTime - bTime;
         });
     }, [newIds, markers, drafts]);
@@ -1083,7 +1083,7 @@ export default function SceneTagManagerPage() {
     // Format markers for videojs-markers plugin
     const formatMarkersForVideoJS = useMemo(() => {
         if (!markers || markers.length === 0) return [];
-        
+
         return markers
             .filter(marker => typeof marker.seconds === 'number' && marker.seconds >= 0)
             .map(marker => ({
@@ -1143,12 +1143,12 @@ export default function SceneTagManagerPage() {
                                 {!loading && scene?.performers && scene.performers.length > 0 && (
                                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                                         {scene.performers.map((performer: any) => (
-                                            <Chip 
-                                                key={performer.id} 
-                                                size="sm" 
-                                                variant="outlined" 
+                                            <Chip
+                                                key={performer.id}
+                                                size="sm"
+                                                variant="outlined"
                                                 color="primary"
-                                                sx={{ 
+                                                sx={{
                                                     fontWeight: 500,
                                                     borderStyle: "solid",
                                                     borderWidth: 1.5
@@ -1176,15 +1176,15 @@ export default function SceneTagManagerPage() {
                                 >
                                     Reset All
                                 </Button>
-                                <Button 
-                                    size="sm" 
-                                    disabled={!dirtyCount || savingAll} 
+                                <Button
+                                    size="sm"
+                                    disabled={!dirtyCount || savingAll}
                                     onClick={handleSaveAll}
                                     color={(() => {
                                         const allEntries = [...newEntries, ...dirtyExistingEntries];
                                         const hasMarkersWithoutPrimaryTag = allEntries.some(({ d }) => !d!.primary_tag_id);
                                         return hasMarkersWithoutPrimaryTag ? "danger" : "primary";
-                                    })()} 
+                                    })()}
                                 >
                                     {savingAll ? "Saving…" : "Save"}
                                 </Button>
@@ -1237,16 +1237,20 @@ export default function SceneTagManagerPage() {
                                             <Card
                                                 key={id}
                                                 variant="soft"
-                                                sx={{
-                                                    p: 1,
-                                                    display: "grid",
-                                                    gap: 0.5,
-                                                    transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
-                                                    "&:hover": { transform: "translateY(-1px)", boxShadow: "md" },
-                                                    // Active marker styling - subtle outline only
-                                                    ...(isActiveMarker && {
-                                                        boxShadow: "0 0 0 2px #42A5F5",
-                                                    }),
+                                                sx={(theme) => {
+                                                    const activeRing = `0 0 0 2px ${theme.vars.palette.primary[500]}`;
+                                                    const hoverShadow = theme.vars.shadow.md;
+                                                    return {
+                                                        p: 1,
+                                                        display: "grid",
+                                                        gap: 0.5,
+                                                        transition: "transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
+                                                        boxShadow: isActiveMarker ? activeRing : undefined,
+                                                        "&:hover": {
+                                                            transform: "translateY(-1px)",
+                                                            boxShadow: isActiveMarker ? `${activeRing}, ${hoverShadow}` : hoverShadow,
+                                                        },
+                                                    };
                                                 }}
                                             >
                                                 {/* Title row (stable widths) */}
@@ -1379,9 +1383,9 @@ export default function SceneTagManagerPage() {
                                                         onChange={(_e, val) => setDraft(id, { primary_tag_id: val?.id ?? null })}
                                                         getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
-                                                        sx={{ 
-                                                            minWidth: 200, 
-                                                            flex: 1, 
+                                                        sx={{
+                                                            minWidth: 200,
+                                                            flex: 1,
                                                             maxWidth: 400,
                                                             '& .MuiAutocomplete-input': {
                                                                 color: !d.primary_tag_id ? 'danger.plainColor' : 'inherit'
