@@ -30,6 +30,11 @@ This is a Next.js application that creates playlists from Stash server markers, 
 
 ### Key Components
 
+**User Interface:**
+- `src/app/layout.tsx` - Modern navigation bar with Material-UI icons and hover effects
+- Clean navigation design with Home, Playlists, Actors, and Settings (cog icon)
+- Responsive layout with smooth transitions and theme compatibility
+
 **Data Layer:**
 - `src/lib/prisma.ts` - Database client with development query logging
 - `src/lib/smartPlaylistServer.ts` - Core smart playlist builder and Stash GraphQL integration
