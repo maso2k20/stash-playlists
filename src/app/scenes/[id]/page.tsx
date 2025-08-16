@@ -276,14 +276,20 @@ export default function SceneTagManagerPage() {
             };
         }
         setDrafts((prev) => {
-            // keep any existing tmp drafts, overwrite server ids
-            const keepTmp: Record<string, Draft> = {};
-            for (const id of Object.keys(prev)) {
-                if (id.startsWith("tmp_")) keepTmp[id] = prev[id];
+            // Preserve ALL existing drafts (both temporary and modified existing ones)
+            // Only initialize drafts for markers that don't already have drafts
+            const preserved = { ...prev };
+            
+            // Only add drafts for new markers that don't already exist
+            for (const [markerId, draft] of Object.entries(next)) {
+                if (!preserved[markerId]) {
+                    preserved[markerId] = draft;
+                }
             }
-            return { ...keepTmp, ...next };
+            
+            return preserved;
         });
-    }, [markers.length]);
+    }, [markers]);
 
     // Load ratings for existing markers
     useEffect(() => {
@@ -395,18 +401,19 @@ export default function SceneTagManagerPage() {
                     ...prev,
                     [markerId]: rating,
                 }));
+            } else if (response.status === 404) {
+                // Item doesn't exist yet, create it first (this is expected for new markers)
+                const marker = markers.find(m => m.id === markerId);
+                if (marker) {
+                    console.log('Item not found, creating it first...');
+                    await createItemForMarker(marker, rating);
+                } else {
+                    console.error('Failed to update rating: Marker not found for ID', markerId);
+                }
             } else {
+                // Log other non-404 errors
                 const errorText = await response.text();
                 console.error('Failed to update rating:', response.status, errorText);
-
-                // If item doesn't exist (404), create it first
-                if (response.status === 404) {
-                    const marker = markers.find(m => m.id === markerId);
-                    if (marker) {
-                        console.log('Item not found, creating it first...');
-                        await createItemForMarker(marker, rating);
-                    }
-                }
             }
         } catch (error) {
             console.error('Error updating rating:', error);
@@ -579,7 +586,7 @@ export default function SceneTagManagerPage() {
         if (isTemp(id)) {
             try {
                 setSavingId(id);
-                await createSceneMarker({
+                const result = await createSceneMarker({
                     variables: {
                         input: {
                             scene_id: sceneId,
@@ -594,7 +601,8 @@ export default function SceneTagManagerPage() {
                         },
                     },
                 });
-                // Remove temp
+                
+                // Remove temp marker from local state
                 setNewIds((prev) => prev.filter((x) => x !== id));
                 setDrafts((prev) => {
                     const newDrafts = { ...prev };
@@ -602,7 +610,7 @@ export default function SceneTagManagerPage() {
                     return newDrafts;
                 });
                 await addMarkersOrganisedTag();
-                // Delay refetch to prevent video jumping
+                // Refetch to ensure new marker appears - this is necessary for reliability
                 setTimeout(() => refetch(), 100);
             } catch (e) {
                 console.error("Failed to create marker:", e);
@@ -627,6 +635,33 @@ export default function SceneTagManagerPage() {
                             tag_ids: normalizedTagIds(d),
                         },
                     },
+                    update: (cache, { data }) => {
+                        if (data?.sceneMarkerUpdate) {
+                            // Update the cache with the updated marker
+                            const existingData = cache.readQuery({
+                                query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                variables: { id: sceneId }
+                            });
+                            
+                            if (existingData?.findScene) {
+                                const updatedMarkers = existingData.findScene.scene_markers.map(marker =>
+                                    marker.id === id ? data.sceneMarkerUpdate : marker
+                                );
+                                
+                                cache.writeQuery({
+                                    query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                    variables: { id: sceneId },
+                                    data: {
+                                        ...existingData,
+                                        findScene: {
+                                            ...existingData.findScene,
+                                            scene_markers: updatedMarkers
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
                 });
                 await addMarkersOrganisedTag();
                 // Immediately update the draft to match what was just saved to clear "unsaved" state
@@ -647,8 +682,7 @@ export default function SceneTagManagerPage() {
                         [id]: newDraft,
                     };
                 });
-                // Delay refetch to prevent video jumping
-                setTimeout(() => refetch(), 100);
+                // No refetch needed - local drafts are already updated to match saved state
             } catch (e) {
                 console.error("Failed to update marker:", e);
             } finally {
@@ -837,6 +871,32 @@ export default function SceneTagManagerPage() {
                             tag_ids: normalizedTagIds(d!),
                         },
                     },
+                    update: (cache, { data }) => {
+                        if (data?.sceneMarkerCreate) {
+                            // Update the cache to include the new marker
+                            const existingData = cache.readQuery({
+                                query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                variables: { id: sceneId }
+                            });
+                            
+                            if (existingData?.findScene) {
+                                cache.writeQuery({
+                                    query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                    variables: { id: sceneId },
+                                    data: {
+                                        ...existingData,
+                                        findScene: {
+                                            ...existingData.findScene,
+                                            scene_markers: [
+                                                ...existingData.findScene.scene_markers,
+                                                data.sceneMarkerCreate
+                                            ]
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
                 });
             }
 
@@ -856,6 +916,33 @@ export default function SceneTagManagerPage() {
                             tag_ids: normalizedTagIds(d!),
                         },
                     },
+                    update: (cache, { data }) => {
+                        if (data?.sceneMarkerUpdate) {
+                            // Update the cache with the updated marker
+                            const existingData = cache.readQuery({
+                                query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                variables: { id: sceneId }
+                            });
+                            
+                            if (existingData?.findScene) {
+                                const updatedMarkers = existingData.findScene.scene_markers.map(marker =>
+                                    marker.id === id ? data.sceneMarkerUpdate : marker
+                                );
+                                
+                                cache.writeQuery({
+                                    query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                    variables: { id: sceneId },
+                                    data: {
+                                        ...existingData,
+                                        findScene: {
+                                            ...existingData.findScene,
+                                            scene_markers: updatedMarkers
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
                 });
             }
 
@@ -881,8 +968,7 @@ export default function SceneTagManagerPage() {
                 return next;
             });
             await addMarkersOrganisedTag();
-            // Delay refetch to prevent video jumping
-            setTimeout(() => refetch(), 100);
+            // No refetch needed - local drafts are already updated to match saved state
         } catch (e) {
             console.error("Save all failed:", e);
         } finally {
@@ -1123,21 +1209,56 @@ export default function SceneTagManagerPage() {
     // Can the clock buttons read time?
     const canReadPlayerTime = playerReady && !!playerRef.current?.currentTime;
 
-    // Format markers for videojs-markers plugin
+    // Format markers for videojs-markers plugin (combines server markers with real-time draft changes)
     const formatMarkersForVideoJS = useMemo(() => {
-        if (!markers || markers.length === 0) return [];
-
-        return markers
-            .filter(marker => typeof marker.seconds === 'number' && marker.seconds >= 0)
-            .map(marker => ({
+        // Combine server markers with draft data for real-time updates
+        const combinedMarkers = [];
+        
+        // Add existing server markers with draft overlays
+        for (const marker of markers || []) {
+            const draft = drafts[marker.id];
+            const effectiveMarker = draft ? {
                 id: marker.id,
-                time: marker.seconds,
-                text: marker.primary_tag?.name || marker.title || 'Untitled Marker',
-                duration: marker.end_seconds ? Math.max(0, marker.end_seconds - marker.seconds) : undefined,
-                isActive: marker.id === activeMarkerId
-            }))
-            .sort((a, b) => a.time - b.time);
-    }, [markers, activeMarkerId]);
+                seconds: typeof draft.seconds === 'number' ? draft.seconds : marker.seconds,
+                end_seconds: draft.end_seconds !== undefined ? draft.end_seconds : marker.end_seconds,
+                title: draft.title || marker.title,
+                primary_tag: draft.primary_tag_id 
+                    ? tagOptions.find(t => t.id === draft.primary_tag_id) || marker.primary_tag
+                    : marker.primary_tag
+            } : marker;
+            
+            // Only include markers with valid times
+            if (typeof effectiveMarker.seconds === 'number' && effectiveMarker.seconds >= 0) {
+                combinedMarkers.push({
+                    id: effectiveMarker.id,
+                    time: effectiveMarker.seconds,
+                    text: effectiveMarker.primary_tag?.name || effectiveMarker.title || 'Untitled Marker',
+                    duration: effectiveMarker.end_seconds ? Math.max(0, effectiveMarker.end_seconds - effectiveMarker.seconds) : undefined,
+                    isActive: effectiveMarker.id === activeMarkerId
+                });
+            }
+        }
+        
+        // Add temporary markers from drafts
+        for (const newId of newIds) {
+            const draft = drafts[newId];
+            if (draft && typeof draft.seconds === 'number' && draft.seconds >= 0) {
+                const primaryTag = draft.primary_tag_id 
+                    ? tagOptions.find(t => t.id === draft.primary_tag_id)
+                    : null;
+                    
+                combinedMarkers.push({
+                    id: newId,
+                    time: draft.seconds,
+                    text: primaryTag?.name || draft.title || 'New Marker',
+                    duration: draft.end_seconds ? Math.max(0, draft.end_seconds - draft.seconds) : undefined,
+                    isActive: newId === activeMarkerId
+                });
+            }
+        }
+        
+        return combinedMarkers.sort((a, b) => a.time - b.time);
+    }, [markers, drafts, newIds, activeMarkerId, tagOptions]);
 
     return (
         <Container maxWidth={false} sx={{ px: { xs: 1, sm: 1.5, lg: 2 }, py: 1.5 }}>
@@ -1729,15 +1850,26 @@ export default function SceneTagManagerPage() {
                     </Grid>
 
                     {/* RIGHT: VideoJS player (60%) */}
-                    <Grid xs={12} md={7} sx={{ display: "flex" }}>
+                    <Grid xs={12} md={7} sx={{ 
+                        display: "flex",
+                        // Sticky positioning for desktop screens only
+                        position: { xs: "static", md: "sticky" },
+                        top: { md: 16 }, // Small offset from viewport top
+                        alignSelf: { md: "flex-start" }, // Align to top of grid container
+                        zIndex: { md: 10 }, // Above other content
+                        transition: "box-shadow 0.2s ease", // Smooth visual feedback
+                    }}>
                         <Sheet
                             variant="plain"
                             sx={{
                                 p: 0,
-                                borderRadius: 0,
+                                borderRadius: { xs: 0, md: "md" }, // Rounded corners on desktop
                                 bgcolor: "transparent",
                                 width: "100%",
                                 mx: "auto",
+                                // Add subtle shadow when sticky on desktop
+                                boxShadow: { xs: "none", md: "sm" },
+                                overflow: "hidden", // Ensure video doesn't break border radius
                             }}
                         >
                             <Box

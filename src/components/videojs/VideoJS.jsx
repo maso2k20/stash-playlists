@@ -328,10 +328,10 @@ const arePropsEqual = (prevProps, nextProps) => {
   // Check other critical props
   const offsetEqual = JSON.stringify(prevProps.offset) === JSON.stringify(nextProps.offset);
   const hasStartedEqual = prevProps.hasStarted === nextProps.hasStarted;
-  const markersEqual = JSON.stringify(prevProps.markers) === JSON.stringify(nextProps.markers);
   
-  // Only re-render if critical props have changed
-  return sourcesEqual && offsetEqual && hasStartedEqual && markersEqual;
+  // For markers, only re-render if sources change - let the useEffect handle marker updates
+  // This prevents video reloads when markers are added/updated
+  return sourcesEqual && offsetEqual && hasStartedEqual;
 };
 
 export default React.memo(VideoJS, arePropsEqual);

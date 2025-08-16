@@ -161,6 +161,12 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Uses explicit object copying instead of destructuring to prevent React state batching issues
   - Maintains all unsaved edits when performing delete operations on other markers
   - Applies to both temporary markers and existing markers being deleted
+  - Optimized to prevent video reloads during marker save operations
+- **Sticky Video Player**: Video player remains visible when scrolling through long marker lists:
+  - Uses CSS `position: sticky` on desktop screens (md+ breakpoints)
+  - Maintains video playback state during marker editing workflow
+  - Enhanced with subtle shadow and rounded corners when sticky
+  - Mobile devices use normal layout to avoid screen space conflicts
 - **Tag Recommendations**: Smart tag suggestions based on primary tag relationships:
   - **Primary Tag Suggestions**: Shows tags with children as green "Recommended" chips when no primary tag is selected
     - Helps users discover parent category tags quickly
