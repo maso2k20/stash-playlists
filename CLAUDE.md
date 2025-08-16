@@ -141,6 +141,9 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Bulk apply/remove to all markers with mode toggle
   - Reset functionality to restore full performer tag list
 - **Bulk Operations**: Save All, Reset All functionality for efficient marker management
+  - Concurrent save operations using Promise.all() for improved performance
+  - Parallel execution of create and update operations reduces total save time
+  - Apollo cache updates maintained for each operation to ensure UI consistency
 - **Auto-tagging**: Automatically adds "Markers Organised" tag to scene when markers are saved
 - **Draft System**: Changes tracked as drafts with unsaved indicators and individual save/reset options
 - **Chronological Ordering**: Markers automatically sorted by timestamp in editing interface

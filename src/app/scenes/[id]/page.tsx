@@ -854,10 +854,11 @@ export default function SceneTagManagerPage() {
 
         setSavingAll(true);
         try {
-            // Handle all mutations sequentially 
-            // Create all new markers
-            for (const { id, d } of newEntries) {
-                await createSceneMarker({
+            // Handle all mutations concurrently for better performance
+            
+            // Create all new markers in parallel
+            const createPromises = newEntries.map(({ id, d }) => 
+                createSceneMarker({
                     variables: {
                         input: {
                             scene_id: sceneId,
@@ -897,12 +898,12 @@ export default function SceneTagManagerPage() {
                             }
                         }
                     }
-                });
-            }
+                })
+            );
 
-            // Update all dirty existing markers
-            for (const { id, d } of dirtyExistingEntries) {
-                await updateSceneMarker({
+            // Update all dirty existing markers in parallel
+            const updatePromises = dirtyExistingEntries.map(({ id, d }) =>
+                updateSceneMarker({
                     variables: {
                         input: {
                             id,
@@ -943,8 +944,11 @@ export default function SceneTagManagerPage() {
                             }
                         }
                     }
-                });
-            }
+                })
+            );
+
+            // Wait for all operations to complete
+            await Promise.all([...createPromises, ...updatePromises]);
 
             // Clear temps and reset existing marker drafts to their saved state
             setNewIds([]);
