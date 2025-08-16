@@ -132,7 +132,7 @@ export function listBackups(): BackupInfo[] {
         filename: file,
         path: filePath,
         size: stats.size,
-        created: stats.birthtime,
+        created: stats.mtime,
       };
     })
     .sort((a, b) => b.created.getTime() - a.created.getTime());
@@ -153,8 +153,19 @@ export async function cleanupOldBackups(): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
     
+    console.log(`🔧 Cleanup: Retention days: ${retentionDays}`);
+    console.log(`🔧 Cleanup: Cutoff date: ${cutoffDate.toISOString()}`);
+    
     const backups = listBackups();
+    console.log(`🔧 Cleanup: Found ${backups.length} backup files`);
+    
+    // Log each backup's date for debugging
+    backups.forEach(backup => {
+      console.log(`🔧 Cleanup: ${backup.filename} - created: ${backup.created.toISOString()}`);
+    });
+    
     const toDelete = backups.filter(backup => backup.created < cutoffDate);
+    console.log(`🔧 Cleanup: ${toDelete.length} files marked for deletion`);
     
     let deletedCount = 0;
     for (const backup of toDelete) {

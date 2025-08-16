@@ -79,6 +79,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - Playlist images stored at `/data/playlist-images/` (persistent storage)
 - Automatic migration deployment and seeding via `entrypoint.sh`
 - Port 3000 exposed
+- Runs as non-root `nextjs` user (UID 1001) with proper file permissions for Next.js cache directories
 
 ### Smart Playlist Logic
 Located in `src/lib/smartPlaylistServer.ts:buildItemsForPlaylist()`:
