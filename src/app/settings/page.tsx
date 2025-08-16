@@ -342,17 +342,22 @@ export default function SettingsPage() {
   };
 
   const handleBackupAction = async (action: string, filename?: string) => {
+    console.log(`🔧 UI: Starting backup action: ${action}`, filename ? `with filename: ${filename}` : '');
     setBackupLoading(true);
     try {
+      console.log('🔧 UI: Sending backup request to API...');
       const res = await fetch('/api/backup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, filename }),
       });
       
+      console.log(`🔧 UI: API response status: ${res.status}`);
       const result = await res.json();
+      console.log('🔧 UI: API response data:', result);
       
       if (result.success) {
+        console.log('✅ UI: Backup action succeeded');
         setSnack({ 
           open: true, 
           msg: result.message, 
@@ -360,6 +365,7 @@ export default function SettingsPage() {
         });
         await loadBackupInfo();
       } else {
+        console.error('❌ UI: Backup action failed:', result.error);
         setSnack({ 
           open: true, 
           msg: result.error || 'Operation failed', 
@@ -367,9 +373,10 @@ export default function SettingsPage() {
         });
       }
     } catch (error) {
+      console.error('❌ UI: Backup action error:', error);
       setSnack({ 
         open: true, 
-        msg: 'Operation failed', 
+        msg: `Operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 
         color: 'danger' 
       });
     } finally {

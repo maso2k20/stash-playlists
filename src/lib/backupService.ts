@@ -37,32 +37,83 @@ let cronJob: cron.ScheduledTask | null = null;
 
 // Ensure backup directory exists
 export function ensureBackupDir(): void {
+  console.log(`🔧 Checking backup directory: ${BACKUP_DIR}`);
+  
   if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    console.log('🔧 Creating backup directory...');
+    try {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+      console.log('✅ Backup directory created successfully');
+    } catch (error) {
+      console.error('❌ Failed to create backup directory:', error);
+      throw error;
+    }
+  } else {
+    console.log('✅ Backup directory already exists');
+  }
+  
+  // Check if directory is writable
+  try {
+    const testFile = path.join(BACKUP_DIR, '.test-write');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    console.log('✅ Backup directory is writable');
+  } catch (error) {
+    console.error('❌ Backup directory is not writable:', error);
+    throw new Error(`Backup directory is not writable: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 // Create a backup file using SQLite's backup command
 export async function createBackup(): Promise<string> {
+  console.log('🔧 Starting backup process...');
+  console.log(`🔧 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🔧 Backup directory: ${BACKUP_DIR}`);
+  console.log(`🔧 Database path: ${DB_PATH}`);
+  
   ensureBackupDir();
+  console.log('🔧 Backup directory verified');
   
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const backupFilename = `stash-playlists-${timestamp}.db`;
   const backupPath = path.join(BACKUP_DIR, backupFilename);
   
+  console.log(`🔧 Backup filename: ${backupFilename}`);
+  console.log(`🔧 Full backup path: ${backupPath}`);
+  
   // Use Prisma to execute VACUUM INTO command (avoids database locking issues)
   const prisma = new PrismaClient();
   
   try {
+    console.log('🔧 Creating Prisma client connection...');
+    
     // Create backup using VACUUM INTO (creates a clean, compacted copy)
+    console.log('🔧 Executing VACUUM INTO command...');
     await prisma.$executeRaw`VACUUM INTO ${backupPath}`;
     
-    console.log(`Backup created successfully: ${backupFilename}`);
+    // Verify backup file was created
+    if (fs.existsSync(backupPath)) {
+      const stats = fs.statSync(backupPath);
+      console.log(`✅ Backup created successfully: ${backupFilename}`);
+      console.log(`✅ Backup file size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+    } else {
+      console.error('❌ Backup file was not created at expected path');
+      throw new Error('Backup file was not created');
+    }
+    
     return backupFilename;
   } catch (error) {
-    console.error('Backup failed:', error);
+    console.error('❌ Backup failed:', error);
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      backupPath,
+      backupDir: BACKUP_DIR,
+      dbPath: DB_PATH
+    });
     throw new Error(`Backup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   } finally {
+    console.log('🔧 Disconnecting Prisma client...');
     await prisma.$disconnect();
   }
 }

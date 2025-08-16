@@ -42,13 +42,18 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔧 API: Backup POST request received');
     const body = await request.json();
+    console.log('🔧 API: Request body:', body);
     const { action, filename } = body;
 
     switch (action) {
       case 'create': {
+        console.log('🔧 API: Creating backup...');
         const backupFilename = await createBackup();
+        console.log('✅ API: Backup created, running cleanup...');
         await cleanupOldBackups();
+        console.log('✅ API: Cleanup completed');
         return NextResponse.json({
           success: true,
           filename: backupFilename,
@@ -117,7 +122,8 @@ export async function POST(request: NextRequest) {
         );
     }
   } catch (error) {
-    console.error('Backup API error:', error);
+    console.error('❌ API: Backup API error:', error);
+    console.error('❌ API: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json(
       { 
         error: error instanceof Error ? error.message : 'Internal server error',
