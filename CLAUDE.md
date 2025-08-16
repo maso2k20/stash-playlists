@@ -203,6 +203,19 @@ Enhanced playlist browsing and organization at `/playlists`:
   - Prominent "Refreshing..." chip with spinning icon appears in stats row
   - Warning color and text provide immediate feedback during refresh operations
   - Complements existing dimmed refresh button for comprehensive user feedback
+- **Automatic Smart Playlist Refresh**: Scheduled refresh system to keep playlists synchronized:
+  - Configurable refresh intervals: hourly, daily, or weekly schedules
+  - Settings integration with scheduler restart on configuration changes
+  - Manual bulk refresh button on playlists page for immediate updates
+  - Refresh status display in settings showing schedule and last/next refresh times
+  - Background cron service using node-cron for reliable scheduling
+  - Comprehensive error handling and status reporting for refresh operations
+  - **Refresh Confirmation & Logging**: Complete audit trail for refresh operations:
+    - Persistent database logging via RefreshLog table tracking all refresh attempts
+    - Settings page displays recent refresh history with success/failure status
+    - Detailed logging shows refresh type (manual/scheduled), duration, and error details
+    - Real-time status indicators during refresh operations
+    - API endpoints for programmatic access to refresh status and history
 - **Responsive Layout**: Clean JoyUI header design with search and sort controls that stack on mobile
 - **Visual Feedback**: Proper loading states, empty states, and search result indicators
 - **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations

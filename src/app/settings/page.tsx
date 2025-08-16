@@ -25,7 +25,7 @@ import {
   FormHelperText,
 } from "@mui/joy";
 import { useColorScheme } from "@mui/joy/styles";
-import { Check, RotateCcw, Save, RefreshCw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload } from "lucide-react";
+import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload } from "lucide-react";
 import { 
   getSettingsByCategory, 
   getSettingDefinition, 
@@ -72,6 +72,25 @@ export default function SettingsPage() {
     created: string;
     sizeFormatted: string;
   }[]>([]);
+  const [refreshStatus, setRefreshStatus] = useState<{
+    enabled: boolean;
+    lastRefresh?: string;
+    nextRefresh?: string;
+    interval: string;
+    refreshHour: number;
+    refreshDay?: number;
+    isRunning: boolean;
+  } | null>(null);
+  const [refreshLoading, setRefreshLoading] = useState(false);
+  const [refreshHistory, setRefreshHistory] = useState<{
+    id: string;
+    refreshType: string;
+    success: boolean;
+    refreshedPlaylists: number;
+    errors: string[] | null;
+    duration: number;
+    createdAt: string;
+  }[]>([]);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
     msg: "",
@@ -108,6 +127,7 @@ export default function SettingsPage() {
   useEffect(() => {
     load();
     loadBackupInfo();
+    loadRefreshInfo();
   }, []);
 
   const loadBackupInfo = async () => {
@@ -120,6 +140,32 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load backup info:', error);
+    }
+  };
+
+  const loadRefreshInfo = async () => {
+    try {
+      // Load refresh status
+      const res = await fetch("/api/smart-playlists/refresh-all", { 
+        method: "GET",
+        cache: "no-store" 
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRefreshStatus(data.data);
+      }
+
+      // Load refresh history
+      const historyRes = await fetch("/api/smart-playlists/refresh-all?action=history", { 
+        method: "GET",
+        cache: "no-store" 
+      });
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setRefreshHistory(historyData.data);
+      }
+    } catch (error) {
+      console.error('Failed to load refresh info:', error);
     }
   };
 
@@ -263,10 +309,28 @@ export default function SettingsPage() {
           console.error('Failed to update backup schedule:', error);
         }
       }
+
+      // Update refresh scheduler if refresh settings changed
+      const refreshSettingsChanged = changed.some(c => 
+        ['SMART_PLAYLIST_REFRESH_ENABLED', 'SMART_PLAYLIST_REFRESH_INTERVAL', 'SMART_PLAYLIST_REFRESH_HOUR', 'SMART_PLAYLIST_REFRESH_DAY'].includes(c.key)
+      );
+      
+      if (refreshSettingsChanged) {
+        try {
+          await fetch('/api/smart-playlists/refresh-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'restart-scheduler' }),
+          });
+        } catch (error) {
+          console.error('Failed to update refresh scheduler:', error);
+        }
+      }
       
       // Refresh to sync updatedAt, also re-apply theme from server source of truth
       await load();
       await loadBackupInfo();
+      await loadRefreshInfo();
       setSnack({ open: true, msg: "Settings saved", color: "success" });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to save";
@@ -310,6 +374,41 @@ export default function SettingsPage() {
       });
     } finally {
       setBackupLoading(false);
+    }
+  };
+
+  const handleRefreshAction = async () => {
+    setRefreshLoading(true);
+    try {
+      const res = await fetch('/api/smart-playlists/refresh-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        setSnack({ 
+          open: true, 
+          msg: result.message, 
+          color: 'success' 
+        });
+      } else {
+        setSnack({ 
+          open: true, 
+          msg: result.message || 'Refresh failed', 
+          color: result.data?.refreshedPlaylists > 0 ? 'neutral' : 'danger'
+        });
+      }
+      await loadRefreshInfo();
+    } catch (error) {
+      setSnack({ 
+        open: true, 
+        msg: 'Refresh failed', 
+        color: 'danger' 
+      });
+    } finally {
+      setRefreshLoading(false);
     }
   };
 
@@ -675,6 +774,129 @@ export default function SettingsPage() {
                                       <Trash2 size={16} />
                                     </IconButton>
                                   </Tooltip>
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Add refresh controls for Smart Playlist Refresh category */}
+                  {category === 'Smart Playlist Refresh' && (
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                      <Typography level="title-md" sx={{ mb: 2 }}>
+                        Refresh Management
+                      </Typography>
+                      
+                      {/* Refresh Status */}
+                      {refreshStatus && (
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <RefreshCcw size={16} />
+                            <Typography level="body-sm" fontWeight="lg">
+                              Status: {refreshStatus.enabled ? 'Enabled' : 'Disabled'}
+                            </Typography>
+                            {refreshStatus.isRunning && (
+                              <Chip size="sm" variant="soft" color="warning">
+                                Running
+                              </Chip>
+                            )}
+                          </Box>
+                          
+                          {refreshStatus.enabled && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                              {refreshStatus.interval === 'hourly' ? (
+                                'Interval: Every hour at the top of the hour (e.g., 1:00, 2:00, 3:00...)'
+                              ) : refreshStatus.interval === 'weekly' ? (
+                                `Interval: Weekly on ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][refreshStatus.refreshDay || 0]} at ${refreshStatus.refreshHour}:00`
+                              ) : (
+                                `Interval: Daily at ${refreshStatus.refreshHour}:00`
+                              )}
+                            </Typography>
+                          )}
+                          
+                          {refreshStatus.lastRefresh && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                              Last refresh: {new Date(refreshStatus.lastRefresh).toLocaleString()}
+                            </Typography>
+                          )}
+                          
+                          {refreshStatus.nextRefresh && refreshStatus.enabled && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                              Next refresh: {new Date(refreshStatus.nextRefresh).toLocaleString()}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+                      
+                      {/* Manual Refresh Controls */}
+                      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                        <Button
+                          startDecorator={refreshLoading ? <RefreshCcw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+                          onClick={handleRefreshAction}
+                          disabled={refreshLoading}
+                          variant="solid"
+                          color="primary"
+                        >
+                          {refreshLoading ? 'Refreshing...' : 'Refresh All Smart Playlists'}
+                        </Button>
+                      </Box>
+                      
+                      <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                        Manual refresh will immediately update all smart playlists with new content from your Stash server. 
+                        Automatic refresh runs on the schedule configured above when enabled.
+                      </Typography>
+
+                      {/* Refresh History */}
+                      {refreshHistory.length > 0 && (
+                        <Box sx={{ mt: 3 }}>
+                          <Typography level="title-sm" sx={{ mb: 2 }}>
+                            Recent Refresh History
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 300, overflowY: 'auto' }}>
+                            {refreshHistory.map((log) => (
+                              <Box
+                                key={log.id}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 2,
+                                  p: 2,
+                                  border: '1px solid',
+                                  borderColor: 'neutral.200',
+                                  borderRadius: 'md',
+                                  bgcolor: 'background.surface',
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {log.success ? (
+                                    <Check size={16} style={{ color: 'green' }} />
+                                  ) : (
+                                    <AlertCircle size={16} style={{ color: 'red' }} />
+                                  )}
+                                  <Chip 
+                                    size="sm" 
+                                    variant="soft" 
+                                    color={log.refreshType === 'scheduled' ? 'primary' : 'neutral'}
+                                  >
+                                    {log.refreshType}
+                                  </Chip>
+                                </Box>
+                                
+                                <Box sx={{ flexGrow: 1 }}>
+                                  <Typography level="body-sm" fontWeight="lg">
+                                    {log.success ? 
+                                      `Successfully refreshed ${log.refreshedPlaylists} playlist(s)` : 
+                                      `Failed - refreshed ${log.refreshedPlaylists} playlist(s)`
+                                    }
+                                  </Typography>
+                                  <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                    {new Date(log.createdAt).toLocaleString()} • {log.duration}ms
+                                    {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
+                                  </Typography>
                                 </Box>
                               </Box>
                             ))}

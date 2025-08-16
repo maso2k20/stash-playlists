@@ -92,6 +92,9 @@ export default function PlaylistsPage() {
 
   // Per-playlist "refreshing" state
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
+  
+  // Bulk refresh state
+  const [bulkRefreshing, setBulkRefreshing] = useState(false);
 
   // Search and sort state
   const [searchQuery, setSearchQuery] = useState("");
@@ -264,11 +267,60 @@ export default function PlaylistsPage() {
           },
         }));
       }
-      // (no need to re-fetch conditions—they don’t change on refresh)
+      // (no need to re-fetch conditions—they don't change on refresh)
     } catch (e) {
       console.error("Refresh failed", e);
     } finally {
       setRefreshing((r) => ({ ...r, [playlistId]: false }));
+    }
+  };
+
+  // 🔁 Refresh all smart playlists at once
+  const refreshAllSmart = async () => {
+    setBulkRefreshing(true);
+    try {
+      const res = await fetch("/api/smart-playlists/refresh-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (res.ok) {
+        const result = await res.json();
+        
+        // Re-fetch stats for all playlists to update counts
+        const results = await Promise.allSettled(
+          playlists.map(async (p) => {
+            if (p.type === "SMART") {
+              const sRes = await fetch(`/api/playlists/${p.id}/stats`);
+              if (sRes.ok) {
+                const sData = await sRes.json();
+                return [p.id, { itemCount: sData.itemCount ?? 0, durationMs: sData.durationMs ?? 0 }] as const;
+              }
+            }
+            return null;
+          })
+        );
+
+        setStats((prev) => {
+          const next = { ...prev };
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value) {
+              const [id, s] = r.value;
+              next[id] = s;
+            }
+          }
+          return next;
+        });
+
+        // Show success message
+        console.log("Bulk refresh completed:", result.message);
+      } else {
+        console.error("Bulk refresh failed");
+      }
+    } catch (e) {
+      console.error("Bulk refresh error:", e);
+    } finally {
+      setBulkRefreshing(false);
     }
   };
 
@@ -335,9 +387,23 @@ export default function PlaylistsPage() {
       <Stack spacing={2} sx={{ mb: 3 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Typography level="h3">Playlists</Typography>
-          <Button startDecorator={<Plus size={16} />} color="primary" variant="solid" onClick={() => setIsCreateOpen(true)}>
-            Add Playlist
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {/* Bulk refresh button - only show if there are smart playlists */}
+            {playlists.some(p => p.type === "SMART") && (
+              <Button 
+                startDecorator={bulkRefreshing ? <RefreshCcw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+                color="neutral" 
+                variant="outlined" 
+                onClick={refreshAllSmart}
+                disabled={bulkRefreshing}
+              >
+                {bulkRefreshing ? "Refreshing..." : "Refresh Smart Playlists"}
+              </Button>
+            )}
+            <Button startDecorator={<Plus size={16} />} color="primary" variant="solid" onClick={() => setIsCreateOpen(true)}>
+              Add Playlist
+            </Button>
+          </Stack>
         </Stack>
         
         {/* Search and Sort Controls */}

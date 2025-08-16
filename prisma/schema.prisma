@@ -78,3 +78,15 @@ model Item {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 }
+
+model RefreshLog {
+  id                String    @id @default(uuid())
+  refreshType       String    // "manual" or "scheduled"
+  success           Boolean
+  refreshedPlaylists Int      @default(0)
+  errors            Json?     // Array of error messages
+  duration          Int       // Duration in milliseconds
+  createdAt         DateTime  @default(now())
+
+  @@index([createdAt])
+}

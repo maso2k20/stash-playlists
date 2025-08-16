@@ -18,6 +18,7 @@ export const SETTING_CATEGORIES = {
   STASH_INTEGRATION: 'Stash Integration',
   APPEARANCE: 'Appearance',
   PLAYBACK: 'Playback',
+  SMART_PLAYLIST_REFRESH: 'Smart Playlist Refresh',
   BACKUP: 'Database Backup',
 } as const;
 
@@ -144,6 +145,51 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
       if (num < 0 || num > 23) return 'Must be between 0-23 (24-hour format)';
       return null;
     },
+  },
+  {
+    key: 'SMART_PLAYLIST_REFRESH_ENABLED',
+    defaultValue: 'false',
+    type: 'select',
+    category: SETTING_CATEGORIES.SMART_PLAYLIST_REFRESH,
+    label: 'Enable Automatic Refresh',
+    description: 'Automatically refresh smart playlists on a schedule to sync with new content in Stash',
+    required: false,
+    options: ['true', 'false'],
+  },
+  {
+    key: 'SMART_PLAYLIST_REFRESH_INTERVAL',
+    defaultValue: 'daily',
+    type: 'select',
+    category: SETTING_CATEGORIES.SMART_PLAYLIST_REFRESH,
+    label: 'Refresh Interval',
+    description: 'How often to automatically refresh smart playlists',
+    required: false,
+    options: ['hourly', 'daily', 'weekly'],
+  },
+  {
+    key: 'SMART_PLAYLIST_REFRESH_HOUR',
+    defaultValue: '3',
+    type: 'number',
+    category: SETTING_CATEGORIES.SMART_PLAYLIST_REFRESH,
+    label: 'Refresh Time (Hour)',
+    description: 'Hour of the day to run automatic refresh (0-23, in server timezone). Only used for daily and weekly intervals. Hourly refresh runs every hour regardless of this setting.',
+    required: false,
+    validation: (value) => {
+      const num = parseInt(value);
+      if (isNaN(num)) return 'Must be a number';
+      if (num < 0 || num > 23) return 'Must be between 0-23 (24-hour format)';
+      return null;
+    },
+  },
+  {
+    key: 'SMART_PLAYLIST_REFRESH_DAY',
+    defaultValue: '0',
+    type: 'select',
+    category: SETTING_CATEGORIES.SMART_PLAYLIST_REFRESH,
+    label: 'Refresh Day (Weekly)',
+    description: 'Day of the week to run weekly refresh: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday',
+    required: false,
+    options: ['0', '1', '2', '3', '4', '5', '6'],
   },
 ];
 
