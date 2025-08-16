@@ -225,6 +225,9 @@ export default function SceneTagManagerPage() {
     // Delete confirmation dialog
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [markerToDelete, setMarkerToDelete] = useState<{ id: string; title: string } | null>(null);
+    
+    // Delete all confirmation dialog
+    const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
 
     // Ratings state
     const [ratings, setRatings] = useState<Record<string, number | null>>({});
@@ -729,6 +732,42 @@ export default function SceneTagManagerPage() {
         setMarkerToDelete(null);
     };
 
+    // Handle delete all markers
+    const handleDeleteAll = () => {
+        if (markers.length === 0) return;
+        setDeleteAllDialogOpen(true);
+    };
+
+    const confirmDeleteAll = async () => {
+        if (markers.length === 0) return;
+
+        try {
+            setSavingAll(true);
+            // Delete all existing markers
+            for (const marker of markers) {
+                await deleteSceneMarker({
+                    variables: { id: marker.id }
+                });
+            }
+            
+            // Clear all drafts and new markers
+            setNewIds([]);
+            setDrafts({});
+            
+            // Delay refetch to prevent video jumping
+            setTimeout(() => refetch(), 100);
+        } catch (e) {
+            console.error("Failed to delete all markers:", e);
+        } finally {
+            setSavingAll(false);
+            setDeleteAllDialogOpen(false);
+        }
+    };
+
+    const cancelDeleteAll = () => {
+        setDeleteAllDialogOpen(false);
+    };
+
     // Save All / Reset All must include temp rows as well
     const dirtyExistingEntries = useMemo(
         () =>
@@ -1179,6 +1218,15 @@ export default function SceneTagManagerPage() {
                                     onClick={handleResetAll}
                                 >
                                     Reset All
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outlined"
+                                    color="danger"
+                                    disabled={markers.length === 0 || savingAll}
+                                    onClick={handleDeleteAll}
+                                >
+                                    Delete All
                                 </Button>
                                 <Button
                                     size="sm"
@@ -1755,6 +1803,29 @@ export default function SceneTagManagerPage() {
                         </Button>
                         <Button color="danger" onClick={confirmDelete}>
                             Delete
+                        </Button>
+                    </DialogActions>
+                </ModalDialog>
+            </Modal>
+
+            {/* Delete All Confirmation Dialog */}
+            <Modal open={deleteAllDialogOpen} onClose={cancelDeleteAll}>
+                <ModalDialog sx={{ minWidth: 400 }}>
+                    <DialogTitle>Delete All Markers</DialogTitle>
+                    <DialogContent>
+                        <Typography level="body-sm">
+                            Are you sure you want to delete all {markers.length} marker{markers.length !== 1 ? 's' : ''} from this scene?
+                        </Typography>
+                        <Typography level="body-xs" sx={{ mt: 1, opacity: 0.8 }}>
+                            This action cannot be undone. All markers and their ratings will be permanently removed.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button variant="plain" onClick={cancelDeleteAll}>
+                            Cancel
+                        </Button>
+                        <Button color="danger" onClick={confirmDeleteAll}>
+                            Delete All
                         </Button>
                     </DialogActions>
                 </ModalDialog>
