@@ -511,7 +511,7 @@ export default function PlaylistsPage() {
                     </Box>
 
                     {/* Stats row with type chip first */}
-                    <Stack direction="row" spacing={1} sx={{ mb: isSmart ? 1 : 0 }}>
+                    <Stack direction="row" spacing={1} sx={{ mb: isSmart ? 1 : 0, flexWrap: "wrap" }}>
                       <Chip size="sm" variant="soft" color={typeColor[playlist.type]} sx={{ textTransform: "capitalize" }}>
                         {playlist.type.toLowerCase()}
                       </Chip>
@@ -521,6 +521,16 @@ export default function PlaylistsPage() {
                       {durationLabel && (
                         <Chip size="sm" variant="outlined" startDecorator={<Clock size={14} />}>
                           {durationLabel}
+                        </Chip>
+                      )}
+                      {isBusy && (
+                        <Chip 
+                          size="sm" 
+                          variant="soft" 
+                          color="warning" 
+                          startDecorator={<RefreshCcw className="animate-spin" size={14} />}
+                        >
+                          Refreshing...
                         </Chip>
                       )}
                     </Stack>

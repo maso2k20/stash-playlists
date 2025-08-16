@@ -199,6 +199,10 @@ Enhanced playlist browsing and organization at `/playlists`:
   - Play button (▶️) for normal sequential playback
   - Shuffle button (🔀) for randomized playback order
   - URL-based shuffle state via `?shuffle=true` parameter
+- **Smart Playlist Refresh Feedback**: Clear visual indicators when refreshing smart playlists:
+  - Prominent "Refreshing..." chip with spinning icon appears in stats row
+  - Warning color and text provide immediate feedback during refresh operations
+  - Complements existing dimmed refresh button for comprehensive user feedback
 - **Responsive Layout**: Clean JoyUI header design with search and sort controls that stack on mobile
 - **Visual Feedback**: Proper loading states, empty states, and search result indicators
 - **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations
