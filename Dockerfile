@@ -32,11 +32,18 @@ ENV DATABASE_URL="file:/data/prod.db"
 # Prisma/Next runtime needs
 RUN apk add --no-cache libc6-compat openssl
 
-# Copy built app + node_modules + prisma
-COPY --from=builder /app ./
+# Create nextjs user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Ensure data dir exists (your Unraid volume will be mounted here)
-RUN mkdir -p /data
+# Copy built app + node_modules + prisma
+COPY --from=builder --chown=nextjs:nodejs /app ./
+
+# Ensure data dir exists and set permissions
+RUN mkdir -p /data && chown nextjs:nodejs /data
+
+# Switch to non-root user
+USER nextjs
 
 # Copy entrypoint and run it via sh (no chmod on Windows needed)
 COPY entrypoint.sh /entrypoint.sh
