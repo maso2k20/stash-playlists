@@ -561,19 +561,21 @@ export default function PlaylistsPage() {
                           {playlist.name}
                         </Typography>
                       </Link>
-                      <Typography
-                        level="body-sm"
-                        color="neutral"
-                        sx={{
-                          mt: 0.5,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {playlist.description?.trim() || "No description"}
-                      </Typography>
+                      {playlist.description?.trim() && (
+                        <Typography
+                          level="body-sm"
+                          color="neutral"
+                          sx={{
+                            mt: 0.5,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {playlist.description.trim()}
+                        </Typography>
+                      )}
                     </Box>
 
                     {/* Stats row with type chip first */}
