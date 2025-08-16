@@ -594,8 +594,9 @@ export default function SceneTagManagerPage() {
                 // Remove temp
                 setNewIds((prev) => prev.filter((x) => x !== id));
                 setDrafts((prev) => {
-                    const { [id]: _, ...rest } = prev;
-                    return rest;
+                    const newDrafts = { ...prev };
+                    delete newDrafts[id];
+                    return newDrafts;
                 });
                 await addMarkersOrganisedTag();
                 // Delay refetch to prevent video jumping
@@ -658,8 +659,9 @@ export default function SceneTagManagerPage() {
             // discard new row
             setNewIds((prev) => prev.filter((x) => x !== id));
             setDrafts((prev) => {
-                const { [id]: _, ...rest } = prev;
-                return rest;
+                const newDrafts = { ...prev };
+                delete newDrafts[id];
+                return newDrafts;
             });
             return;
         }
@@ -683,8 +685,9 @@ export default function SceneTagManagerPage() {
             // Just remove temp row
             setNewIds((prev) => prev.filter((x) => x !== id));
             setDrafts((prev) => {
-                const { [id]: _, ...rest } = prev;
-                return rest;
+                const newDrafts = { ...prev };
+                delete newDrafts[id];
+                return newDrafts;
             });
             return;
         }
@@ -704,10 +707,11 @@ export default function SceneTagManagerPage() {
             await deleteSceneMarker({
                 variables: { id: markerToDelete.id }
             });
-            // Remove from drafts
+            // Remove from drafts while preserving all other draft changes
             setDrafts((prev) => {
-                const { [markerToDelete.id]: _, ...rest } = prev;
-                return rest;
+                const newDrafts = { ...prev };
+                delete newDrafts[markerToDelete.id];
+                return newDrafts;
             });
             // Delay refetch to prevent video jumping
             setTimeout(() => refetch(), 100);

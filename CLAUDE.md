@@ -156,6 +156,10 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
   - Validates that end time is after start time
   - Applies to both individual saves and bulk Save All operations
   - Clear error messages guide users to fix timing issues
+- **Draft State Preservation**: Robust draft state management ensures unsaved changes to markers are preserved when deleting other markers:
+  - Uses explicit object copying instead of destructuring to prevent React state batching issues
+  - Maintains all unsaved edits when performing delete operations on other markers
+  - Applies to both temporary markers and existing markers being deleted
 - **Tag Recommendations**: Smart tag suggestions based on primary tag relationships:
   - **Primary Tag Suggestions**: Shows tags with children as green "Recommended" chips when no primary tag is selected
     - Helps users discover parent category tags quickly
