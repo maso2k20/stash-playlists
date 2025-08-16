@@ -168,7 +168,7 @@ export async function buildItemsForPlaylist(
     varDecls.push("$actorIds: [ID!]"); vars.actorIds = actorIds;
   }
   if (tagIds.length) {
-    filterParts.push(`tags: { modifier: INCLUDES, value: $tagIds }`);
+    filterParts.push(`tags: { modifier: INCLUDES_ALL, value: $tagIds }`);
     varDecls.push("$tagIds: [ID!]"); vars.tagIds = tagIds;
   }
 
