@@ -244,7 +244,7 @@ Comprehensive scene browsing and navigation at `/scenes` with advanced filtering
   - **Title Search**: Text-based scene title filtering with instant results
   - **Performer Filter**: Multi-select performer dropdown with alphabetical sorting and aggressive caching
   - **Tag Filter**: Multi-select tag filtering using Stash tag context
-  - **Rating Filter**: Filter by minimum star rating (1+ to 5 stars)
+  - **Rating Filter**: Server-side filtering by minimum star rating (1+ to 5 stars) with proper GraphQL GREATER_THAN conversion
 - **Performance Optimizations**: 
   - Apollo Client `cache-first` policy for performer data with `notifyOnNetworkStatusChange: false`
   - Memoized calculations for performer/tag options and selections

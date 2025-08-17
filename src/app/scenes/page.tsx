@@ -56,12 +56,13 @@ const GET_SCENES_PAGINATED = gql`
 
 // Filtered query for search/filtering (all results)
 const GET_SCENES_FILTERED = gql`
-  query getScenesFiltered($title: String!, $performers: [ID!], $tags: [ID!]) {
+  query getScenesFiltered($title: String!, $performers: [ID!], $tags: [ID!], $rating: Int!) {
     findScenes(
       scene_filter: {
         title: { value: $title, modifier: INCLUDES }
         performers: { value: $performers, modifier: INCLUDES_ALL }
         tags: { value: $tags, modifier: INCLUDES_ALL }
+        rating100: { value: $rating, modifier: GREATER_THAN }
       }
       filter: { per_page: -1 }
     ) {
@@ -69,9 +70,17 @@ const GET_SCENES_FILTERED = gql`
       scenes {
         id
         title
-        paths { screenshot }
-        performers { id name }
-        tags { id name }
+        paths {
+          screenshot
+        }
+        performers {
+          id
+          name
+        }
+        tags {
+          id
+          name
+        }
         rating100
       }
     }
@@ -120,6 +129,14 @@ function withApiKey(url: string, apiKey?: string) {
   if (!url || !apiKey) return url;
   if (/[?&]api_key=/.test(url)) return url;
   return url.includes("?") ? `${url}&api_key=${apiKey}` : `${url}?api_key=${apiKey}`;
+}
+
+function getRatingFilterValue(ratingFilter: RatingFilter): number {
+  if (ratingFilter === 'all') return 0; // No filtering - include all (all ratings > 0)
+  const starValue = parseInt(ratingFilter.replace('+', ''), 10);
+  // Convert to GREATER_THAN values: 1→19, 2→39, 3→59, 4→79, 5→99
+  // This works because Stash uses 20,40,60,80,100 for 1-5 stars
+  return (starValue * 20) - 1;
 }
 
 // Reusable pagination controls component (copied from actors page)
@@ -303,8 +320,8 @@ function ScenesContent() {
 
   // Determine if we're filtering (search or filters applied)
   const isFiltering = useMemo(() => {
-    return searchQuery.trim() !== '' || selectedPerformerIds.length > 0 || selectedTagIds.length > 0;
-  }, [searchQuery, selectedPerformerIds, selectedTagIds]);
+    return searchQuery.trim() !== '' || selectedPerformerIds.length > 0 || selectedTagIds.length > 0 || ratingFilter !== 'all';
+  }, [searchQuery, selectedPerformerIds, selectedTagIds, ratingFilter]);
 
   // Choose query and parameters based on filtering state
   const { query, variables } = useMemo(() => {
@@ -315,7 +332,8 @@ function ScenesContent() {
         variables: { 
           title: searchQuery.trim() || "",
           performers: selectedPerformerIds.length > 0 ? selectedPerformerIds : null,
-          tags: selectedTagIds.length > 0 ? selectedTagIds : null
+          tags: selectedTagIds.length > 0 ? selectedTagIds : null,
+          rating: getRatingFilterValue(ratingFilter)
         }
       };
     } else {
@@ -325,7 +343,7 @@ function ScenesContent() {
         variables: { pageNumber, perPage }
       };
     }
-  }, [isFiltering, searchQuery, selectedPerformerIds, selectedTagIds, pageNumber, perPage]);
+  }, [isFiltering, searchQuery, selectedPerformerIds, selectedTagIds, ratingFilter, pageNumber, perPage]);
 
   // Main GraphQL query
   const { data: queryData, loading, error } = useQuery(query, {
@@ -346,19 +364,10 @@ function ScenesContent() {
     }
   }, [queryData]);
 
-  // Apply client-side filtering and sorting
+  // Apply client-side sorting (rating filtering now handled server-side)
   const scenes = useMemo(() => {
-    let filtered = allScenes;
-
-    // Apply rating filter (rating100 is 1-100 scale, convert from 1-5 star filter)
-    if (ratingFilter !== "all") {
-      const minStars = parseInt(ratingFilter.replace("+", ""), 10);
-      const minRating100 = minStars * 20; // Convert 1-5 stars to 20-100 scale
-      filtered = filtered.filter((scene) => (scene.rating100 || 0) >= minRating100);
-    }
-
     // Apply sorting (create a copy to avoid mutating read-only array)
-    const sorted = [...filtered].sort((a, b) => {
+    const sorted = [...allScenes].sort((a, b) => {
       switch (sortOption) {
         case "title-desc":
           return b.title.localeCompare(a.title);
@@ -378,7 +387,7 @@ function ScenesContent() {
     });
 
     return sorted;
-  }, [allScenes, ratingFilter, sortOption]);
+  }, [allScenes, sortOption]);
 
   // Prepare options for filters
   const performerOptions = useMemo(() => {
