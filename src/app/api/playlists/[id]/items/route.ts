@@ -199,6 +199,37 @@ export async function POST(request: NextRequest) {
     const built = await buildItemsForPlaylist(playlistId);
     const incoming = normalizeIncoming(built ?? []);
 
+    // Check if this is a smart playlist with rating filter that returned no results
+    // In this case, don't clear the playlist, just return current state
+    if (incoming.length === 0) {
+      const playlist = await prisma.playlist.findUnique({
+        where: { id: playlistId },
+        select: { type: true, conditions: true }
+      });
+      
+      if (playlist?.type === "SMART") {
+        const conditions = (playlist.conditions as any) || {};
+        const hasRatingFilter = conditions.minRating && conditions.minRating >= 1;
+        
+        if (hasRatingFilter) {
+          // Don't clear playlist when rating filter returns no results
+          // This preserves existing items until markers are actually rated
+          const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
+          return NextResponse.json(
+            {
+              message: "No items match rating filter - playlist unchanged",
+              upsertedItems: 0,
+              linkedCreated: 0,
+              linkedUpdated: 0,
+              deleted: 0,
+              totalLinkedNow,
+            },
+            { status: 200 }
+          );
+        }
+      }
+    }
+
     const result = await syncItems(playlistId, incoming, {
       preserveTimings: payload?.refresh === true && payload?.regenerate !== true,
     });

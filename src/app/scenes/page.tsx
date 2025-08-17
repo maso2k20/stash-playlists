@@ -1,7 +1,7 @@
 // src/app/scenes/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useQuery, gql } from "@apollo/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
@@ -213,7 +213,7 @@ function HoverPreview({
   );
 }
 
-export default function ScenesPage() {
+function ScenesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -779,5 +779,36 @@ export default function ScenesPage() {
         />
       )}
     </Sheet>
+  );
+}
+
+export default function ScenesPage() {
+  return (
+    <Suspense fallback={
+      <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography level="h2" sx={{ mb: 1 }}>
+            All Scenes
+          </Typography>
+        </Box>
+        <Grid container spacing={2}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Grid key={i} xs={12} sm={6} md={4} lg={3} xl={2}>
+              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
+                <AspectRatio ratio="16/9">
+                  <Skeleton />
+                </AspectRatio>
+                <JoyCardContent>
+                  <Skeleton variant="text" level="title-sm" />
+                  <Skeleton variant="text" level="body-sm" />
+                </JoyCardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Sheet>
+    }>
+      <ScenesContent />
+    </Suspense>
   );
 }
