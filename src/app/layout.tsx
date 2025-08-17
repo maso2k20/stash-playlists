@@ -8,6 +8,7 @@ import { AppInitializer } from "@/components/AppInitializer";
 import HomeIcon from "@mui/icons-material/Home";
 import PlaylistPlayIcon from "@mui/icons-material/PlaylistPlay";
 import PeopleIcon from "@mui/icons-material/People";
+import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
 import SettingsIcon from "@mui/icons-material/Settings";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -34,6 +35,7 @@ function NavBar() {
     { href: "/", icon: HomeIcon, label: "Home" },
     { href: "/playlists", icon: PlaylistPlayIcon, label: "Playlists" },
     { href: "/actors", icon: PeopleIcon, label: "Actors" },
+    { href: "/scenes", icon: VideoLibraryIcon, label: "Scenes" },
   ];
 
   return (

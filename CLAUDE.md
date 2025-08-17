@@ -230,6 +230,28 @@ Enhanced playlist browsing and organization at `/playlists`:
 - **Visual Feedback**: Proper loading states, empty states, and search result indicators
 - **Performance Optimized**: Uses useMemo for efficient filtering and sorting operations
 
+### Global Scenes Browser
+Comprehensive scene browsing and navigation at `/scenes` with advanced filtering and sorting:
+- **Navigation Integration**: Added "Scenes" menu item in main navigation between Playlists and Actors
+- **Dual-Query Architecture**: Intelligent query selection for optimal performance:
+  - `GET_SCENES_PAGINATED`: Fast paginated browsing (42 scenes/page) for initial load
+  - `GET_SCENES_FILTERED`: Comprehensive filtering with `per_page: -1` for search across all results
+- **Advanced Filtering System**: Multi-criteria filtering with real-time updates:
+  - **Title Search**: Text-based scene title filtering with instant results
+  - **Performer Filter**: Multi-select performer dropdown with alphabetical sorting and aggressive caching
+  - **Tag Filter**: Multi-select tag filtering using Stash tag context
+  - **Rating Filter**: Filter by minimum star rating (1+ to 5 stars)
+- **Performance Optimizations**: 
+  - Apollo Client `cache-first` policy for performer data with `notifyOnNetworkStatusChange: false`
+  - Memoized calculations for performer/tag options and selections
+  - Server-side sorting of performers by name in GraphQL query
+- **URL State Persistence**: All filters, sorting, and pagination state preserved in URL parameters
+- **Smart Pagination**: Pagination controls only displayed when browsing (not filtering)
+- **Rating Integration**: Visual star rating display on scene cards using `rating100` field conversion
+- **Scene Navigation**: Click any scene card to navigate to `/scenes/[id]` for marker editing
+- **Responsive Design**: Clean JoyUI layout with proper loading states, empty states, and error handling
+- **GraphQL Integration**: Uses Stash proxy endpoint `/api/stash-graphql` with proper error handling and debug logging
+
 ### Actor Browsing System
 Enhanced marker browsing and selection on `/actors/[id]` pages with dual-query pagination system:
 - **Dual-Query Performance**: Automatic switching between paginated browsing (42 items/page) and comprehensive filtering
