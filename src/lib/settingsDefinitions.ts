@@ -20,6 +20,7 @@ export const SETTING_CATEGORIES = {
   PLAYBACK: 'Playback',
   SMART_PLAYLIST_REFRESH: 'Smart Playlist Refresh',
   BACKUP: 'Database Backup',
+  MAINTENANCE: 'Database Maintenance',
 } as const;
 
 // URL validation helper
@@ -190,6 +191,41 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
     description: 'Day of the week to run weekly refresh: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday',
     required: false,
     options: ['0', '1', '2', '3', '4', '5', '6'],
+  },
+  {
+    key: 'MAINTENANCE_ENABLED',
+    defaultValue: 'true',
+    type: 'select',
+    category: SETTING_CATEGORIES.MAINTENANCE,
+    label: 'Enable Maintenance Checks',
+    description: 'Automatically check for orphaned markers whose parent scenes have been deleted from Stash',
+    required: false,
+    options: ['true', 'false'],
+  },
+  {
+    key: 'MAINTENANCE_HOUR',
+    defaultValue: '3',
+    type: 'number',
+    category: SETTING_CATEGORIES.MAINTENANCE,
+    label: 'Maintenance Time (Hour)',
+    description: 'Hour of the day to run automatic maintenance checks (0-23, in server timezone)',
+    required: false,
+    validation: (value) => {
+      const num = parseInt(value);
+      if (isNaN(num)) return 'Must be a number';
+      if (num < 0 || num > 23) return 'Must be between 0-23 (24-hour format)';
+      return null;
+    },
+  },
+  {
+    key: 'MAINTENANCE_ACTION',
+    defaultValue: 'mark',
+    type: 'select',
+    category: SETTING_CATEGORIES.MAINTENANCE,
+    label: 'Orphaned Item Action',
+    description: 'What to do with items whose scenes no longer exist in Stash. "Mark" preserves data for recovery, "Remove" deletes them completely.',
+    required: false,
+    options: ['mark', 'remove'],
   },
 ];
 

@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { initializeBackupService } from '@/lib/backupService';
 import { initializeRefreshService } from '@/lib/smartPlaylistRefreshService';
+import { maintenanceService } from '@/lib/maintenanceService';
 
 let initialized = false;
 
@@ -11,6 +12,7 @@ export async function GET() {
     try {
       await initializeBackupService();
       await initializeRefreshService();
+      await maintenanceService.startScheduler();
       initialized = true;
       console.log('Application initialized successfully');
       return NextResponse.json({ 

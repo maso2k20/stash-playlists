@@ -297,7 +297,6 @@ export async function initializeBackupService(): Promise<void> {
     const cronExpression = `0 ${status.backupHour} * * *`; // Daily at specified hour
     
     cronJob = cron.schedule(cronExpression, performScheduledBackup, {
-      scheduled: true,
       timezone: 'UTC', // Use UTC to avoid timezone issues
     });
     

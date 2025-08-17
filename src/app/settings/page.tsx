@@ -91,6 +91,22 @@ export default function SettingsPage() {
     duration: number;
     createdAt: string;
   }[]>([]);
+  const [maintenanceStatus, setMaintenanceStatus] = useState<{
+    enabled: boolean;
+    hour: number;
+    action: string;
+    isRunning: boolean;
+    nextRun?: string;
+    cronActive: boolean;
+  } | null>(null);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+  const [backfillStatus, setBackfillStatus] = useState<{
+    totalItems: number;
+    itemsWithSceneId: number;
+    itemsNeedingBackfill: number;
+    backfillPercentage: number;
+  } | null>(null);
+  const [backfillLoading, setBackfillLoading] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
     msg: "",
@@ -128,6 +144,8 @@ export default function SettingsPage() {
     load();
     loadBackupInfo();
     loadRefreshInfo();
+    loadMaintenanceInfo();
+    loadBackfillStatus();
   }, []);
 
   const loadBackupInfo = async () => {
@@ -166,6 +184,30 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load refresh info:', error);
+    }
+  };
+
+  const loadMaintenanceInfo = async () => {
+    try {
+      const res = await fetch("/api/maintenance", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setMaintenanceStatus(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load maintenance info:', error);
+    }
+  };
+
+  const loadBackfillStatus = async () => {
+    try {
+      const res = await fetch("/api/maintenance/backfill-scene-ids", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setBackfillStatus(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load backfill status:', error);
     }
   };
 
@@ -326,11 +368,30 @@ export default function SettingsPage() {
           console.error('Failed to update refresh scheduler:', error);
         }
       }
+
+      // Update maintenance scheduler if maintenance settings changed
+      const maintenanceSettingsChanged = changed.some(c => 
+        ['MAINTENANCE_ENABLED', 'MAINTENANCE_HOUR', 'MAINTENANCE_ACTION'].includes(c.key)
+      );
+      
+      if (maintenanceSettingsChanged) {
+        try {
+          await fetch('/api/maintenance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'restart-scheduler' }),
+          });
+        } catch (error) {
+          console.error('Failed to update maintenance scheduler:', error);
+        }
+      }
       
       // Refresh to sync updatedAt, also re-apply theme from server source of truth
       await load();
       await loadBackupInfo();
       await loadRefreshInfo();
+      await loadMaintenanceInfo();
+      await loadBackfillStatus();
       setSnack({ open: true, msg: "Settings saved", color: "success" });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to save";
@@ -416,6 +477,77 @@ export default function SettingsPage() {
       });
     } finally {
       setRefreshLoading(false);
+    }
+  };
+
+  const handleMaintenanceAction = async () => {
+    setMaintenanceLoading(true);
+    try {
+      const res = await fetch('/api/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run-check' }),
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        setSnack({ 
+          open: true, 
+          msg: result.message, 
+          color: 'success' 
+        });
+      } else {
+        setSnack({ 
+          open: true, 
+          msg: result.message || 'Maintenance failed', 
+          color: 'danger'
+        });
+      }
+      await loadMaintenanceInfo();
+    } catch (error) {
+      setSnack({ 
+        open: true, 
+        msg: 'Maintenance check failed', 
+        color: 'danger' 
+      });
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  };
+
+  const handleBackfillAction = async () => {
+    setBackfillLoading(true);
+    try {
+      const res = await fetch('/api/maintenance/backfill-scene-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        setSnack({ 
+          open: true, 
+          msg: result.message, 
+          color: 'success' 
+        });
+      } else {
+        setSnack({ 
+          open: true, 
+          msg: result.error || 'Backfill failed', 
+          color: 'danger'
+        });
+      }
+      await loadBackfillStatus();
+    } catch (error) {
+      setSnack({ 
+        open: true, 
+        msg: 'Scene ID backfill failed', 
+        color: 'danger' 
+      });
+    } finally {
+      setBackfillLoading(false);
     }
   };
 
@@ -910,6 +1042,107 @@ export default function SettingsPage() {
                           </Box>
                         </Box>
                       )}
+                    </Box>
+                  )}
+
+                  {/* Add maintenance controls for Database Maintenance category */}
+                  {category === 'Database Maintenance' && (
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                      <Typography level="title-md" sx={{ mb: 2 }}>
+                        Maintenance Management
+                      </Typography>
+                      
+                      {/* Maintenance Status */}
+                      {maintenanceStatus && (
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Database size={16} />
+                            <Typography level="body-sm" fontWeight="lg">
+                              Status: {maintenanceStatus.enabled ? 'Enabled' : 'Disabled'}
+                            </Typography>
+                            {maintenanceStatus.isRunning && (
+                              <Chip size="sm" variant="soft" color="warning">
+                                Running
+                              </Chip>
+                            )}
+                          </Box>
+                          
+                          {maintenanceStatus.enabled && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                              Schedule: Daily at {maintenanceStatus.hour}:00 UTC
+                            </Typography>
+                          )}
+                          
+                          {maintenanceStatus.nextRun && maintenanceStatus.enabled && (
+                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                              Next run: {new Date(maintenanceStatus.nextRun).toLocaleString()}
+                            </Typography>
+                          )}
+                          
+                          <Typography level="body-xs" sx={{ color: 'neutral.600', mt: 0.5 }}>
+                            Action: {maintenanceStatus.action === 'mark' ? 'Mark orphaned items (preserve data)' : 'Remove orphaned items (permanent deletion)'}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {/* Manual Maintenance Controls */}
+                      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                        <Button
+                          startDecorator={maintenanceLoading ? <RefreshCw className="animate-spin" size={16} /> : <Database size={16} />}
+                          onClick={handleMaintenanceAction}
+                          disabled={maintenanceLoading}
+                          variant="solid"
+                          color="primary"
+                        >
+                          {maintenanceLoading ? 'Checking...' : 'Run Maintenance Check'}
+                        </Button>
+                      </Box>
+                      
+                      <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 3 }}>
+                        Maintenance checks verify that all markers in your database still have valid parent scenes in Stash. 
+                        Orphaned markers are handled according to your configured action above.
+                      </Typography>
+
+                      {/* Scene ID Backfill Section */}
+                      <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 3 }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>
+                          Scene ID Backfill
+                        </Typography>
+                        
+                        {backfillStatus && (
+                          <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                            <Typography level="body-sm" fontWeight="lg" sx={{ mb: 1 }}>
+                              Database Status
+                            </Typography>
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                              Total items: {backfillStatus.totalItems}
+                            </Typography>
+                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                              Items with scene ID: {backfillStatus.itemsWithSceneId} ({backfillStatus.backfillPercentage}%)
+                            </Typography>
+                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                              Items needing backfill: {backfillStatus.itemsNeedingBackfill}
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                          <Button
+                            startDecorator={backfillLoading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
+                            onClick={handleBackfillAction}
+                            disabled={backfillLoading || (backfillStatus?.itemsNeedingBackfill || 0) === 0}
+                            variant="outlined"
+                            color="primary"
+                          >
+                            {backfillLoading ? 'Processing...' : 'Backfill Scene IDs'}
+                          </Button>
+                        </Box>
+                        
+                        <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                          Scene ID backfill extracts scene IDs from existing marker stream URLs to enable maintenance checks. 
+                          This is a one-time operation for existing data. New markers automatically include scene IDs.
+                        </Typography>
+                      </Box>
                     </Box>
                   )}
                 </Box>

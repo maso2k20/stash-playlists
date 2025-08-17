@@ -330,3 +330,25 @@ Automated backup solution with scheduled and manual backup capabilities:
 - **Error Handling**: Comprehensive error handling with user-friendly feedback messages
 - **Database Compatibility**: Uses Prisma's `$executeRaw` instead of direct SQLite connections to prevent locking conflicts in production
 
+### Database Maintenance System
+Comprehensive maintenance system for detecting and handling orphaned markers whose parent scenes have been deleted from Stash:
+- **Scene ID Tracking**: Added `sceneId` field to Item model for tracking parent scenes from Stash
+- **Orphan Detection**: Automated nightly checks to identify markers whose scenes no longer exist in Stash
+- **Safe Handling**: `orphaned` field allows marking items as orphaned instead of immediate deletion
+- **Efficient Checking**: Single GraphQL query fetches all scenes from Stash for comparison against local markers
+- **Configurable Actions**: Choose between marking orphaned items (preserves data) or removing them completely
+- **Scene ID Backfill**: Manual backfill process extracts scene IDs from existing item stream URLs for historical data
+- **Scheduled Maintenance**: Configurable nightly maintenance checks using node-cron (default 3 AM UTC)
+- **Manual Controls**: Settings page provides manual maintenance check and scene ID backfill buttons
+- **API Endpoints**:
+  - `/api/maintenance` - Manual maintenance checks and scheduler restart
+  - `/api/maintenance/backfill-scene-ids` - Scene ID backfill for existing items
+- **Settings Integration**: Complete maintenance controls in "Database Maintenance" settings category:
+  - `MAINTENANCE_ENABLED`: Enable/disable automatic checks (default: true)
+  - `MAINTENANCE_HOUR`: Hour for daily maintenance (default: 3, range 0-23 UTC)
+  - `MAINTENANCE_ACTION`: "mark" or "remove" orphaned items (default: "mark")
+- **Comprehensive Logging**: Maintenance results logged to RefreshLog table with detailed status and error reporting
+- **Status Display**: Real-time maintenance status, schedule, and next run time in settings interface
+- **Data Integrity**: Ensures playlist consistency by automatically handling deleted Stash content
+- **Performance Optimized**: Efficient bulk operations with proper error handling and progress reporting
+

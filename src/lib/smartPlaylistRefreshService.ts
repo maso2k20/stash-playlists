@@ -120,7 +120,7 @@ export async function refreshAllSmartPlaylists(refreshType: 'manual' | 'schedule
           refreshType,
           success,
           refreshedPlaylists: refreshedCount,
-          errors: errors.length > 0 ? errors : null,
+          errors: errors.length > 0 ? errors : undefined,
           duration,
         },
       });
@@ -185,11 +185,62 @@ function getCronExpression(interval: string, hour: number, day?: number): string
 // Calculate next run time based on cron expression
 function getNextRunTime(cronExpression: string): Date | null {
   try {
-    const task = cron.schedule(cronExpression, () => {}, { scheduled: false });
-    // Get next 2 dates (current might be past)
-    const dates = task.getNextDates(2);
-    task.destroy();
-    return dates.length > 0 ? dates[0].toDate() : null;
+    // Manual calculation for common cron expressions
+    const now = new Date();
+    
+    // Parse cron expression: minute hour day month weekday
+    const parts = cronExpression.split(' ');
+    if (parts.length !== 5) return null;
+    
+    const [minute, hour, day, month, weekday] = parts;
+    
+    // Handle hourly case (0 * * * *)
+    if (hour === '*' && minute === '0') {
+      const next = new Date(now);
+      next.setMinutes(0, 0, 0);
+      next.setHours(next.getHours() + 1);
+      return next;
+    }
+    
+    // Handle daily case (0 H * * *)
+    if (day === '*' && month === '*' && weekday === '*' && hour !== '*') {
+      const next = new Date(now);
+      const targetHour = parseInt(hour);
+      const targetMinute = parseInt(minute) || 0;
+      
+      next.setHours(targetHour, targetMinute, 0, 0);
+      
+      // If today's time has passed, schedule for tomorrow
+      if (next <= now) {
+        next.setDate(next.getDate() + 1);
+      }
+      
+      return next;
+    }
+    
+    // Handle weekly case (0 H * * D)
+    if (day === '*' && month === '*' && weekday !== '*') {
+      const next = new Date(now);
+      const targetHour = parseInt(hour);
+      const targetMinute = parseInt(minute) || 0;
+      const targetWeekday = parseInt(weekday);
+      
+      next.setHours(targetHour, targetMinute, 0, 0);
+      
+      // Calculate days until target weekday
+      const currentWeekday = next.getDay();
+      let daysUntilTarget = targetWeekday - currentWeekday;
+      
+      // If target day has passed this week, or it's today but time has passed
+      if (daysUntilTarget < 0 || (daysUntilTarget === 0 && next <= now)) {
+        daysUntilTarget += 7;
+      }
+      
+      next.setDate(next.getDate() + daysUntilTarget);
+      return next;
+    }
+    
+    return null;
   } catch (error) {
     console.error('[SmartPlaylistRefresh] Error calculating next run time:', error);
     return null;
@@ -218,7 +269,6 @@ export async function startRefreshScheduler(): Promise<void> {
       console.log('[SmartPlaylistRefresh] Starting scheduled refresh...');
       await refreshAllSmartPlaylists('scheduled');
     }, {
-      scheduled: true,
       timezone: 'UTC' // Use UTC to match database timestamps
     });
 

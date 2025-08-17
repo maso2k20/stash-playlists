@@ -72,11 +72,16 @@ model Item {
   stream     String?
   preview    String?
   rating     Int?
+  sceneId    String?   // Scene ID from Stash server for maintenance checks
+  orphaned   Boolean   @default(false) // Mark items whose scenes no longer exist in Stash
 
   playlists  PlaylistItem[]
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
+
+  @@index([sceneId])
+  @@index([orphaned])
 }
 
 model RefreshLog {

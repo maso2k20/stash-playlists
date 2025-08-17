@@ -50,6 +50,7 @@ export function mapMarkersToItems(markers: any[], opts: {
       ? `${stashServer}/scene/${m.scene.id}/stream?api_key=${stashAPI}`
       : (m.stream ?? null),
     preview: (m.preview ?? m.screenshot) ?? null,
+    sceneId: m.scene?.id ?? null, // Add scene ID for maintenance tracking
     itemOrder: index,
   }));
 }
