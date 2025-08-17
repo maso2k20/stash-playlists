@@ -272,9 +272,43 @@ export async function buildItemsForPlaylist(
 
   // Apply rating filter if specified
   if (minRating && minRating >= 1) {
+    // First ensure all items exist in database (with null rating if not previously rated)
     const itemIds = items.map(item => item.id);
     
-    const itemsWithRatings = await prisma.item.findMany({
+    // Get existing items to see which ones already have data
+    const existingItems = await prisma.item.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, rating: true }
+    });
+    const existingItemMap = new Map(existingItems.map(item => [item.id, item]));
+    
+    // Create missing items with null ratings (upsert to avoid conflicts)
+    // Use Promise.all for better performance with multiple items
+    const missingItems = items.filter(item => !existingItemMap.has(item.id));
+    if (missingItems.length > 0) {
+      await Promise.all(
+        missingItems.map(item =>
+          prisma.item.upsert({
+            where: { id: item.id },
+            update: {}, // Don't update existing items, just ensure they exist
+            create: {
+              id: item.id,
+              title: item.title || "",
+              startTime: item.startTime,
+              endTime: item.endTime,
+              screenshot: item.screenshot,
+              stream: item.stream,
+              preview: item.preview,
+              rating: null // Explicitly set to null for unrated items
+            }
+          })
+        )
+      );
+    }
+    
+    // Now filter: only include items with rating >= minRating
+    // Note: items with null rating (unrated) are excluded
+    const itemsWithSufficientRating = await prisma.item.findMany({
       where: {
         id: { in: itemIds },
         rating: { gte: minRating }
@@ -282,7 +316,7 @@ export async function buildItemsForPlaylist(
       select: { id: true }
     });
 
-    const ratedItemIds = new Set(itemsWithRatings.map(item => item.id));
+    const ratedItemIds = new Set(itemsWithSufficientRating.map(item => item.id));
     return items.filter(item => ratedItemIds.has(item.id));
   }
 

@@ -84,7 +84,11 @@ This is a Next.js application that creates playlists from Stash server markers, 
 ### Smart Playlist Logic
 Located in `src/lib/smartPlaylistServer.ts:buildItemsForPlaylist()`:
 - Queries Stash for scene markers matching actor/tag conditions
-- Applies rating filters (minimum rating threshold) by checking database
+- **Consistent Rating Filters**: Ensures items exist in database before applying rating filters
+  - Creates missing items with null ratings for unrated markers
+  - Only includes items with explicit ratings >= minimum threshold
+  - Maintains consistency between editor preview and refresh operations
+  - Uses concurrent database operations for optimal performance
 - Creates video clips with configurable before/after timing around markers using settings defaults
 - Generates deduped titles combining scene and marker names
 - Provides preview, screenshot, and stream URLs with API key authentication
