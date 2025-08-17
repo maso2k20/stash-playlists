@@ -1,9 +1,8 @@
 // src/app/actors/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, gql } from "@apollo/client";
-import { useSmartMarkerCache } from "@/hooks/useSmartMarkerCache";
 import { useParams, useRouter } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
@@ -22,7 +21,6 @@ import {
   CardCover,
   Button,
   Chip,
-  Checkbox,
   Autocomplete,
   Modal,
   ModalDialog,
@@ -91,33 +89,6 @@ const GET_MARKERS_FILTERED = gql`
   }
 `;
 
-// Legacy queries for count-only checks (still needed for smart cache)
-const GET_MARKER_COUNT_FILTERED = gql`
-  query getActorMarkerCountFiltered($actorId: ID!, $tagID: [ID!]!) {
-    findSceneMarkers(
-      scene_marker_filter: {
-        performers: { modifier: INCLUDES, value: [$actorId] }
-        tags: { modifier: INCLUDES, value: $tagID }
-      }
-      filter: { per_page: 1 }
-    ) {
-      count
-    }
-  }
-`;
-
-const GET_MARKER_COUNT_UNFILTERED = gql`
-  query getActorMarkerCountUnfiltered($actorId: ID!) {
-    findSceneMarkers(
-      scene_marker_filter: {
-        performers: { modifier: INCLUDES, value: [$actorId] }
-      }
-      filter: { per_page: 1 }
-    ) {
-      count
-    }
-  }
-`;
 
 type Playlist = { id: string; name: string; type: string };
 
@@ -151,16 +122,19 @@ function withApiKey(url: string, apiKey?: string) {
 function PaginationControls({ 
   pageNumber, 
   perPage, 
-  allScenesLength, 
+  totalCount,
   onPageChange, 
   sx = {} 
 }: {
   pageNumber: number;
   perPage: number;
-  allScenesLength: number;
+  totalCount: number;
   onPageChange: (page: number) => void;
   sx?: any;
 }) {
+  // Calculate the maximum page number based on total count
+  const maxPage = Math.ceil(totalCount / perPage);
+  
   return (
     <Box sx={{ display: "flex", justifyContent: "center", gap: 1, alignItems: "center", ...sx }}>
       <Button
@@ -174,7 +148,7 @@ function PaginationControls({
       
       {/* Page numbers */}
       {[pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2]
-        .filter((n) => n >= 1)
+        .filter((n) => n >= 1 && n <= maxPage) // Filter to only show valid pages
         .map((n) => (
           <Chip
             key={n}
@@ -191,7 +165,7 @@ function PaginationControls({
       <Button
         size="sm"
         variant="plain"
-        disabled={allScenesLength < perPage} // Disable if current page has fewer items than perPage
+        disabled={pageNumber >= maxPage} // Disable if on last page or beyond
         onClick={() => onPageChange(pageNumber + 1)}
       >
         Next
@@ -301,9 +275,9 @@ export default function Page() {
   const [pageNumber, setPageNumber] = useState(1);
   const perPage = 42;
   
-  // Track if we've already applied cached ratings to avoid loops
-  const hasAppliedCachedRatings = useRef(false);
-  const cachedRatingsRef = useRef<Record<string, number>>({});
+  // Total count state
+  const [totalCount, setTotalCount] = useState(0);
+  
   
   // Initialize filters from URL on mount
   useEffect(() => {
@@ -430,30 +404,26 @@ export default function Page() {
     }
   }, [isFiltering, actorId, tagIDsForFilter, pageNumber, perPage]);
 
-  // Use smart cache hook with dynamic query
-  const { 
-    data: allScenes, 
-    ratings: cachedRatings,
-    loading, 
-    error, 
-    isFromCache,
-    cacheAge,
-    refetch: refetchMarkers,
-    clearCache,
-    updateCachedRatings
-  } = useSmartMarkerCache({
-    actorId,
-    tagIds: tagIDsForFilter,
-    pageNumber: isFiltering ? undefined : pageNumber,
-    perPage: isFiltering ? undefined : perPage,
-    dataQuery: query,
-    enabled: !!actorId
+  // Direct GraphQL query
+  const { data: queryData, loading, error } = useQuery(query, {
+    variables,
+    skip: !actorId,
+    fetchPolicy: 'cache-and-network',
+    errorPolicy: 'all'
   });
 
-  // Update ref when cachedRatings changes
+  // Extract scenes and total count from query response
+  const allScenes = useMemo(() => {
+    return queryData?.findSceneMarkers?.scene_markers || [];
+  }, [queryData]);
+
+  // Update total count when query data changes
   useEffect(() => {
-    cachedRatingsRef.current = cachedRatings;
-  }, [cachedRatings]);
+    if (queryData?.findSceneMarkers?.count !== undefined) {
+      setTotalCount(queryData.findSceneMarkers.count);
+    }
+  }, [queryData]);
+
 
   // Filter and sort scenes
   const scenes = useMemo(() => {
@@ -495,59 +465,24 @@ export default function Page() {
     return sorted;
   }, [allScenes, searchQuery, sortOption, ratings]);
 
-  // Fetch ratings for current markers (only if not from cache)
+  // Fetch ratings for current markers
   useEffect(() => {
     if (allScenes.length === 0) return;
-    
-    // Skip if we just loaded from cache (even if ratings are empty - avoid refetching empty results)
-    if (isFromCache) {
-      console.log(`⚡ Cache: Using cached data, skipping ratings API (${Object.keys(cachedRatingsRef.current).length} cached ratings)`);
-      return;
-    }
     
     const markerIds = allScenes.map((marker: any) => marker.id);
     const idsParam = markerIds.join(',');
     
-    console.log(`📡 Fetching fresh ratings for ${markerIds.length} markers`);
-    // Fetch fresh ratings (they change more frequently than marker data)
+    // Fetch ratings for current markers
     fetch(`/api/items/ratings?ids=${encodeURIComponent(idsParam)}`)
       .then(res => res.json())
       .then(data => {
-        console.log(`📊 Ratings API response:`, { success: data.success, ratingsCount: Object.keys(data.ratings || {}).length, sampleData: data });
         if (data.success && data.ratings) {
           setRatings(data.ratings);
-          
-          // Only update cache if we actually have ratings (avoid spamming with empty objects)
-          const ratingsCount = Object.keys(data.ratings).length;
-          if (ratingsCount > 0) {
-            console.log(`💾 Updating cache with fresh ratings for ${ratingsCount} items`);
-            updateCachedRatings(data.ratings);
-          } else {
-            // Still cache the empty ratings to avoid repeated API calls
-            updateCachedRatings(data.ratings);
-          }
         }
       })
       .catch(err => {
         console.error('Failed to fetch ratings:', err);
       });
-  }, [allScenes, isFromCache, updateCachedRatings]);
-
-  // Set initial cached ratings once when they become available
-  useEffect(() => {
-    if (
-      Object.keys(cachedRatings).length > 0 && 
-      !hasAppliedCachedRatings.current
-    ) {
-      console.log(`⚡ Applied cached ratings for ${Object.keys(cachedRatings).length} items`);
-      setRatings(cachedRatings);
-      hasAppliedCachedRatings.current = true;
-    }
-  }, [cachedRatings]);
-
-  // Reset the cached ratings flag when allScenes changes (new data set)
-  useEffect(() => {
-    hasAppliedCachedRatings.current = false;
   }, [allScenes]);
 
 
@@ -642,11 +577,6 @@ export default function Page() {
                   : `Page ${pageNumber} • ${allScenes.length} marker${allScenes.length === 1 ? '' : 's'}`
                 }
               </Typography>
-              {isFromCache && (
-                <Chip size="sm" variant="soft" color="success">
-                  {cacheAge !== undefined ? `Cached (${cacheAge}m)` : 'Cached'}
-                </Chip>
-              )}
             </Box>
           )}
         </Box>
@@ -745,20 +675,6 @@ export default function Page() {
         >
           Clear tags
         </Button>
-        
-        {/* Debug: Cache controls */}
-        {isFromCache && (
-          <Button
-            size="sm"
-            variant="outlined"
-            color="neutral"
-            onClick={clearCache}
-            sx={{ minWidth: "auto" }}
-            title="Clear cache and refresh data"
-          >
-            Refresh Cache
-          </Button>
-        )}
       </Stack>
 
       {/* Top Pagination Controls - only show when not filtering */}
@@ -766,7 +682,7 @@ export default function Page() {
         <PaginationControls 
           pageNumber={pageNumber}
           perPage={perPage}
-          allScenesLength={allScenes.length}
+          totalCount={totalCount}
           onPageChange={(newPage) => {
             setPageNumber(newPage);
             updateURLWithFilters(undefined, undefined, undefined, newPage);
@@ -1003,7 +919,7 @@ export default function Page() {
         <PaginationControls 
           pageNumber={pageNumber}
           perPage={perPage}
-          allScenesLength={allScenes.length}
+          totalCount={totalCount}
           onPageChange={(newPage) => {
             setPageNumber(newPage);
             updateURLWithFilters(undefined, undefined, undefined, newPage);

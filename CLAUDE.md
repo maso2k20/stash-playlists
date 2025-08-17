@@ -233,18 +233,17 @@ Enhanced playlist browsing and organization at `/playlists`:
 ### Actor Browsing System
 Enhanced marker browsing and selection on `/actors/[id]` pages with dual-query pagination system:
 - **Dual-Query Performance**: Automatic switching between paginated browsing (42 items/page) and comprehensive filtering
-- **Smart Caching System**: LocalStorage-based caching with 15-minute timeout and change detection:
-  - `src/lib/markerCache.ts`: Cache utilities with pagination support and stable key generation
-  - `src/hooks/useSmartMarkerCache.ts`: Custom hook implementing smart cache with GraphQL integration
-  - Separate cache entries for paginated vs filtered results for optimal performance
+- **Pagination System**: Direct GraphQL queries with proper pagination controls:
+  - Uses Apollo Client `useQuery` with dynamic query selection for optimal performance
+  - Proper pagination boundaries prevent navigation to empty pages
 - **Pagination Controls**: Top and bottom pagination with page number chips for easy navigation
 - **Advanced Filtering**: Multi-select tag filtering with real-time search across marker titles
 - **Context-Aware Sorting**: Sorting only available during filtering (not pagination) for better UX
 - **URL Persistence**: All state (page, tags, search, sort) persisted in URL query parameters
 - **Performance Optimization**: 
-  - Initial load: 42 cards vs 329 cards = ~8x faster rendering
-  - Cached loads: Nearly instantaneous with smart cache hit detection
-  - Ratings caching: Avoids expensive API calls for previously fetched ratings
+  - Paginated load: 42 cards per page for fast rendering
+  - Direct GraphQL queries with Apollo Client caching
+  - Efficient ratings fetching per page
 - **Direct Navigation**: Click any marker card to navigate to scene editing page for that marker's scene
 - **Individual Playlist Addition**: Plus button on each marker card opens dialog to add single marker to playlists
 - **Rating Display**: Shows existing star ratings for previously rated markers via bulk API lookup
@@ -305,16 +304,3 @@ Automated backup solution with scheduled and manual backup capabilities:
 - **Error Handling**: Comprehensive error handling with user-friendly feedback messages
 - **Database Compatibility**: Uses Prisma's `$executeRaw` instead of direct SQLite connections to prevent locking conflicts in production
 
-### Smart Marker Caching System
-High-performance caching for actor marker pages to handle large datasets efficiently:
-- **Two-Query Strategy**: Lightweight count check + full data fetch only when needed
-  - `GET_MARKER_COUNT`: Fast query to get marker count (per_page: 1)
-  - `GET_ALL_MARKERS`: Full data query only when cache is invalid or count changed
-- **Change Detection**: Compares marker count to detect when data has changed on server
-- **LocalStorage Cache**: Stores full marker data with metadata (actor ID, tag filter, count, timestamp)
-- **Smart Invalidation**: Cache expires after 15 minutes or when count mismatch detected
-- **Cache Performance**: Subsequent visits load instantly while count verification happens in background
-- **Visual Feedback**: Shows "Cached (Xm)" chip and cache refresh button in UI
-- **Graceful Fallback**: Falls back to direct queries if caching fails or localStorage unavailable
-- **Implementation**: `src/hooks/useSmartMarkerCache.ts` + `src/lib/markerCache.ts`
-- **Benefits**: Reduces heavy GraphQL queries from ~1000ms to ~50ms on repeated visits
