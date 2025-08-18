@@ -217,16 +217,6 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
       return null;
     },
   },
-  {
-    key: 'MAINTENANCE_ACTION',
-    defaultValue: 'mark',
-    type: 'select',
-    category: SETTING_CATEGORIES.MAINTENANCE,
-    label: 'Orphaned Item Action',
-    description: 'What to do with items whose scenes no longer exist in Stash. "Mark" preserves data for recovery, "Remove" deletes them completely.',
-    required: false,
-    options: ['mark', 'remove'],
-  },
 ];
 
 // Helper to get setting definition by key

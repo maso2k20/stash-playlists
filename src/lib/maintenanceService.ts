@@ -9,7 +9,6 @@ type MaintenanceResult = {
   data: {
     totalItemsChecked: number;
     orphanedItemsFound: number;
-    orphanedItemsMarked: number;
     orphanedItemsRemoved: number;
     errors: string[];
     duration: number;
@@ -35,7 +34,7 @@ export class MaintenanceService {
       const settings = await prisma.settings.findMany({
         where: {
           key: {
-            in: ['MAINTENANCE_ENABLED', 'MAINTENANCE_HOUR', 'MAINTENANCE_ACTION']
+            in: ['MAINTENANCE_ENABLED', 'MAINTENANCE_HOUR']
           }
         }
       });
@@ -46,12 +45,10 @@ export class MaintenanceService {
 
       const enabled = settingsMap.MAINTENANCE_ENABLED === 'true';
       const hour = parseInt(settingsMap.MAINTENANCE_HOUR || '3');
-      const action = settingsMap.MAINTENANCE_ACTION || 'mark';
 
       return {
         enabled,
         hour,
-        action,
         isRunning: this.isRunning,
         nextRun: enabled ? this.getNextRunTime(hour) : null,
         cronActive: this.cronJob ? true : false
@@ -61,7 +58,6 @@ export class MaintenanceService {
       return {
         enabled: false,
         hour: 3,
-        action: 'mark',
         isRunning: false,
         nextRun: null,
         cronActive: false
@@ -115,7 +111,6 @@ export class MaintenanceService {
             data: {
               totalItemsChecked: 0,
               orphanedItemsFound: 0,
-              orphanedItemsMarked: 0,
               orphanedItemsRemoved: 0,
               errors: [error instanceof Error ? error.message : 'Unknown error'],
               duration: 0
@@ -155,13 +150,7 @@ export class MaintenanceService {
     try {
       console.log('🔧 Starting maintenance check...');
 
-      // Get maintenance settings
-      const settings = await prisma.settings.findMany({
-        where: {
-          key: { in: ['MAINTENANCE_ACTION'] }
-        }
-      });
-      const action = settings.find(s => s.key === 'MAINTENANCE_ACTION')?.value || 'mark';
+      // Maintenance always removes orphaned items for clean playlists
 
       // Get all items with scene IDs that aren't already marked as orphaned
       const itemsToCheck = await prisma.item.findMany({
@@ -214,48 +203,33 @@ export class MaintenanceService {
 
       console.log(`🔧 Found ${orphanedItems.length} orphaned items`);
 
-      let orphanedItemsMarked = 0;
       let orphanedItemsRemoved = 0;
 
       if (orphanedItems.length > 0) {
-        if (action === 'remove') {
-          // Remove orphaned items completely
-          const orphanedIds = orphanedItems.map(item => item.id);
-          
-          // First remove from playlists
-          await prisma.playlistItem.deleteMany({
-            where: { itemId: { in: orphanedIds } }
-          });
-          
-          // Then remove the items themselves
-          await prisma.item.deleteMany({
-            where: { id: { in: orphanedIds } }
-          });
-          
-          orphanedItemsRemoved = orphanedItems.length;
-          console.log(`🗑️ Removed ${orphanedItemsRemoved} orphaned items`);
-        } else {
-          // Mark items as orphaned (default behavior)
-          await prisma.item.updateMany({
-            where: { 
-              id: { in: orphanedItems.map(item => item.id) }
-            },
-            data: { orphaned: true }
-          });
-          
-          orphanedItemsMarked = orphanedItems.length;
-          console.log(`🏷️ Marked ${orphanedItemsMarked} items as orphaned`);
-        }
+        // Remove orphaned items completely
+        const orphanedIds = orphanedItems.map(item => item.id);
+        
+        // First remove from playlists
+        await prisma.playlistItem.deleteMany({
+          where: { itemId: { in: orphanedIds } }
+        });
+        
+        // Then remove the items themselves
+        await prisma.item.deleteMany({
+          where: { id: { in: orphanedIds } }
+        });
+        
+        orphanedItemsRemoved = orphanedItems.length;
+        console.log(`🗑️ Removed ${orphanedItemsRemoved} orphaned items`);
       }
 
       const duration = Date.now() - startTime;
       const result: MaintenanceResult = {
         success: true,
-        message: `Maintenance completed: ${orphanedItems.length} orphaned items ${action === 'remove' ? 'removed' : 'marked'}`,
+        message: `Maintenance completed: ${orphanedItems.length} orphaned items removed`,
         data: {
           totalItemsChecked: itemsToCheck.length,
           orphanedItemsFound: orphanedItems.length,
-          orphanedItemsMarked,
           orphanedItemsRemoved,
           errors,
           duration
@@ -274,7 +248,6 @@ export class MaintenanceService {
         data: {
           totalItemsChecked: 0,
           orphanedItemsFound: 0,
-          orphanedItemsMarked: 0,
           orphanedItemsRemoved: 0,
           errors: [error instanceof Error ? error.message : 'Unknown error'],
           duration
@@ -291,7 +264,7 @@ export class MaintenanceService {
         data: {
           refreshType: `maintenance-${type}`,
           success: result.success,
-          refreshedPlaylists: 0, // Not applicable for maintenance
+          refreshedPlaylists: result.data.orphanedItemsRemoved, // Use this field to store orphaned items count
           errors: result.data.errors.length > 0 ? result.data.errors : undefined,
           duration: result.data.duration
         }

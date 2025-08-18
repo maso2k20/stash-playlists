@@ -2,9 +2,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { maintenanceService } from "@/lib/maintenanceService";
 
-// GET /api/maintenance - Get maintenance status
-export async function GET() {
+// GET /api/maintenance - Get maintenance status or history
+export async function GET(req: NextRequest) {
   try {
+    const url = new URL(req.url);
+    const action = url.searchParams.get('action');
+
+    if (action === 'history') {
+      // Return maintenance history from RefreshLog
+      const { prisma } = await import("@/lib/prisma");
+      
+      try {
+        const history = await prisma.refreshLog.findMany({
+          where: {
+            refreshType: {
+              startsWith: 'maintenance-' // maintenance-manual or maintenance-scheduled
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10, // Last 10 maintenance operations
+          select: {
+            id: true,
+            refreshType: true,
+            success: true,
+            refreshedPlaylists: true, // Will be 0 for maintenance operations
+            errors: true,
+            duration: true,
+            createdAt: true,
+          },
+        });
+        
+        return NextResponse.json({
+          success: true,
+          data: history
+        });
+      } catch (dbError) {
+        console.error('❌ Database error getting maintenance history:', dbError);
+        return NextResponse.json({
+          success: false,
+          message: 'Database error getting maintenance history',
+          error: dbError instanceof Error ? dbError.message : 'Unknown database error'
+        }, { status: 500 });
+      }
+    }
+
+    // Default: return current maintenance status
     const status = await maintenanceService.getScheduleStatus();
     
     return NextResponse.json({

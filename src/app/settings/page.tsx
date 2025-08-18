@@ -25,7 +25,7 @@ import {
   FormHelperText,
 } from "@mui/joy";
 import { useColorScheme } from "@mui/joy/styles";
-import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload } from "lucide-react";
+import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload, CheckCircle, XCircle } from "lucide-react";
 import { 
   getSettingsByCategory, 
   getSettingDefinition, 
@@ -91,10 +91,18 @@ export default function SettingsPage() {
     duration: number;
     createdAt: string;
   }[]>([]);
+  const [maintenanceHistory, setMaintenanceHistory] = useState<{
+    id: string;
+    refreshType: string;
+    success: boolean;
+    refreshedPlaylists: number;
+    errors: string[] | null;
+    duration: number;
+    createdAt: string;
+  }[]>([]);
   const [maintenanceStatus, setMaintenanceStatus] = useState<{
     enabled: boolean;
     hour: number;
-    action: string;
     isRunning: boolean;
     nextRun?: string;
     cronActive: boolean;
@@ -189,10 +197,21 @@ export default function SettingsPage() {
 
   const loadMaintenanceInfo = async () => {
     try {
+      // Load maintenance status
       const res = await fetch("/api/maintenance", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setMaintenanceStatus(data.data);
+      }
+
+      // Load maintenance history
+      const historyRes = await fetch("/api/maintenance?action=history", { 
+        method: "GET",
+        cache: "no-store" 
+      });
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setMaintenanceHistory(historyData.data);
       }
     } catch (error) {
       console.error('Failed to load maintenance info:', error);
@@ -1079,9 +1098,6 @@ export default function SettingsPage() {
                             </Typography>
                           )}
                           
-                          <Typography level="body-xs" sx={{ color: 'neutral.600', mt: 0.5 }}>
-                            Action: {maintenanceStatus.action === 'mark' ? 'Mark orphaned items (preserve data)' : 'Remove orphaned items (permanent deletion)'}
-                          </Typography>
                         </Box>
                       )}
                       
@@ -1100,8 +1116,54 @@ export default function SettingsPage() {
                       
                       <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 3 }}>
                         Maintenance checks verify that all markers in your database still have valid parent scenes in Stash. 
-                        Orphaned markers are handled according to your configured action above.
+                        Orphaned markers are automatically removed to keep playlists clean.
                       </Typography>
+
+                      {/* Maintenance History */}
+                      {maintenanceHistory.length > 0 && (
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                          <Typography level="title-sm" sx={{ mb: 2 }}>
+                            Recent Maintenance History
+                          </Typography>
+                          
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
+                            {maintenanceHistory.map((log) => (
+                              <Box
+                                key={log.id}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 2,
+                                  p: 1.5,
+                                  borderRadius: 'sm',
+                                  bgcolor: log.success ? 'success.50' : 'danger.50',
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'fit-content' }}>
+                                  {log.success ? (
+                                    <CheckCircle size={16} color="var(--joy-palette-success-500)" />
+                                  ) : (
+                                    <XCircle size={16} color="var(--joy-palette-danger-500)" />
+                                  )}
+                                </Box>
+                                
+                                <Box sx={{ flexGrow: 1 }}>
+                                  <Typography level="body-sm" fontWeight="lg">
+                                    {log.success ? 
+                                      `${log.refreshedPlaylists} orphaned item(s) removed` : 
+                                      `Maintenance failed`
+                                    }
+                                  </Typography>
+                                  <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                    {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('maintenance-', '')}
+                                    {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
 
                       {/* Scene ID Backfill Section */}
                       <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 3 }}>
