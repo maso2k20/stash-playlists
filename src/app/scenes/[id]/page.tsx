@@ -1092,15 +1092,47 @@ export default function SceneTagManagerPage() {
         }
     };
 
-    // Find closest marker to current time
+    // Find closest marker to current time - prioritizes markers that contain the current time
     const findClosestMarker = useCallback((currentTime: number): string | null => {
         if (!markers || markers.length === 0) return null;
 
-        let closestId: string | null = null;
-        let closestDistance = Infinity;
-
         // Include both existing markers and new markers in drafts
         const allMarkerIds = [...markers.map(m => m.id), ...newIds];
+
+        // First priority: Find markers where current time is within their range
+        const containingMarkers: Array<{ id: string; duration: number }> = [];
+        
+        for (const id of allMarkerIds) {
+            const marker = markers.find(m => m.id === id);
+            const draft = drafts[id];
+
+            if (!draft && !marker) continue;
+
+            // Get effective start and end times from draft or original marker
+            const startTime = draft?.seconds ?? marker?.seconds ?? 0;
+            const endTime = draft?.end_seconds ?? marker?.end_seconds ?? null;
+
+            // If marker has both start and end times, check if current time is within range
+            if (typeof endTime === 'number' && endTime > startTime) {
+                if (currentTime >= startTime && currentTime <= endTime) {
+                    containingMarkers.push({
+                        id,
+                        duration: endTime - startTime
+                    });
+                }
+            }
+        }
+
+        // If we found markers containing the current time, return the most specific one (shortest duration)
+        if (containingMarkers.length > 0) {
+            return containingMarkers.reduce((shortest, current) => 
+                current.duration < shortest.duration ? current : shortest
+            ).id;
+        }
+
+        // Second priority: No markers contain current time, fall back to closest by start time
+        let closestId: string | null = null;
+        let closestDistance = Infinity;
 
         for (const id of allMarkerIds) {
             const marker = markers.find(m => m.id === id);
@@ -1108,9 +1140,9 @@ export default function SceneTagManagerPage() {
 
             if (!draft && !marker) continue;
 
-            // Get marker time from draft or original marker
-            const markerTime = draft?.seconds ?? marker?.seconds ?? 0;
-            const distance = Math.abs(currentTime - markerTime);
+            // Get marker start time from draft or original marker
+            const markerStartTime = draft?.seconds ?? marker?.seconds ?? 0;
+            const distance = Math.abs(currentTime - markerStartTime);
 
             if (distance < closestDistance) {
                 closestDistance = distance;

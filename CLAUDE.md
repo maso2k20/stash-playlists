@@ -131,8 +131,12 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
     - Hover-activated horizontal volume slider popup
     - Timer display repositioned after progress bar for better layout
     - Clean popup design with proper hover area to prevent flickering
-  - **Active Marker Highlighting**: Real-time visual feedback for closest marker to current timeline position
-    - Timeline markers highlight in bright blue when closest to playback position
+  - **Active Marker Highlighting**: Real-time visual feedback for current marker based on video timeline position
+    - **Range-based Detection**: Markers with end times remain active when video is within their start-end range
+    - **Priority System**: If video time falls within marker range, that marker stays active regardless of nearby markers
+    - **Specificity Handling**: When multiple markers contain current time, shortest duration marker is selected
+    - **Fallback Logic**: For markers without end times, uses distance-based detection to closest start time
+    - Timeline markers highlight in bright blue when active during playback
     - Marker cards show subtle blue outline for active marker with "● Active" chip
     - Automatic updates during timeline scrubbing and video playback
     - Throttled performance optimization (~10fps) for smooth operation
