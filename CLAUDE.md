@@ -71,6 +71,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - `/api/items/filter` - Filter items by minimum rating
 - `/api/settings` - Configuration management with auto-initialization and validation
 - `/api/settings/test-connection` - Test Stash server connectivity and authentication
+- `/api/settings/performer-count-recommendations` - Retrieve performer count tag recommendations configuration
 - `/api/stash-graphql` - Proxy to Stash server GraphQL
 
 ### Docker Deployment
@@ -143,6 +144,9 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
 - **Rating Integration**: Rate markers directly in the editing interface with auto-save
 - **Back Navigation**: Smart back button that returns to referrer page (actors page) preserving filter state
 - **Common Tags**: Bulk add/remove arbitrary tags to all markers with toggle for add/remove mode
+  - **Performer Count Recommendations**: Smart tag suggestions based on scene performer count (configurable in Settings)
+  - Recommendations appear below Common Tags dropdown with one-click addition to selection
+  - Shows performer count context (e.g., "Recommended for 3 performers") with visual feedback when already selected
 - **Performer Tags**: Pre-populated with all performer tags, allowing bulk application to markers:
   - Auto-populated from scene performers with deduplication
   - Remove-only interface (cannot add arbitrary tags)
@@ -301,11 +305,15 @@ Comprehensive image management for playlist personalization:
 Comprehensive configuration system with type safety and validation:
 - **Typed Definitions**: `src/lib/settingsDefinitions.ts` with validation, categories, and defaults
 - **Auto-Initialization**: Missing settings automatically created with defaults on first load
-- **Categorized UI**: Settings grouped by category (Stash Integration, Appearance, Playback, Database Backup) with accordion layout
+- **Tabbed Interface**: Settings organized into logical tabs for better navigation and reduced visual clutter:
+  - **Configuration Tab**: Stash Integration, Appearance, Playback, Recommended Tags
+  - **Automation Tab**: Smart Playlist Refresh, Database Maintenance
+  - **Backup Tab**: Database Backup management and controls
 - **Real-time Validation**: Input validation with helpful error messages and visual feedback
 - **Connection Testing**: Built-in Stash server connectivity testing with detailed diagnostics
 - **Extensible Architecture**: Easy to add new settings by updating definitions file
-- **Setting Types**: Support for text, URL, number, and select input types with appropriate validation
+- **Setting Types**: Support for text, URL, number, select, and JSON input types with appropriate validation
+- **Recommended Tags System**: Configure tag recommendations based on performer count with user-friendly dropdowns
 - **Default Values**: 
   - `STASH_SERVER`: Empty (required for connection)
   - `STASH_API`: Empty (required for authentication)  
@@ -315,6 +323,7 @@ Comprehensive configuration system with type safety and validation:
   - `BACKUP_ENABLED`: "true" (enable automatic daily backups)
   - `BACKUP_RETENTION_DAYS`: "7" (days to keep backups, 1-365)
   - `BACKUP_HOUR`: "2" (hour to run backups, 0-23 UTC)
+  - `PERFORMER_COUNT_TAG_RECOMMENDATIONS`: "{}" (JSON configuration for performer count based tag suggestions)
 
 ### Database Backup System
 Automated backup solution with scheduled and manual backup capabilities:

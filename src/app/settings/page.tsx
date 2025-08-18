@@ -23,9 +23,14 @@ import {
   FormControl,
   FormLabel,
   FormHelperText,
+  Tabs,
+  TabList,
+  Tab,
+  TabPanel,
 } from "@mui/joy";
 import { useColorScheme } from "@mui/joy/styles";
 import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload, CheckCircle, XCircle } from "lucide-react";
+import PerformerCountTagSettings from "@/components/PerformerCountTagSettings";
 import { 
   getSettingsByCategory, 
   getSettingDefinition, 
@@ -115,6 +120,7 @@ export default function SettingsPage() {
     backfillPercentage: number;
   } | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
     msg: "",
@@ -599,6 +605,17 @@ export default function SettingsPage() {
       );
     }
 
+    // Special handling for performer count tag recommendations
+    if (definition.type === 'json' && definition.key === 'PERFORMER_COUNT_TAG_RECOMMENDATIONS') {
+      return (
+        <PerformerCountTagSettings
+          value={s.value ?? definition.defaultValue}
+          onChange={(value) => updateOne(s.key, value)}
+          error={hasError}
+        />
+      );
+    }
+
     // text/url/number inputs
     return (
       <Input
@@ -629,6 +646,41 @@ export default function SettingsPage() {
     
     return result;
   }, [settings]);
+
+  // Group settings by tab
+  const tabGroupedSettings = useMemo(() => {
+    const tabs = {
+      configuration: [
+        'Stash Integration',
+        'Appearance', 
+        'Playback',
+        'Recommended Tags'
+      ],
+      automation: [
+        'Smart Playlist Refresh',
+        'Database Maintenance'
+      ],
+      backup: [
+        'Database Backup'
+      ]
+    };
+
+    const result: Record<string, Record<string, Array<{ setting: Setting; definition: SettingDefinition }>>> = {
+      configuration: {},
+      automation: {},
+      backup: {}
+    };
+
+    Object.entries(tabs).forEach(([tab, categories]) => {
+      categories.forEach(category => {
+        if (groupedSettings[category]) {
+          result[tab][category] = groupedSettings[category];
+        }
+      });
+    });
+
+    return result;
+  }, [groupedSettings]);
 
   return (
     <Sheet sx={{ p: 2, maxWidth: 1000, mx: "auto" }}>
@@ -687,13 +739,18 @@ export default function SettingsPage() {
           ))}
         </Box>
       ) : (
-        <AccordionGroup size="lg">
-          {Object.entries(groupedSettings).map(([category, items]) => (
-            <Accordion key={category} defaultExpanded>
-              <AccordionSummary indicator={<ChevronDown />}>
-                <Typography level="title-lg">{category}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
+        <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value as number)}>
+          <TabList>
+            <Tab>Configuration</Tab>
+            <Tab>Automation</Tab>
+            <Tab>Backup</Tab>
+          </TabList>
+
+          {/* Configuration Tab */}
+          <TabPanel value={0}>
+            {Object.entries(tabGroupedSettings.configuration).map(([category, items]) => (
+              <Box key={category} sx={{ mb: 4 }}>
+                <Typography level="title-lg" sx={{ mb: 3 }}>{category}</Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {items.map(({ setting, definition }) => {
                     const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
@@ -1208,10 +1265,539 @@ export default function SettingsPage() {
                     </Box>
                   )}
                 </Box>
-              </AccordionDetails>
-            </Accordion>
-          ))}
-        </AccordionGroup>
+                
+                {/* Add connection testing for Stash Integration category */}
+                {category === 'Stash Integration' && (
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Button
+                      startDecorator={testingConnection ? <RefreshCw className="animate-spin" size={16} /> : <Wifi size={16} />}
+                      onClick={testConnection}
+                      disabled={testingConnection}
+                      variant="outlined"
+                      color="primary"
+                      sx={{ mb: 2 }}
+                    >
+                      {testingConnection ? 'Testing...' : 'Test Connection'}
+                    </Button>
+                    
+                    {connectionResult && (
+                      <Box sx={{ 
+                        p: 2, 
+                        borderRadius: 'md', 
+                        bgcolor: connectionResult.success ? 'success.50' : 'danger.50',
+                        border: '1px solid',
+                        borderColor: connectionResult.success ? 'success.200' : 'danger.200'
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          {connectionResult.success ? (
+                            <Wifi size={16} color="var(--joy-palette-success-500)" />
+                          ) : (
+                            <WifiOff size={16} color="var(--joy-palette-danger-500)" />
+                          )}
+                          <Typography 
+                            level="body-sm" 
+                            fontWeight="lg"
+                            color={connectionResult.success ? 'success' : 'danger'}
+                          >
+                            {connectionResult.message}
+                          </Typography>
+                        </Box>
+                        
+                        {connectionResult.success && connectionResult.version && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            Stash Version: {connectionResult.version}
+                          </Typography>
+                        )}
+                        
+                        {!connectionResult.success && connectionResult.details && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600', mt: 0.5 }}>
+                            {connectionResult.details}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </TabPanel>
+
+          {/* Automation Tab */}
+          <TabPanel value={1}>
+            {Object.entries(tabGroupedSettings.automation).map(([category, items]) => (
+              <Box key={category} sx={{ mb: 4 }}>
+                <Typography level="title-lg" sx={{ mb: 3 }}>{category}</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {items.map(({ setting, definition }) => {
+                    const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                    const dirty = (setting.value ?? "") !== origVal;
+                    const hasError = !!validationErrors[setting.key];
+                    
+                    return (
+                      <FormControl key={setting.key} error={hasError || undefined}>
+                        <FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {definition.label}
+                            {definition.required && (
+                              <Typography color="danger" level="body-sm">*</Typography>
+                            )}
+                            {dirty && (
+                              <Chip size="sm" color="warning" variant="soft">
+                                Modified
+                              </Chip>
+                            )}
+                          </Box>
+                        </FormLabel>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                          <Box sx={{ flexGrow: 1 }}>
+                            {renderEditor(setting, definition)}
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={14} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </Box>
+                        
+                        <FormHelperText>
+                          {hasError && (
+                            <Typography color="danger" level="body-xs">
+                              {validationErrors[setting.key]}
+                            </Typography>
+                          )}
+                          <Typography level="body-xs" sx={{ opacity: 0.8 }}>
+                            {definition.description}
+                          </Typography>
+                        </FormHelperText>
+                      </FormControl>
+                    );
+                  })}
+                </Box>
+                
+                {/* Add special controls for automation categories */}
+                {category === 'Smart Playlist Refresh' && (
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Typography level="title-md" sx={{ mb: 2 }}>
+                      Refresh Management
+                    </Typography>
+                    
+                    {/* Refresh Status */}
+                    {refreshStatus && (
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <RefreshCw size={16} />
+                          <Typography level="body-sm" fontWeight="lg">
+                            Status: {refreshStatus.enabled ? 'Enabled' : 'Disabled'}
+                          </Typography>
+                          {refreshStatus.isRunning && (
+                            <Chip size="sm" variant="soft" color="primary">
+                              Running
+                            </Chip>
+                          )}
+                        </Box>
+                        
+                        {refreshStatus.lastRefresh && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            Last refresh: {new Date(refreshStatus.lastRefresh).toLocaleString()}
+                          </Typography>
+                        )}
+                        
+                        {refreshStatus.nextRefresh && refreshStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            Next refresh: {new Date(refreshStatus.nextRefresh).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                    
+                    {/* Manual Refresh Controls */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                      <Button
+                        startDecorator={refreshLoading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+                        onClick={handleRefreshAction}
+                        disabled={refreshLoading}
+                        variant="solid"
+                        color="primary"
+                      >
+                        {refreshLoading ? 'Refreshing...' : 'Refresh All Playlists Now'}
+                      </Button>
+                    </Box>
+                    
+                    {/* Refresh History */}
+                    {refreshHistory.length > 0 && (
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>
+                          Recent Refresh History
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
+                          {refreshHistory.map((log) => (
+                            <Box
+                              key={log.id}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                p: 1.5,
+                                borderRadius: 'sm',
+                                bgcolor: log.success ? 'success.50' : 'danger.50',
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'fit-content' }}>
+                                {log.success ? (
+                                  <CheckCircle size={16} color="var(--joy-palette-success-500)" />
+                                ) : (
+                                  <XCircle size={16} color="var(--joy-palette-danger-500)" />
+                                )}
+                              </Box>
+                              
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography level="body-sm" fontWeight="lg">
+                                  {log.success ? 
+                                    `${log.refreshedPlaylists} playlist(s) refreshed` : 
+                                    `Refresh failed`
+                                  }
+                                </Typography>
+                                <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('refresh-', '')}
+                                  {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+                
+                {category === 'Database Maintenance' && (
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Typography level="title-md" sx={{ mb: 2 }}>
+                      Maintenance Management
+                    </Typography>
+                    
+                    {/* Maintenance Status */}
+                    {maintenanceStatus && (
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Database size={16} />
+                          <Typography level="body-sm" fontWeight="lg">
+                            Status: {maintenanceStatus.enabled ? 'Enabled' : 'Disabled'}
+                          </Typography>
+                        </Box>
+                        
+                        {maintenanceStatus.nextRun && maintenanceStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            Next maintenance: {new Date(maintenanceStatus.nextRun).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                    
+                    {/* Manual Maintenance Controls */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                      <Button
+                        startDecorator={maintenanceLoading ? <RefreshCw className="animate-spin" size={16} /> : <Database size={16} />}
+                        onClick={handleMaintenanceAction}
+                        disabled={maintenanceLoading}
+                        variant="solid"
+                        color="primary"
+                      >
+                        {maintenanceLoading ? 'Checking...' : 'Run Maintenance Check'}
+                      </Button>
+                    </Box>
+                    
+                    <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 3 }}>
+                      Maintenance checks verify that all markers in your database still have valid parent scenes in Stash. 
+                      Orphaned markers are automatically removed to keep playlists clean.
+                    </Typography>
+
+                    {/* Maintenance History */}
+                    {maintenanceHistory.length > 0 && (
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>
+                          Recent Maintenance History
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
+                          {maintenanceHistory.map((log) => (
+                            <Box
+                              key={log.id}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                p: 1.5,
+                                borderRadius: 'sm',
+                                bgcolor: log.success ? 'success.50' : 'danger.50',
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'fit-content' }}>
+                                {log.success ? (
+                                  <CheckCircle size={16} color="var(--joy-palette-success-500)" />
+                                ) : (
+                                  <XCircle size={16} color="var(--joy-palette-danger-500)" />
+                                )}
+                              </Box>
+                              
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography level="body-sm" fontWeight="lg">
+                                  {log.success ? 
+                                    `${log.refreshedPlaylists} orphaned item(s) removed` : 
+                                    `Maintenance failed`
+                                  }
+                                </Typography>
+                                <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('maintenance-', '')}
+                                  {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {/* Scene ID Backfill Section */}
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 3 }}>
+                      <Typography level="title-sm" sx={{ mb: 2 }}>
+                        Scene ID Backfill
+                      </Typography>
+                      
+                      {backfillStatus && (
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                          <Typography level="body-sm" fontWeight="lg" sx={{ mb: 1 }}>
+                            Database Status
+                          </Typography>
+                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            Total items: {backfillStatus.totalItems}
+                          </Typography>
+                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            Items with scene ID: {backfillStatus.itemsWithSceneId} ({backfillStatus.backfillPercentage}%)
+                          </Typography>
+                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            Items needing backfill: {backfillStatus.itemsNeedingBackfill}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                        <Button
+                          startDecorator={backfillLoading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
+                          onClick={handleBackfillAction}
+                          disabled={backfillLoading || (backfillStatus?.itemsNeedingBackfill || 0) === 0}
+                          variant="outlined"
+                          color="primary"
+                        >
+                          {backfillLoading ? 'Processing...' : 'Backfill Scene IDs'}
+                        </Button>
+                      </Box>
+                      
+                      <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                        Scene ID backfill extracts scene IDs from existing marker stream URLs to enable maintenance checks. 
+                        This is a one-time operation for existing data. New markers automatically include scene IDs.
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </TabPanel>
+
+          {/* Backup Tab */}
+          <TabPanel value={2}>
+            {Object.entries(tabGroupedSettings.backup).map(([category, items]) => (
+              <Box key={category} sx={{ mb: 4 }}>
+                <Typography level="title-lg" sx={{ mb: 3 }}>{category}</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {items.map(({ setting, definition }) => {
+                    const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                    const dirty = (setting.value ?? "") !== origVal;
+                    const hasError = !!validationErrors[setting.key];
+                    
+                    return (
+                      <FormControl key={setting.key} error={hasError || undefined}>
+                        <FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {definition.label}
+                            {definition.required && (
+                              <Typography color="danger" level="body-sm">*</Typography>
+                            )}
+                            {dirty && (
+                              <Chip size="sm" color="warning" variant="soft">
+                                Modified
+                              </Chip>
+                            )}
+                          </Box>
+                        </FormLabel>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                          <Box sx={{ flexGrow: 1 }}>
+                            {renderEditor(setting, definition)}
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={14} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </Box>
+                        
+                        <FormHelperText>
+                          {hasError && (
+                            <Typography color="danger" level="body-xs">
+                              {validationErrors[setting.key]}
+                            </Typography>
+                          )}
+                          <Typography level="body-xs" sx={{ opacity: 0.8 }}>
+                            {definition.description}
+                          </Typography>
+                        </FormHelperText>
+                      </FormControl>
+                    );
+                  })}
+                </Box>
+                
+                {/* Add backup controls for Database Backup category */}
+                {category === 'Database Backup' && (
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Typography level="title-md" sx={{ mb: 2 }}>
+                      Backup Management
+                    </Typography>
+                    
+                    {/* Backup Status */}
+                    {backupStatus && (
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Database size={16} />
+                          <Typography level="body-sm" fontWeight="lg">
+                            Status: {backupStatus.enabled ? 'Enabled' : 'Disabled'}
+                          </Typography>
+                        </Box>
+                        
+                        {backupStatus.lastBackup && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            Last backup: {new Date(backupStatus.lastBackup).toLocaleString()}
+                          </Typography>
+                        )}
+                        
+                        {backupStatus.nextBackup && backupStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            Next backup: {new Date(backupStatus.nextBackup).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                    
+                    {/* Manual Backup Controls */}
+                    <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                      <Button
+                        startDecorator={backupLoading ? <RefreshCw className="animate-spin" size={16} /> : <Database size={16} />}
+                        onClick={() => handleBackupAction('create')}
+                        disabled={backupLoading}
+                        variant="solid"
+                        color="primary"
+                      >
+                        {backupLoading ? 'Creating...' : 'Create Backup Now'}
+                      </Button>
+                      
+                      <Button
+                        startDecorator={<Trash2 size={16} />}
+                        onClick={() => handleBackupAction('cleanup')}
+                        disabled={backupLoading}
+                        variant="outlined"
+                        color="neutral"
+                      >
+                        Cleanup Old Backups
+                      </Button>
+                    </Box>
+                    
+                    {/* Backup Files List */}
+                    {backups.length > 0 && (
+                      <Box>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>
+                          Available Backups ({backups.length})
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 300, overflowY: 'auto' }}>
+                          {backups.map((backup) => (
+                            <Box
+                              key={backup.filename}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                p: 2,
+                                border: '1px solid',
+                                borderColor: 'neutral.200',
+                                borderRadius: 'md',
+                                bgcolor: 'background.surface',
+                              }}
+                            >
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography level="body-sm" fontWeight="lg">
+                                  {backup.filename}
+                                </Typography>
+                                <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                  {new Date(backup.created).toLocaleString()} • {backup.sizeFormatted}
+                                </Typography>
+                              </Box>
+                              
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Tooltip title="Restore from this backup">
+                                  <IconButton
+                                    size="sm"
+                                    variant="soft"
+                                    color="warning"
+                                    onClick={() => {
+                                      if (confirm(`Are you sure you want to restore from ${backup.filename}? This will replace your current database and cannot be undone.`)) {
+                                        handleBackupAction('restore', backup.filename);
+                                      }
+                                    }}
+                                    disabled={backupLoading}
+                                  >
+                                    <Upload size={16} />
+                                  </IconButton>
+                                </Tooltip>
+                                
+                                <Tooltip title="Delete this backup">
+                                  <IconButton
+                                    size="sm"
+                                    variant="soft"
+                                    color="danger"
+                                    onClick={() => {
+                                      if (confirm(`Are you sure you want to delete ${backup.filename}? This cannot be undone.`)) {
+                                        handleBackupAction('delete', backup.filename);
+                                      }
+                                    }}
+                                    disabled={backupLoading}
+                                  >
+                                    <Trash2 size={16} />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </TabPanel>
+        </Tabs>
       )}
 
       <Snackbar

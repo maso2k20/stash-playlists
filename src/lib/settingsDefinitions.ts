@@ -1,6 +1,6 @@
 // src/lib/settingsDefinitions.ts
 
-export type SettingType = 'text' | 'url' | 'select' | 'number';
+export type SettingType = 'text' | 'url' | 'select' | 'number' | 'json';
 
 export type SettingDefinition = {
   key: string;
@@ -18,6 +18,7 @@ export const SETTING_CATEGORIES = {
   STASH_INTEGRATION: 'Stash Integration',
   APPEARANCE: 'Appearance',
   PLAYBACK: 'Playback',
+  RECOMMENDED_TAGS: 'Recommended Tags',
   SMART_PLAYLIST_REFRESH: 'Smart Playlist Refresh',
   BACKUP: 'Database Backup',
   MAINTENANCE: 'Database Maintenance',
@@ -148,6 +149,37 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
     },
   },
   {
+    key: 'PERFORMER_COUNT_TAG_RECOMMENDATIONS',
+    defaultValue: '{}',
+    type: 'json',
+    category: SETTING_CATEGORIES.RECOMMENDED_TAGS,
+    label: 'Performer Count Tag Recommendations',
+    description: 'Configure tags to recommend based on the number of performers in a scene. The system will suggest these tags when editing markers for scenes with the specified performer count.',
+    required: false,
+    validation: (value) => {
+      if (!value.trim()) return null;
+      try {
+        const parsed = JSON.parse(value);
+        if (typeof parsed !== 'object' || parsed === null) {
+          return 'Must be a valid JSON object';
+        }
+        // Validate that all keys are numbers and all values are strings
+        for (const [key, val] of Object.entries(parsed)) {
+          const num = parseInt(key);
+          if (isNaN(num) || num < 1 || num > 20) {
+            return 'Performer count keys must be numbers between 1 and 20';
+          }
+          if (typeof val !== 'string' || !val.trim()) {
+            return 'Tag IDs must be non-empty strings';
+          }
+        }
+        return null;
+      } catch {
+        return 'Must be valid JSON format';
+      }
+    },
+  },
+  {
     key: 'SMART_PLAYLIST_REFRESH_ENABLED',
     defaultValue: 'false',
     type: 'select',
@@ -263,6 +295,38 @@ export async function getDefaultClipSettings() {
       before: Math.max(0, Number(settingsMap.DEFAULT_CLIP_BEFORE ?? '0')),
       after: Math.max(0, Number(settingsMap.DEFAULT_CLIP_AFTER ?? '0')),
     };
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+// Helper to get performer count tag recommendations
+export async function getPerformerCountTagRecommendations(): Promise<Record<number, string>> {
+  const { PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient();
+  
+  try {
+    const setting = await prisma.settings.findUnique({
+      where: { key: 'PERFORMER_COUNT_TAG_RECOMMENDATIONS' },
+      select: { value: true },
+    });
+    
+    if (!setting?.value) return {};
+    
+    try {
+      const parsed = JSON.parse(setting.value);
+      // Convert string keys to numbers
+      const result: Record<number, string> = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        const num = parseInt(key);
+        if (!isNaN(num) && typeof value === 'string') {
+          result[num] = value;
+        }
+      }
+      return result;
+    } catch {
+      return {};
+    }
   } finally {
     await prisma.$disconnect();
   }

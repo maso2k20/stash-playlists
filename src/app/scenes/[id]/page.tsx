@@ -236,6 +236,9 @@ export default function SceneTagManagerPage() {
     // Back navigation logic
     const [referrer, setReferrer] = useState<string | null>(null);
 
+    // Performer count recommendations
+    const [performerCountRecommendations, setPerformerCountRecommendations] = useState<Record<number, string>>({});
+
     useEffect(() => {
         // Check if we came from an actors page
         if (document.referrer) {
@@ -247,6 +250,23 @@ export default function SceneTagManagerPage() {
                 setReferrer(document.referrer);
             }
         }
+    }, []);
+
+    // Load performer count recommendations
+    useEffect(() => {
+        const loadRecommendations = async () => {
+            try {
+                const response = await fetch('/api/settings/performer-count-recommendations');
+                const result = await response.json();
+                if (result.success) {
+                    setPerformerCountRecommendations(result.recommendations);
+                }
+            } catch (error) {
+                console.error('Failed to load performer count recommendations:', error);
+            }
+        };
+
+        loadRecommendations();
     }, []);
 
     // Handle back navigation
@@ -513,6 +533,19 @@ export default function SceneTagManagerPage() {
     // Get primary tag recommendations - tags with children, for when no primary tag is selected
     const getPrimaryTagRecommendations = (): Tag[] => {
         return tagOptions.filter(tag => tag.children && tag.children.length > 0);
+    };
+
+    // Get performer count recommendations - tags based on the number of performers in the scene
+    const getPerformerCountRecommendations = (): Tag[] => {
+        if (!scene?.performers || !performerCountRecommendations) return [];
+        
+        const performerCount = scene.performers.length;
+        const recommendedTagId = performerCountRecommendations[performerCount];
+        
+        if (!recommendedTagId) return [];
+        
+        const recommendedTag = tagOptions.find(tag => tag.id === recommendedTagId);
+        return recommendedTag ? [recommendedTag] : [];
     };
 
     // Handle adding a recommended tag to the marker
@@ -1783,6 +1816,44 @@ export default function SceneTagManagerPage() {
                                     sx={{ minWidth: 320, maxWidth: 720 }}
                                     placeholder="Pick tags to add/remove on every marker…"
                                 />
+
+                                {/* Performer count recommendations */}
+                                {(() => {
+                                    const performerRecommendations = getPerformerCountRecommendations();
+                                    return performerRecommendations.length > 0 ? (
+                                        <Box sx={{ mt: 1 }}>
+                                            <Typography level="body-sm" sx={{ mb: 1, fontWeight: 'lg' }}>
+                                                Recommended for {scene?.performers?.length || 0} performer{(scene?.performers?.length || 0) !== 1 ? 's' : ''}:
+                                            </Typography>
+                                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                                                {performerRecommendations.map((tag) => (
+                                                    <Chip
+                                                        key={tag.id}
+                                                        size="sm"
+                                                        variant="soft"
+                                                        color="warning"
+                                                        onClick={() => {
+                                                            // Add to common tags if not already selected
+                                                            if (!commonTagIds.includes(tag.id)) {
+                                                                setCommonTagIds(prev => [...prev, tag.id]);
+                                                            }
+                                                        }}
+                                                        sx={{
+                                                            cursor: "pointer",
+                                                            opacity: commonTagIds.includes(tag.id) ? 0.5 : 1,
+                                                            "&:hover": {
+                                                                transform: "translateY(-1px)",
+                                                                boxShadow: "sm"
+                                                            }
+                                                        }}
+                                                    >
+                                                        {tag.name} {commonTagIds.includes(tag.id) && "✓"}
+                                                    </Chip>
+                                                ))}
+                                            </Box>
+                                        </Box>
+                                    ) : null;
+                                })()}
 
                                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                                     <Checkbox
