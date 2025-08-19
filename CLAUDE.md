@@ -132,6 +132,7 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
     - Hover-activated horizontal volume slider popup
     - Timer display repositioned after progress bar for better layout
     - Clean popup design with proper hover area to prevent flickering
+  - **Double-click Protection**: Disabled double-click fullscreen activation via `userActions.doubleClick: false` to prevent accidental fullscreen during playback
   - **Active Marker Highlighting**: Real-time visual feedback for current marker based on video timeline position
     - **Range-based Detection**: Markers with end times remain active when video is within their start-end range
     - **Priority System**: If video time falls within marker range, that marker stays active regardless of nearby markers

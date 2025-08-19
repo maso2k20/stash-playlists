@@ -228,6 +228,9 @@ export default function SceneTagManagerPage() {
     
     // Delete all confirmation dialog
     const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+    
+    // Back navigation warning dialog
+    const [backWarningDialogOpen, setBackWarningDialogOpen] = useState(false);
 
     // Ratings state
     const [ratings, setRatings] = useState<Record<string, number | null>>({});
@@ -271,11 +274,30 @@ export default function SceneTagManagerPage() {
 
     // Handle back navigation
     const handleGoBack = () => {
+        if (dirtyCount > 0) {
+            setBackWarningDialogOpen(true);
+        } else {
+            if (referrer) {
+                router.push(referrer);
+            } else {
+                router.back();
+            }
+        }
+    };
+
+    // Confirm back navigation with unsaved changes
+    const confirmGoBack = () => {
+        setBackWarningDialogOpen(false);
         if (referrer) {
             router.push(referrer);
         } else {
             router.back();
         }
+    };
+
+    // Cancel back navigation
+    const cancelGoBack = () => {
+        setBackWarningDialogOpen(false);
     };
 
     // Init drafts from server markers
@@ -2065,6 +2087,29 @@ export default function SceneTagManagerPage() {
                         </Button>
                         <Button color="danger" onClick={confirmDeleteAll}>
                             Delete All
+                        </Button>
+                    </DialogActions>
+                </ModalDialog>
+            </Modal>
+
+            {/* Back Navigation Warning Dialog */}
+            <Modal open={backWarningDialogOpen} onClose={cancelGoBack}>
+                <ModalDialog sx={{ minWidth: 400 }}>
+                    <DialogTitle>Unsaved Changes</DialogTitle>
+                    <DialogContent>
+                        <Typography level="body-sm">
+                            You have {dirtyCount} unsaved change{dirtyCount !== 1 ? 's' : ''}. Are you sure you want to leave without saving?
+                        </Typography>
+                        <Typography level="body-xs" sx={{ mt: 1, opacity: 0.8 }}>
+                            Any changes you made will be lost.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button variant="plain" onClick={cancelGoBack}>
+                            Cancel
+                        </Button>
+                        <Button color="danger" onClick={confirmGoBack}>
+                            Leave Without Saving
                         </Button>
                     </DialogActions>
                 </ModalDialog>
