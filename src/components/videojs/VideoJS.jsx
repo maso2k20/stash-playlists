@@ -160,6 +160,7 @@ export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
   const vttBlobRef = React.useRef(null);
+  const wasFullscreenRef = React.useRef(false);
   const { options, onReady, offset, vttPath, stashServer, stashAPI, markers } = props;
 
   const [visible, setVisible] = React.useState(true);
@@ -194,6 +195,11 @@ export const VideoJS = (props) => {
         // Add forward 30s button
         const forward30Button = new Forward30Button(player);
         controlBar.addChild(forward30Button);
+        
+        // Track fullscreen state changes
+        player.on('fullscreenchange', () => {
+          wasFullscreenRef.current = player.isFullscreen();
+        });
         
         
         
@@ -235,6 +241,16 @@ export const VideoJS = (props) => {
       }
       if (props.hasStarted) {
         player.play();
+      }
+      
+      // Restore fullscreen state if it was previously fullscreen
+      if (wasFullscreenRef.current && !player.isFullscreen()) {
+        // Use a small delay to ensure the new video source is loaded
+        setTimeout(() => {
+          if (player && !player.isDisposed()) {
+            player.requestFullscreen();
+          }
+        }, 100);
       }
     }
   }, [options, offset, props.hasStarted]);
@@ -334,10 +350,11 @@ const arePropsEqual = (prevProps, nextProps) => {
   // Check other critical props
   const offsetEqual = JSON.stringify(prevProps.offset) === JSON.stringify(nextProps.offset);
   const hasStartedEqual = prevProps.hasStarted === nextProps.hasStarted;
+  const onEndedEqual = prevProps.onEnded === nextProps.onEnded;
   
   // For markers, only re-render if sources change - let the useEffect handle marker updates
   // This prevents video reloads when markers are added/updated
-  return sourcesEqual && offsetEqual && hasStartedEqual;
+  return sourcesEqual && offsetEqual && hasStartedEqual && onEndedEqual;
 };
 
 export default React.memo(VideoJS, arePropsEqual);

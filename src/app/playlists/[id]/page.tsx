@@ -319,7 +319,6 @@ export default function PlaylistPlayer() {
               }}
             >
               <VideoJS
-                key={currentItem?.item?.id} // Key ensures video only remounts when item changes
                 options={videoJsOptions}
                 offset={offset}
                 onReady={handlePlayerReady}
