@@ -1,4 +1,5 @@
 import { gql } from "@apollo/client";
+import { extractRelativePath } from "@/lib/urlUtils";
 
 export const SMART_PLAYLIST_BUILDER = gql`
   query smartPlaylistBuilder($actorId: [ID!], $tagID: [ID!]!) {
@@ -39,17 +40,15 @@ export function mapMarkersToItems(markers: any[], opts: {
   stashServer?: string | null;
   stashAPI?: string | null;
 }) {
-  const { stashServer, stashAPI } = opts;
   return (markers ?? []).map((m: any, index: number) => ({
     id: String(m.id),
     title: m.title ?? "",
     startTime: Number(m.seconds ?? 0),
     endTime: Number(m.end_seconds ?? 0),
-    screenshot: m.screenshot ?? null,
-    stream: m.scene?.id && stashServer && stashAPI
-      ? `${stashServer}/scene/${m.scene.id}/stream?api_key=${stashAPI}`
-      : (m.stream ?? null),
-    preview: (m.preview ?? m.screenshot) ?? null,
+    // Store relative paths only - full URLs built at runtime
+    screenshot: m.scene?.id ? `/scene/${m.scene.id}/screenshot` : extractRelativePath(m.screenshot),
+    stream: m.scene?.id ? `/scene/${m.scene.id}/stream` : extractRelativePath(m.stream),
+    preview: extractRelativePath(m.preview ?? m.screenshot),
     sceneId: m.scene?.id ?? null, // Add scene ID for maintenance tracking
     itemOrder: index,
   }));

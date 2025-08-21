@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     stream?: string | null;
     preview?: string | null;
     rating?: number | null;
+    sceneId?: string | null;
   };
 
   try {
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     return jsonError(400, 'Invalid JSON');
   }
 
-  const { id, title, startTime, endTime, screenshot, stream, preview, rating } = body;
+  const { id, title, startTime, endTime, screenshot, stream, preview, rating, sceneId } = body;
 
   if (!id) {
     return jsonError(400, 'Item ID is required');
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
         stream: stream || null,
         preview: preview || null,
         rating: rating || null,
+        sceneId: sceneId || null,
       },
     });
 

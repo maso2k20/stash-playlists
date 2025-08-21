@@ -13,6 +13,7 @@ type IncomingItem = {
   stream?: string | null;
   preview?: string | null;
   rating?: number | null;
+  sceneId?: string | null;
   itemOrder?: number;
 };
 
@@ -68,6 +69,9 @@ function normalizeIncoming(items: any[]): IncomingItem[] {
       rating: Object.prototype.hasOwnProperty.call(raw, "rating")
         ? (raw.rating as number | null | undefined) ?? null
         : undefined,
+      sceneId: Object.prototype.hasOwnProperty.call(raw, "sceneId")
+        ? (raw.sceneId as string | null | undefined) ?? null
+        : undefined,
 
       itemOrder: typeof items[i]?.order === "number" ? items[i].order :
                  typeof raw.itemOrder === "number" ? raw.itemOrder : undefined,
@@ -117,6 +121,7 @@ async function syncItems(
         stream: it.stream,
         preview: it.preview,
         rating: it.rating,
+        sceneId: it.sceneId,
       });
 
       await tx.item.upsert({
@@ -131,6 +136,7 @@ async function syncItems(
           stream: it.stream ?? null,
           preview: it.preview ?? null,
           rating: it.rating ?? null,
+          sceneId: it.sceneId ?? null,
         },
       });
       upsertedItems++;

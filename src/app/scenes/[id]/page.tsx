@@ -462,6 +462,11 @@ export default function SceneTagManagerPage() {
                 startTime: marker.seconds || 0,
                 endTime: marker.end_seconds || (marker.seconds || 0) + 30, // default 30 second duration
                 rating: rating,
+                sceneId: sceneId,
+                // Store relative paths only - full URLs built at runtime
+                screenshot: `/scene/${sceneId}/screenshot`,
+                stream: `/scene/${sceneId}/stream`,
+                preview: `/scene/${sceneId}/scene_marker/${marker.id}/preview`,
             };
 
             const createResponse = await fetch('/api/items', {
