@@ -9,6 +9,7 @@ import { useStashTags } from "@/context/StashTagsContext";
 import { formatLength } from "@/lib/formatLength";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { makeStashUrl } from "@/lib/urlUtils";
 
 import {
   Sheet,
@@ -105,18 +106,6 @@ type SortOption =
  * - If preview is .webp: swap <img src> to preview on hover.
  * - Falls back to screenshot if no preview provided.
  */
-function joinUrl(base?: string, path?: string) {
-  if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
-  if (!base) return path;
-  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
-}
-
-function withApiKey(url: string, apiKey?: string) {
-  if (!url || !apiKey) return url;
-  if (/[?&]api_key=/.test(url)) return url;
-  return url.includes("?") ? `${url}&api_key=${apiKey}` : `${url}?api_key=${apiKey}`;
-}
 
 // Reusable pagination controls component
 function PaginationControls({ 
@@ -190,8 +179,8 @@ function HoverPreview({
   const [hovered, setHovered] = useState(false);
   const [videoErrored, setVideoErrored] = useState(false);
 
-  const resolvedPreview = withApiKey(joinUrl(stashBase, preview ?? ""), apiKey);
-  const resolvedShot = withApiKey(joinUrl(stashBase, screenshot ?? ""), apiKey);
+  const resolvedPreview = makeStashUrl(preview, stashBase, apiKey);
+  const resolvedShot = makeStashUrl(screenshot, stashBase, apiKey);
 
   const hasPreview = !!resolvedPreview;
 
@@ -509,7 +498,7 @@ export default function Page() {
       startTime: singleMarker.seconds,
       endTime: singleMarker.end_seconds,
       screenshot: singleMarker.screenshot,
-      stream: `${stashServer}/scene/${singleMarker.scene.id}/stream?api_key=${stashAPI}`,
+      stream: singleMarker.stream,
       preview,
     };
 
@@ -813,8 +802,8 @@ export default function Page() {
                           screenshot={marker.screenshot}
                           preview={marker.preview}
                           alt={marker.title}
-                          stashBase={stashServer}
-                          apiKey={stashAPI}
+                          stashBase={String(stashServer || "")}
+                          apiKey={String(stashAPI || "")}
                         />
                       </CardCover>
 

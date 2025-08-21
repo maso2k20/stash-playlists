@@ -24,10 +24,13 @@ import { ArrowUp, ArrowDown, Trash2, Clock } from "lucide-react";
 import { formatLength } from "@/lib/formatLength";
 import PlaylistImageUpload from "@/components/PlaylistImageUpload";
 import Image from "next/image";
+import { useSettings } from "@/app/context/SettingsContext";
+import { makeStashUrl } from "@/lib/urlUtils";
 
 export default function EditManualPlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const settings = useSettings();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -288,7 +291,7 @@ export default function EditManualPlaylistPage() {
                         }}>
                           {item.screenshot ? (
                             <Image
-                              src={item.screenshot}
+                              src={makeStashUrl(item.screenshot, String(settings["STASH_SERVER"] || ""), String(settings["STASH_API"] || ""))}
                               alt={item.title}
                               fill
                               style={{ objectFit: 'cover' }}

@@ -20,7 +20,7 @@ model Settings {
 model Actor {
   id         String   @id
   name       String
-  image_path String
+  image_path String   // Relative path like "/performer/123/image" (server URL added at runtime)
   rating     Int
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
@@ -68,9 +68,9 @@ model Item {
   title      String
   startTime  Float     @default(0)
   endTime    Float     @default(0)
-  screenshot String?
-  stream     String?
-  preview    String?
+  screenshot String?   // Relative path like "/scene/123/screenshot" (server URL added at runtime)
+  stream     String?   // Relative path like "/scene/123/stream" (server URL added at runtime)
+  preview    String?   // Relative path like "/scene/123/scene_marker/456/preview" (server URL added at runtime)
   rating     Int?
   sceneId    String?   // Scene ID from Stash server for maintenance checks
   orphaned   Boolean   @default(false) // Mark items whose scenes no longer exist in Stash

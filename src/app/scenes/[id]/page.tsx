@@ -34,6 +34,7 @@ import { useSettings } from "@/app/context/SettingsContext";
 import VideoJS from "@/components/videojs/VideoJS";
 import TimeInput from "@/components/TimeInput";
 import StarRating from "@/components/StarRating";
+import { makeStashUrl } from "@/lib/urlUtils";
 
 /* Query: scene with markers + tags */
 const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
@@ -122,17 +123,6 @@ type Draft = {
     tag_ids: string[];
 };
 
-function joinUrl(base?: string, path?: string) {
-    if (!path) return "";
-    if (/^https?:\/\//i.test(path)) return path;
-    if (!base) return path;
-    return `${base.replace(/\/+$/, "")}/${String(path).replace(/^\/+/, "")}`;
-}
-
-function withApiKey(url: string, apiKey?: string) {
-    if (!url || !apiKey) return url;
-    return /[?&]api_key=/.test(url) ? url : `${url}${url.includes("?") ? "&" : "?"}api_key=${apiKey}`;
-}
 
 export default function SceneTagManagerPage() {
     const params = useParams<{ id: string }>();
@@ -192,9 +182,7 @@ export default function SceneTagManagerPage() {
     const posterUrl = useMemo(() => {
         const raw = scene?.paths?.screenshot || "";
         if (!raw) return undefined;
-        const abs = joinUrl(stashServer, raw);
-        const withKey = withApiKey(abs, stashAPI);
-        return withKey || undefined; // undefined avoids a broken img if empty
+        return makeStashUrl(raw, stashServer, stashAPI) || undefined;
     }, [scene?.paths?.screenshot, stashServer, stashAPI]);
 
     // ----- State -----

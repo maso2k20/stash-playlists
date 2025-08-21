@@ -53,6 +53,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 - Proxy endpoint at `/api/stash-graphql` for client-side GraphQL requests
 - **Enhanced Tag Context**: `src/context/StashTagsContext.tsx` with comprehensive tag data including `child_count` and nested children for smart recommendations
 - **Tag Refresh**: Manual refresh buttons available on scene editing and actor scenes pages to reload tags from Stash server without app restart
+- **Dynamic URL Handling**: Relative path storage with runtime URL construction for server portability (see URL Management section)
 
 **State Management:**
 - `src/app/context/SettingsContext.tsx` - Global settings context
@@ -92,7 +93,7 @@ Located in `src/lib/smartPlaylistServer.ts:buildItemsForPlaylist()`:
   - Maintains consistency between editor preview and refresh operations
 - Creates video clips with configurable before/after timing around markers using settings defaults
 - Generates deduped titles combining scene and marker names
-- Provides preview, screenshot, and stream URLs with API key authentication
+- **Relative Path Storage**: Stores relative paths (e.g., `/scene/123/screenshot`) in database; full URLs constructed at runtime using current server settings
 
 ### Rating System
 Comprehensive 1-5 star rating system for markers/items:
@@ -133,6 +134,7 @@ Enhanced marker editing and tagging interface on `/scenes/[id]` pages:
     - Timer display repositioned after progress bar for better layout
     - Clean popup design with proper hover area to prevent flickering
   - **Double-click Protection**: Disabled double-click fullscreen activation via `userActions.doubleClick: false` to prevent accidental fullscreen during playback
+  - **Fullscreen Preservation**: Maintains fullscreen mode when transitioning between playlist items to prevent interruption of viewing experience
   - **Active Marker Highlighting**: Real-time visual feedback for current marker based on video timeline position
     - **Range-based Detection**: Markers with end times remain active when video is within their start-end range
     - **Priority System**: If video time falls within marker range, that marker stays active regardless of nearby markers
@@ -365,4 +367,41 @@ Comprehensive maintenance system for detecting and handling orphaned markers who
 - **Status Display**: Real-time maintenance status, schedule, and next run time in settings interface
 - **Data Integrity**: Ensures playlist consistency by automatically handling deleted Stash content
 - **Performance Optimized**: Efficient bulk operations with proper error handling and progress reporting
+
+### URL Management System
+Dynamic URL handling system that separates server configuration from stored data for maximum portability:
+
+**Relative Path Storage:**
+- Database fields (`Actor.image_path`, `Item.screenshot/stream/preview`) store relative paths only
+- Examples: `/scene/123/screenshot`, `/performer/456/image`, `/scene/123/scene_marker/789/preview`
+- No server addresses embedded in database - ensures portability when changing Stash server IP/hostname
+
+**Runtime URL Construction:**
+- `src/lib/urlUtils.ts` provides utility functions for URL handling:
+  - `makeStashUrl(relativePath, stashServer, apiKey?)` - construct full URLs with current server settings
+  - `extractRelativePath(fullUrl)` - extract relative path from existing full URLs  
+  - `isRelativePath(path)` - check if path is already relative
+- Full URLs built on-demand using current `STASH_SERVER` and `STASH_API` settings
+- Automatic API key appending for authenticated endpoints
+
+**Migration Support:**
+- `src/scripts/migrateUrls.ts` - one-time migration script to convert existing full URLs to relative paths
+- Handles Actor.image_path and Item fields (screenshot, stream, preview)
+- Safe conversion with error handling and detailed logging
+- **Running the Migration:**
+  - **Method 1 (TypeScript):** `npm run migrate-urls` (uses npx tsx to execute TypeScript version)
+  - **Method 2 (JavaScript):** `npm run migrate-urls-js` (uses plain Node.js to execute JavaScript version)
+  - **Direct execution:** `node migrate-urls.js` (JavaScript) or `npx tsx src/scripts/migrateUrls.ts` (TypeScript)
+- Run once after updating to the new URL handling system
+- Both versions provide identical functionality with detailed progress logging
+
+**Component Integration:**
+- All UI components use `makeStashUrl()` to display images/videos with current server settings
+- Stash server changes immediately reflected across entire application without database updates
+- Components receive server settings via React context (`useSettings()`)
+
+**API Endpoints:**
+- New data automatically stores relative paths via `extractRelativePath()` utility
+- Legacy full URLs converted to relative paths on input for backward compatibility
+- Consistent relative path storage across all create/update operations
 

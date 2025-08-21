@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
 import { usePathname } from "next/navigation";
+import { makeStashUrl } from "@/lib/urlUtils";
 import {
     Sheet,
     Box,
@@ -75,17 +76,6 @@ const GET_ACTOR_SCENES_WITHOUT_TAG = gql`
   }
 `;
 
-function joinUrl(base?: string, path?: string) {
-    if (!path) return "";
-    if (/^https?:\/\//i.test(path)) return path;
-    if (!base) return path;
-    return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
-}
-function withApiKey(url: string, apiKey?: string) {
-    if (!url || !apiKey) return url;
-    if (/[?&]api_key=/.test(url)) return url;
-    return url.includes("?") ? `${url}&api_key=${apiKey}` : `${url}?api_key=${apiKey}`;
-}
 
 function HoverPreview({
     screenshot,
@@ -103,8 +93,8 @@ function HoverPreview({
     const [hovered, setHovered] = useState(false);
     const [videoErrored, setVideoErrored] = useState(false);
 
-    const resolvedPreview = withApiKey(joinUrl(stashBase, preview ?? ""), apiKey);
-    const resolvedShot = withApiKey(joinUrl(stashBase, screenshot ?? ""), apiKey);
+    const resolvedPreview = makeStashUrl(preview, stashBase, apiKey);
+    const resolvedShot = makeStashUrl(screenshot, stashBase, apiKey);
 
     const hasPreview = !!resolvedPreview;
     const isVideo = hasPreview && /\.(webm|mp4)(?:$|\?)/i.test(resolvedPreview);

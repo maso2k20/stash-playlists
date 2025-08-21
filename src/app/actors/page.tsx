@@ -3,6 +3,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSettings } from "@/app/context/SettingsContext";
+import { makeStashUrl } from "@/lib/urlUtils";
 import {
   Grid,
   Card,
@@ -30,6 +32,7 @@ export default function MyActorsPage() {
   const [actors, setActors] = useState<Actor[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const settings = useSettings();
 
   useEffect(() => {
     fetch("/api/actors", { cache: "no-store" })
@@ -164,7 +167,7 @@ export default function MyActorsPage() {
                     <CardCover>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={actor.image_path}
+                        src={makeStashUrl(actor.image_path, String(settings["STASH_SERVER"] || ""), String(settings["STASH_API"] || ""))}
                         alt={actor.name}
                         style={{ objectFit: "cover" }}
                         loading="lazy"

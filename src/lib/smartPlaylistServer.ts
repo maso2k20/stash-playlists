@@ -244,15 +244,16 @@ export async function buildItemsForPlaylist(
       const sceneId = m.scene?.id ?? undefined;
       const markerId = m.id;
 
+      // Store relative paths only - full URLs constructed at runtime
       const preview =
         sceneId && markerId
-          ? `${baseServer}/scene/${sceneId}/scene_marker/${markerId}/preview${keyParam}`
+          ? `/scene/${sceneId}/scene_marker/${markerId}/preview`
           : undefined;
       const screenshot = sceneId
-        ? `${baseServer}/scene/${sceneId}/screenshot${keyParam}`
+        ? `/scene/${sceneId}/screenshot`
         : undefined;
       const stream = sceneId
-        ? `${baseServer}/scene/${sceneId}/stream${keyParam}`
+        ? `/scene/${sceneId}/stream`
         : undefined;
 
       return {

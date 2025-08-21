@@ -8,6 +8,8 @@ import VideoJS from "@/components/videojs/VideoJS";
 import { PlaylistDetail } from '@/components/PlaylistDetail';
 import StarRating from '@/components/StarRating';
 import MarkerTagEditor from '@/components/MarkerTagEditor';
+import { useSettings } from "@/app/context/SettingsContext";
+import { makeStashUrl } from "@/lib/urlUtils";
 
 // GraphQL queries and mutations for marker tag editing
 const GET_SCENE_MARKER_DETAILS = gql`
@@ -60,6 +62,7 @@ type Playlist = {
 export default function PlaylistPlayer() {
   const { id } = useParams();
   const searchParams = useSearchParams();
+  const settings = useSettings();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0); // index within playOrder
   const [hasStarted, setHasStarted] = useState(false);
@@ -250,16 +253,21 @@ export default function PlaylistPlayer() {
   const currentItem = items[currentItemIndex];
 
   // Memoize video options to prevent re-renders when only scene data changes
-  const videoJsOptions = useMemo(() => ({
-    autoplay: true, // Auto-play when new items are selected
-    controls: true,
-    responsive: true,
-    fluid: true,
-    aspectRatio: '16:9',
-    sources: currentItem
-      ? [{ src: currentItem.item.stream, type: "video/mp4" }]
-      : [],
-  }), [currentItem?.item?.stream]); // Only re-render when the actual video source changes
+  const videoJsOptions = useMemo(() => {
+    const stashServer = String(settings["STASH_SERVER"] || "");
+    const stashApiKey = String(settings["STASH_API"] || "");
+    
+    return {
+      autoplay: true, // Auto-play when new items are selected
+      controls: true,
+      responsive: true,
+      fluid: true,
+      aspectRatio: '16:9',
+      sources: currentItem
+        ? [{ src: makeStashUrl(currentItem.item.stream, stashServer, stashApiKey), type: "video/mp4" }]
+        : [],
+    };
+  }, [currentItem?.item?.stream, settings]); // Re-render when video source or settings change
 
   const handlePlayerReady = useCallback((player: any) => {
     playerRef.current = player;
@@ -385,7 +393,7 @@ export default function PlaylistPlayer() {
             title={playlist?.name}
             showCounts
             items={items}
-            // 👇 pass/consume play order so shuffle affects playback
+            // 👇 pass/consume play order so shuffle affects playbook
             playOrder={playOrder}
             onOrderChange={(order) => {
               setPlayOrder(order);
@@ -395,6 +403,8 @@ export default function PlaylistPlayer() {
             setCurrentIndex={setCurrentIndex} // interpreted as index within playOrder
             onDoubleClickPlay={(i) => setCurrentIndex(i)}
             playedItemIndices={playedItemIndices}
+            stashServer={String(settings["STASH_SERVER"] || "")}
+            stashApiKey={String(settings["STASH_API"] || "")}
             // onRemoveItem={(id) => {/* DELETE /api/playlists/:id/items with { itemId: id } */}}
           />
         </Grid>

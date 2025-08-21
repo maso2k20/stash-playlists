@@ -1,7 +1,8 @@
 // src/app/api/actors/route.ts
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';  
+import { prisma } from '@/lib/prisma';
+import { extractRelativePath } from '@/lib/urlUtils';  
 
 // GET /api/actors
 export async function GET() {
@@ -24,17 +25,20 @@ export async function POST(request: Request) {
     );
   }
 
+  // Convert full URL to relative path for storage
+  const relativeImagePath = extractRelativePath(image_path);
+
   const actor = await prisma.actor.upsert({
     where: { id },
     create: {
       id,
       name,
-      image_path,
+      image_path: relativeImagePath,
       rating
     },
     update: {
       name,
-      image_path,
+      image_path: relativeImagePath,
       rating
     }
   });

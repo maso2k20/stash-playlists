@@ -8,6 +8,7 @@ import DeleteForeverRounded from '@mui/icons-material/DeleteForeverRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import ShuffleRounded from '@mui/icons-material/ShuffleRounded';
 import { formatLength } from "@/lib/formatLength";
+import { makeStashUrl } from "@/lib/urlUtils";
 
 type PlaylistItem = {
   id: string; // content item id
@@ -43,6 +44,9 @@ export function PlaylistDetail({
   playOrder,
   onOrderChange,           // called with new order (indices) on shuffle
   playedItemIndices,       // set of indices for items that have been played
+  // Stash server settings for URL construction
+  stashServer,
+  stashApiKey,
 }: {
   items: PlaylistItem[];
   currentIndex: number;
@@ -54,6 +58,8 @@ export function PlaylistDetail({
   playOrder?: number[];
   onOrderChange?: (order: number[]) => void;
   playedItemIndices?: Set<number>;
+  stashServer?: string;
+  stashApiKey?: string;
 }) {
   const [q, setQ] = React.useState('');
 
@@ -206,7 +212,7 @@ export function PlaylistDetail({
                     }}
                   >
                     {it.item.screenshot ? (
-                      <img src={it.item.screenshot} alt="" loading="lazy" />
+                      <img src={makeStashUrl(it.item.screenshot, stashServer, stashApiKey)} alt="" loading="lazy" />
                     ) : (
                       <div />
                     )}
