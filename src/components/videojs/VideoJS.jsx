@@ -233,10 +233,14 @@ export const VideoJS = (props) => {
           addCustomMarkers(player, markers);
         }
         
-        // Start playback if autoplay was originally requested
-        // This ensures offset is properly applied before playback begins
+        // Start playback after offset is applied and player is fully ready
         if (options.autoplay) {
-          player.play();
+          // Wait for the next tick to ensure offset is fully applied
+          setTimeout(() => {
+            if (player && !player.isDisposed()) {
+              player.play();
+            }
+          }, 0);
         }
       }));
     } else {
