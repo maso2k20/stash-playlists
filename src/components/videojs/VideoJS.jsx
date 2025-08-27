@@ -173,6 +173,7 @@ export const VideoJS = (props) => {
 
       const playerOptions = {
         ...options,
+        autoplay: false, // Disable initial autoplay to ensure offset is applied first
         userActions: {
           ...options?.userActions,
           doubleClick: false
@@ -230,6 +231,12 @@ export const VideoJS = (props) => {
         // Initialize markers after player is ready
         if (markers && markers.length > 0) {
           addCustomMarkers(player, markers);
+        }
+        
+        // Start playback if autoplay was originally requested
+        // This ensures offset is properly applied before playback begins
+        if (options.autoplay) {
+          player.play();
         }
       }));
     } else {

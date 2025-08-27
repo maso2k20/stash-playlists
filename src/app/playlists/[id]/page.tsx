@@ -234,11 +234,18 @@ export default function PlaylistPlayer() {
 
   // Reset index/order when items change
   useEffect(() => {
+    // Only proceed if we have items loaded
+    if (items.length === 0) {
+      setPlayOrder([]);
+      return;
+    }
+    
     const shouldShuffle = searchParams.get('shuffle') === 'true';
     const initialOrder = items.map((_, i) => i);
     
-    if (shouldShuffle && items.length > 0) {
-      setPlayOrder(shuffleArray(initialOrder));
+    if (shouldShuffle) {
+      const shuffled = shuffleArray(initialOrder);
+      setPlayOrder(shuffled);
     } else {
       setPlayOrder(initialOrder);
     }
@@ -251,11 +258,13 @@ export default function PlaylistPlayer() {
   // Current item derived from playOrder
   const currentItemIndex = playOrder[currentIndex] ?? 0;
   const currentItem = items[currentItemIndex];
+  
 
   // Memoize video options to prevent re-renders when only scene data changes
   const videoJsOptions = useMemo(() => {
     const stashServer = String(settings["STASH_SERVER"] || "");
     const stashApiKey = String(settings["STASH_API"] || "");
+    
     
     return {
       autoplay: true, // Auto-play when new items are selected
@@ -286,15 +295,20 @@ export default function PlaylistPlayer() {
   }, [playOrder, currentIndex, setCurrentIndex]);
 
   // Memoize offset to prevent video restarts when only scene data changes
-  const offset = useMemo(() => currentItem
-    ? {
-        start: currentItem.item.startTime,
-        end: currentItem.item.endTime,
-        restart_beginning: false,
-      }
-    : undefined, [currentItem?.item?.startTime, currentItem?.item?.endTime]);
+  const offset = useMemo(() => {
+    const result = currentItem
+      ? {
+          start: currentItem.item.startTime,
+          end: currentItem.item.endTime,
+          restart_beginning: false,
+        }
+      : undefined;
+    return result;
+  }, [currentItem?.item?.startTime, currentItem?.item?.endTime, currentIndex, currentItem?.item?.title]);
 
+  // Don't render until playlist is loaded and playOrder is properly set
   if (!playlist) return <div>Loading...</div>;
+  if (items.length > 0 && playOrder.length === 0) return <div>Loading...</div>;
 
   return (
     <Container maxWidth={false} sx={{ py: 1, px: { xs: 1, sm: 1.5, lg: 2 }, height: '100vh', display: 'flex', flexDirection: 'column' }}>
