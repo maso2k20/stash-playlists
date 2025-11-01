@@ -186,6 +186,7 @@ export async function buildItemsForPlaylist(
           id
           title
           seconds
+          end_seconds
           scene { id title }
         }
       }
@@ -199,6 +200,7 @@ export async function buildItemsForPlaylist(
         id: string;
         title?: string | null;
         seconds: number;
+        end_seconds?: number | null;
         scene: { id: string; title?: string | null } | null;
       }>;
     };
@@ -212,8 +214,13 @@ export async function buildItemsForPlaylist(
 
   const items: BuiltItem[] = (data.findSceneMarkers?.scene_markers ?? []).map(
     (m, idx) => {
-      const start = Math.max(0, Math.floor(m.seconds - before));
-      const end = Math.max(start + 1, Math.floor(m.seconds + after));
+      // Use actual marker duration when available, fallback to 30 seconds (same as scene editing)
+      const markerStart = m.seconds;
+      const markerEnd = m.end_seconds ?? (markerStart + 30);
+      
+      // Apply clip timing adjustments to the marker boundaries
+      const start = Math.max(0, Math.floor(markerStart - before));
+      const end = Math.max(start + 1, Math.floor(markerEnd + after));
 
       // --- Deduped title logic ---
       const norm = (s?: string | null) =>
