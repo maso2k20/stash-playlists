@@ -402,7 +402,7 @@ export default function PlaylistPlayer() {
           </Box>
         </Grid>
 
-        <Grid xs={12} md={4} sx={{ minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+        <Grid xs={12} md={4} sx={{ minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <PlaylistDetail
             title={playlist?.name}
             showCounts
