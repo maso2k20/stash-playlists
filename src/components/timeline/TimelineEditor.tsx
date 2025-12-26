@@ -31,6 +31,19 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 10;
 const ZOOM_STEP = 0.25;
 
+// Format time as MM:SS or HH:MM:SS if over an hour
+function formatTime(seconds: number): string {
+    const totalSeconds = Math.floor(seconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
 export function TimelineEditor({
     markers,
     duration,
@@ -158,6 +171,7 @@ export function TimelineEditor({
                 overflow: "hidden",
                 border: "1px solid",
                 borderColor: "divider",
+                height: "100%",
             }}
         >
             {/* Controls bar */}
@@ -207,6 +221,19 @@ export function TimelineEditor({
                 </Tooltip>
 
                 <Box sx={{ flex: 1 }} />
+
+                {/* Time display */}
+                <Typography
+                    level="body-sm"
+                    sx={{
+                        fontFamily: "monospace",
+                        color: "text.secondary",
+                        minWidth: 100,
+                        textAlign: "right",
+                    }}
+                >
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                </Typography>
 
                 {/* Add marker button */}
                 <Button

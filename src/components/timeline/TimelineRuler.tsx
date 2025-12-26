@@ -51,47 +51,42 @@ export function TimelineRuler({
                     height: "100%",
                 }}
             >
-                {ticks.map(({ time, position, label, isMajor }) => (
-                    <Box
-                        key={time}
-                        sx={{
-                            position: "absolute",
-                            left: position,
-                            top: 0,
-                            height: "100%",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                        }}
-                    >
-                        {/* Tick mark */}
+                {ticks.filter(t => t.isMajor).map(({ time, position, label }) => {
+                    // Adjust alignment for edge labels to prevent clipping
+                    const isFirst = time === 0;
+                    const isLast = position >= totalWidth - 30;
+                    const padding = 6; // Padding from edges
+
+                    return (
                         <Box
+                            key={time}
                             sx={{
-                                width: 1,
-                                height: isMajor ? 12 : 6,
-                                backgroundColor: isMajor
-                                    ? "text.primary"
-                                    : "text.tertiary",
-                                opacity: isMajor ? 0.7 : 0.4,
+                                position: "absolute",
+                                left: isFirst ? padding : isLast ? position - padding : position,
+                                top: 0,
+                                height: "100%",
+                                display: "flex",
+                                alignItems: "center",
                             }}
-                        />
-                        {/* Label */}
-                        {isMajor && (
+                        >
                             <Typography
                                 level="body-xs"
                                 sx={{
                                     fontSize: "10px",
                                     color: "text.secondary",
                                     whiteSpace: "nowrap",
-                                    transform: "translateX(-50%)",
-                                    mt: 0.25,
+                                    transform: isFirst
+                                        ? "translateX(0)"
+                                        : isLast
+                                            ? "translateX(-100%)"
+                                            : "translateX(-50%)",
                                 }}
                             >
                                 {label}
                             </Typography>
-                        )}
-                    </Box>
-                ))}
+                        </Box>
+                    );
+                })}
             </Box>
         </Box>
     );

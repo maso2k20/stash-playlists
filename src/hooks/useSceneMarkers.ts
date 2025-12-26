@@ -133,7 +133,10 @@ export function useSceneMarkers(sceneId: string, tagOptions: Tag[] = []): UseSce
     const [updateScene] = useMutation(UPDATE_SCENE);
 
     const scene = data?.findScene;
-    const markers: Marker[] = (scene?.scene_markers ?? []) as Marker[];
+    const markers: Marker[] = useMemo(
+        () => (scene?.scene_markers ?? []) as Marker[],
+        [scene?.scene_markers]
+    );
 
     // State
     const [drafts, setDrafts] = useState<Record<string, Draft>>({});

@@ -8,10 +8,13 @@ import {
     Autocomplete,
     Chip,
     Card,
+    IconButton,
+    Tooltip,
 } from "@mui/joy";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import TimeInput from "@/components/TimeInput";
 import type { Tag, Draft } from "@/types/markers";
 
@@ -22,6 +25,8 @@ interface MarkerDetailPanelProps {
     isNew: boolean;
     isDirty: boolean;
     isSaving: boolean;
+    currentTime: number;
+    playerReady: boolean;
     onDraftChange: (patch: Partial<Draft>) => void;
     onSave: () => void;
     onReset: () => void;
@@ -35,6 +40,8 @@ export function MarkerDetailPanel({
     isNew,
     isDirty,
     isSaving,
+    currentTime,
+    playerReady,
     onDraftChange,
     onSave,
     onReset,
@@ -67,15 +74,40 @@ export function MarkerDetailPanel({
         draft.tag_ids.includes(t.id) && t.id !== draft.primary_tag_id
     );
 
+    // Get primary tag recommendations - tags with children, for when no primary tag is selected
+    const primaryTagRecommendations = !draft.primary_tag_id
+        ? tagOptions.filter(tag => tag.children && tag.children.length > 0).slice(0, 8)
+        : [];
+
+    // Get recommended tags based on primary tag children
+    const recommendedTags = primaryTag?.children
+        ? primaryTag.children.filter(child => !draft.tag_ids.includes(child.id))
+        : [];
+
+    // Handle selecting a primary tag from recommendations
+    const handleSelectPrimaryTag = (tagId: string) => {
+        onDraftChange({
+            primary_tag_id: tagId,
+            tag_ids: Array.from(new Set([tagId, ...draft.tag_ids])),
+        });
+    };
+
+    // Handle adding a recommended tag
+    const handleAddRecommendedTag = (tagId: string) => {
+        onDraftChange({
+            tag_ids: Array.from(new Set([...draft.tag_ids, tagId])),
+        });
+    };
+
     return (
         <Card
             variant="outlined"
             sx={{
                 height: "100%",
-                p: 2,
+                p: 1.5,
                 display: "flex",
                 flexDirection: "column",
-                gap: 2,
+                gap: 1.5,
                 backgroundColor: "background.surface",
                 overflow: "auto",
             }}
@@ -106,30 +138,62 @@ export function MarkerDetailPanel({
             </Box>
 
             {/* Times */}
-            <Box sx={{ display: "flex", gap: 2 }}>
-                <Box sx={{ flex: 1 }}>
-                    <Typography level="body-sm" sx={{ mb: 0.5 }}>
-                        Start Time
+            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+                <Box>
+                    <Typography level="body-xs" sx={{ mb: 0.5 }}>
+                        Start
                     </Typography>
-                    <TimeInput
-                        value={draft.seconds}
-                        onChange={(seconds) => onDraftChange({ seconds })}
-                        size="sm"
-                        placeholder="0:00"
-                    />
+                    <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+                        <Tooltip title="Set to current video time" variant="soft">
+                            <span>
+                                <IconButton
+                                    size="sm"
+                                    variant="soft"
+                                    disabled={!playerReady}
+                                    onClick={() => onDraftChange({ seconds: Math.round(currentTime) })}
+                                    sx={{ minWidth: 28, minHeight: 28 }}
+                                >
+                                    <AccessTimeIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <TimeInput
+                            value={draft.seconds}
+                            onChange={(seconds) => onDraftChange({ seconds })}
+                            size="sm"
+                            placeholder="0:00"
+                            sx={{ width: 70, "& input": { textAlign: "center" } }}
+                        />
+                    </Box>
                 </Box>
-                <Box sx={{ flex: 1 }}>
-                    <Typography level="body-sm" sx={{ mb: 0.5 }}>
-                        End Time
+                <Box>
+                    <Typography level="body-xs" sx={{ mb: 0.5 }}>
+                        End
                     </Typography>
-                    <TimeInput
-                        value={draft.end_seconds ?? 0}
-                        onChange={(seconds) =>
-                            onDraftChange({ end_seconds: seconds === 0 ? null : seconds })
-                        }
-                        size="sm"
-                        placeholder="0:00"
-                    />
+                    <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+                        <Tooltip title="Set to current video time" variant="soft">
+                            <span>
+                                <IconButton
+                                    size="sm"
+                                    variant="soft"
+                                    disabled={!playerReady}
+                                    onClick={() => onDraftChange({ end_seconds: Math.round(currentTime) })}
+                                    sx={{ minWidth: 28, minHeight: 28 }}
+                                >
+                                    <AccessTimeIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <TimeInput
+                            value={draft.end_seconds ?? 0}
+                            onChange={(seconds) =>
+                                onDraftChange({ end_seconds: seconds === 0 ? null : seconds })
+                            }
+                            size="sm"
+                            placeholder="0:00"
+                            sx={{ width: 70, "& input": { textAlign: "center" } }}
+                        />
+                    </Box>
                 </Box>
             </Box>
 
@@ -155,6 +219,29 @@ export function MarkerDetailPanel({
                     isOptionEqualToValue={(a, b) => a?.id === b?.id}
                     placeholder="Select primary tag..."
                 />
+                {/* Primary tag recommendations - only show when no primary tag selected */}
+                {primaryTagRecommendations.length > 0 && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 1 }}>
+                        {primaryTagRecommendations.map((tag) => (
+                            <Chip
+                                key={tag.id}
+                                size="sm"
+                                variant="soft"
+                                color="success"
+                                onClick={() => handleSelectPrimaryTag(tag.id)}
+                                sx={{
+                                    cursor: "pointer",
+                                    "&:hover": {
+                                        transform: "translateY(-1px)",
+                                        boxShadow: "sm"
+                                    }
+                                }}
+                            >
+                                {tag.name}
+                            </Chip>
+                        ))}
+                    </Box>
+                )}
             </Box>
 
             {/* Other Tags */}
@@ -179,6 +266,29 @@ export function MarkerDetailPanel({
                     isOptionEqualToValue={(a, b) => a?.id === b?.id}
                     placeholder="Add tags..."
                 />
+                {/* Recommended tags based on primary tag children */}
+                {recommendedTags.length > 0 && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 1 }}>
+                        {recommendedTags.map((tag) => (
+                            <Chip
+                                key={tag.id}
+                                size="sm"
+                                variant="soft"
+                                color="primary"
+                                onClick={() => handleAddRecommendedTag(tag.id)}
+                                sx={{
+                                    cursor: "pointer",
+                                    "&:hover": {
+                                        transform: "translateY(-1px)",
+                                        boxShadow: "sm"
+                                    }
+                                }}
+                            >
+                                {tag.name}
+                            </Chip>
+                        ))}
+                    </Box>
+                )}
             </Box>
 
             {/* Spacer */}
