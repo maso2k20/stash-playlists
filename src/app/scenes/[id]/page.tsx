@@ -29,12 +29,16 @@ import {
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import ContentPasteIcon from "@mui/icons-material/ContentPaste";
+import TimelineIcon from "@mui/icons-material/Timeline";
 import { useStashTags } from "@/context/StashTagsContext";
 import { useSettings } from "@/app/context/SettingsContext";
 import VideoJS from "@/components/videojs/VideoJS";
 import TimeInput from "@/components/TimeInput";
 import StarRating from "@/components/StarRating";
 import { makeStashUrl } from "@/lib/urlUtils";
+import { formatSecondsToMMSS } from "@/lib/formatLength";
 
 /* Query: scene with markers + tags */
 const GET_SCENE_FOR_TAG_MANAGEMENT = gql`
@@ -229,6 +233,9 @@ export default function SceneTagManagerPage() {
 
     // Performer count recommendations
     const [performerCountRecommendations, setPerformerCountRecommendations] = useState<Record<number, string>>({});
+
+    // Time clipboard for copy/paste between time inputs
+    const [timeClipboard, setTimeClipboard] = useState<number | null>(null);
 
     useEffect(() => {
         // Check if we came from an actors page
@@ -1371,6 +1378,17 @@ export default function SceneTagManagerPage() {
                             {scene?.title || "Scene"}
                         </Typography>
                         <Box sx={{ flexGrow: 1 }} />
+                        <Tooltip title="Open timeline editor (experimental)" variant="soft">
+                            <Button
+                                size="sm"
+                                variant="soft"
+                                color="primary"
+                                startDecorator={<TimelineIcon />}
+                                onClick={() => router.push(`/scenes/${sceneId}/timeline`)}
+                            >
+                                Timeline View
+                            </Button>
+                        </Tooltip>
                         <Button
                             size="sm"
                             variant="outlined"
@@ -1612,6 +1630,36 @@ export default function SceneTagManagerPage() {
                                                         sx={{ width: 100 }}
                                                         placeholder="0:00"
                                                     />
+                                                    {/* Copy start time */}
+                                                    <Tooltip title="Copy start time" variant="soft">
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="plain"
+                                                            onClick={() => setTimeClipboard(d.seconds)}
+                                                            aria-label="Copy start time"
+                                                            sx={{ minWidth: 24, minHeight: 24, p: 0.25 }}
+                                                        >
+                                                            <ContentCopyIcon sx={{ fontSize: 14 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    {/* Paste to start time */}
+                                                    <Tooltip
+                                                        title={timeClipboard !== null ? `Paste ${formatSecondsToMMSS(timeClipboard)}` : "No time copied"}
+                                                        variant="soft"
+                                                    >
+                                                        <span>
+                                                            <IconButton
+                                                                size="sm"
+                                                                variant="plain"
+                                                                disabled={timeClipboard === null}
+                                                                onClick={() => timeClipboard !== null && setDraft(id, { seconds: timeClipboard })}
+                                                                aria-label="Paste start time"
+                                                                sx={{ minWidth: 24, minHeight: 24, p: 0.25, opacity: timeClipboard === null ? 0.3 : 1 }}
+                                                            >
+                                                                <ContentPasteIcon sx={{ fontSize: 14 }} />
+                                                            </IconButton>
+                                                        </span>
+                                                    </Tooltip>
 
                                                     {/* End icon */}
                                                     <Tooltip title="Set end = current video time" variant="soft">
@@ -1637,6 +1685,36 @@ export default function SceneTagManagerPage() {
                                                         sx={{ width: 100 }}
                                                         placeholder="0:00"
                                                     />
+                                                    {/* Copy end time */}
+                                                    <Tooltip title="Copy end time" variant="soft">
+                                                        <IconButton
+                                                            size="sm"
+                                                            variant="plain"
+                                                            onClick={() => setTimeClipboard(d.end_seconds ?? 0)}
+                                                            aria-label="Copy end time"
+                                                            sx={{ minWidth: 24, minHeight: 24, p: 0.25 }}
+                                                        >
+                                                            <ContentCopyIcon sx={{ fontSize: 14 }} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    {/* Paste to end time */}
+                                                    <Tooltip
+                                                        title={timeClipboard !== null ? `Paste ${formatSecondsToMMSS(timeClipboard)}` : "No time copied"}
+                                                        variant="soft"
+                                                    >
+                                                        <span>
+                                                            <IconButton
+                                                                size="sm"
+                                                                variant="plain"
+                                                                disabled={timeClipboard === null}
+                                                                onClick={() => timeClipboard !== null && setDraft(id, { end_seconds: timeClipboard === 0 ? null : timeClipboard })}
+                                                                aria-label="Paste end time"
+                                                                sx={{ minWidth: 24, minHeight: 24, p: 0.25, opacity: timeClipboard === null ? 0.3 : 1 }}
+                                                            >
+                                                                <ContentPasteIcon sx={{ fontSize: 14 }} />
+                                                            </IconButton>
+                                                        </span>
+                                                    </Tooltip>
                                                 </Box>
 
                                                 {/* Primary tag */}

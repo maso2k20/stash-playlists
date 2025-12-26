@@ -1,0 +1,213 @@
+"use client";
+
+import { useState, useRef } from "react";
+import { Box, Typography, Tooltip } from "@mui/joy";
+import type { MarkerWithLane } from "@/types/markers";
+import { getMarkerColor, formatTimeLabel } from "@/lib/timelineUtils";
+
+interface TimelineMarkerBarProps {
+    marker: MarkerWithLane;
+    pixelsPerSecond: number;
+    laneHeight: number;
+    isSelected: boolean;
+    onSelect: (id: string) => void;
+    onDragEnd: (id: string, newStart: number, newEnd: number) => void;
+    maxDuration: number;
+}
+
+export function TimelineMarkerBar({
+    marker,
+    pixelsPerSecond,
+    laneHeight,
+    isSelected,
+    onSelect,
+    onDragEnd,
+    maxDuration,
+}: TimelineMarkerBarProps) {
+    const [isDragging, setIsDragging] = useState<"move" | "start" | "end" | null>(null);
+    const [dragOffset, setDragOffset] = useState({ start: 0, end: 0 });
+    const dragStartRef = useRef({ x: 0, originalStart: 0, originalEnd: 0 });
+
+    const colors = getMarkerColor(marker);
+    const left = marker.start * pixelsPerSecond + dragOffset.start;
+    const width = Math.max(8, (marker.end - marker.start) * pixelsPerSecond + dragOffset.end - dragOffset.start);
+    const top = marker.lane * laneHeight;
+
+    const handleMouseDown = (
+        e: React.MouseEvent,
+        dragType: "move" | "start" | "end"
+    ) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        setIsDragging(dragType);
+        dragStartRef.current = {
+            x: e.clientX,
+            originalStart: marker.start,
+            originalEnd: marker.end,
+        };
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const deltaX = moveEvent.clientX - dragStartRef.current.x;
+            const deltaSeconds = deltaX / pixelsPerSecond;
+
+            if (dragType === "move") {
+                // Move both start and end
+                let newStart = dragStartRef.current.originalStart + deltaSeconds;
+                let newEnd = dragStartRef.current.originalEnd + deltaSeconds;
+
+                // Clamp to boundaries
+                if (newStart < 0) {
+                    newEnd -= newStart;
+                    newStart = 0;
+                }
+                if (newEnd > maxDuration) {
+                    newStart -= newEnd - maxDuration;
+                    newEnd = maxDuration;
+                }
+
+                const startOffset = (newStart - marker.start) * pixelsPerSecond;
+                const endOffset = (newEnd - marker.end) * pixelsPerSecond;
+                setDragOffset({ start: startOffset, end: endOffset });
+            } else if (dragType === "start") {
+                // Move only start
+                let newStart = dragStartRef.current.originalStart + deltaSeconds;
+                newStart = Math.max(0, Math.min(newStart, marker.end - 1));
+                const startOffset = (newStart - marker.start) * pixelsPerSecond;
+                setDragOffset({ start: startOffset, end: 0 });
+            } else if (dragType === "end") {
+                // Move only end
+                let newEnd = dragStartRef.current.originalEnd + deltaSeconds;
+                newEnd = Math.max(marker.start + 1, Math.min(newEnd, maxDuration));
+                const endOffset = (newEnd - marker.end) * pixelsPerSecond;
+                setDragOffset({ start: 0, end: endOffset });
+            }
+        };
+
+        const handleMouseUp = () => {
+            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener("mouseup", handleMouseUp);
+
+            const deltaStartSeconds = dragOffset.start / pixelsPerSecond;
+            const deltaEndSeconds = dragOffset.end / pixelsPerSecond;
+
+            let newStart = marker.start + deltaStartSeconds;
+            let newEnd = marker.end + deltaEndSeconds;
+
+            // Round to 0.1 seconds
+            newStart = Math.round(newStart * 10) / 10;
+            newEnd = Math.round(newEnd * 10) / 10;
+
+            setIsDragging(null);
+            setDragOffset({ start: 0, end: 0 });
+
+            if (newStart !== marker.start || newEnd !== marker.end) {
+                onDragEnd(marker.id, newStart, newEnd);
+            }
+        };
+
+        document.addEventListener("mousemove", handleMouseMove);
+        document.addEventListener("mouseup", handleMouseUp);
+    };
+
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!isDragging) {
+            onSelect(marker.id);
+        }
+    };
+
+    return (
+        <Tooltip
+            title={`${marker.primaryTagName || marker.title} (${formatTimeLabel(marker.start)} - ${formatTimeLabel(marker.end)})`}
+            variant="soft"
+            placement="top"
+        >
+            <Box
+                onClick={handleClick}
+                onMouseDown={(e) => handleMouseDown(e, "move")}
+                sx={{
+                    position: "absolute",
+                    left,
+                    top,
+                    width,
+                    height: laneHeight - 4,
+                    backgroundColor: colors.background,
+                    border: `2px solid ${isSelected ? "#2196F3" : colors.border}`,
+                    borderRadius: "4px",
+                    cursor: isDragging ? "grabbing" : "grab",
+                    display: "flex",
+                    alignItems: "center",
+                    overflow: "hidden",
+                    transition: isDragging ? "none" : "box-shadow 0.2s",
+                    boxShadow: isSelected
+                        ? "0 0 0 2px rgba(33, 150, 243, 0.3), 0 2px 8px rgba(0,0,0,0.2)"
+                        : "0 1px 3px rgba(0,0,0,0.2)",
+                    "&:hover": {
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                    },
+                    zIndex: isSelected ? 10 : marker.lane + 1,
+                }}
+            >
+                {/* Left resize handle */}
+                <Box
+                    onMouseDown={(e) => {
+                        e.stopPropagation();
+                        handleMouseDown(e, "start");
+                    }}
+                    sx={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        width: 8,
+                        height: "100%",
+                        cursor: "ew-resize",
+                        backgroundColor: "transparent",
+                        "&:hover": {
+                            backgroundColor: "rgba(255,255,255,0.2)",
+                        },
+                    }}
+                />
+
+                {/* Content */}
+                <Typography
+                    level="body-xs"
+                    sx={{
+                        color: colors.text,
+                        px: 1,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        fontSize: "11px",
+                        fontWeight: isSelected ? 600 : 400,
+                        pointerEvents: "none",
+                        flex: 1,
+                        textAlign: "center",
+                    }}
+                >
+                    {marker.primaryTagName || marker.title || "Untitled"}
+                </Typography>
+
+                {/* Right resize handle */}
+                <Box
+                    onMouseDown={(e) => {
+                        e.stopPropagation();
+                        handleMouseDown(e, "end");
+                    }}
+                    sx={{
+                        position: "absolute",
+                        right: 0,
+                        top: 0,
+                        width: 8,
+                        height: "100%",
+                        cursor: "ew-resize",
+                        backgroundColor: "transparent",
+                        "&:hover": {
+                            backgroundColor: "rgba(255,255,255,0.2)",
+                        },
+                    }}
+                />
+            </Box>
+        </Tooltip>
+    );
+}
