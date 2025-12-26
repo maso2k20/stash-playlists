@@ -1386,8 +1386,23 @@ export default function SceneTagManagerPage() {
                     {/* LEFT: Marker editor (40%) */}
                     <Grid xs={12} md={5}>
                         <Card variant="outlined" sx={{ p: 1.25, borderRadius: "lg" }}>
-                            {/* Row: header + bulk actions */}
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75, flexWrap: "wrap" }}>
+                            {/* Row: header + bulk actions - sticky toolbar */}
+                            <Box sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                                mb: 0.75,
+                                flexWrap: "wrap",
+                                position: "sticky",
+                                top: 0,
+                                zIndex: 100,
+                                bgcolor: "background.surface",
+                                py: 1,
+                                mx: -1.25,
+                                px: 1.25,
+                                borderBottom: "1px solid",
+                                borderColor: "divider",
+                            }}>
                                 {!loading && scene?.performers && scene.performers.length > 0 && (
                                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                                         {scene.performers.map((performer: any) => (
