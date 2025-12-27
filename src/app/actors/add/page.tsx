@@ -37,7 +37,7 @@ const GET_ALL_PERFORMERS = gql`
 const FILTER_PERFORMERS = gql`
   query filterPerformers($filter: String!) {
     findPerformers(
-      performer_filter: { name: { value: $filter, modifier: INCLUDES } }
+      performer_filter: { name: { value: $filter, modifier: MATCHES_REGEX } }
     ) {
       performers {
         id
@@ -104,17 +104,20 @@ export default function AddActorsPage() {
     fetchPolicy: "cache-and-network",
   });
 
+  // Escape special regex characters for MATCHES_REGEX query
+  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   // For multi-word searches, we need a fallback strategy since server tokenizes
   const searchQuery = useMemo(() => {
     if (!debouncedFilter) return "";
-    return debouncedFilter;
+    return escapeRegex(debouncedFilter);
   }, [debouncedFilter]);
 
   const fallbackQuery = useMemo(() => {
     if (!debouncedFilter) return "";
     const words = debouncedFilter.trim().split(/\s+/);
     // If it's a multi-word search, use just the first word as fallback
-    return words.length > 1 ? words[0] : "";
+    return words.length > 1 ? escapeRegex(words[0]) : "";
   }, [debouncedFilter]);
 
   const {
@@ -147,7 +150,7 @@ export default function AddActorsPage() {
       
       // Combine primary and fallback results, removing duplicates
       const combinedResults = [...primaryResults];
-      const existingIds = new Set(primaryResults.map(p => p.id));
+      const existingIds = new Set(primaryResults.map((p: Performer) => p.id));
       
       for (const performer of fallbackResults) {
         if (!existingIds.has((performer as Performer).id)) {
@@ -247,6 +250,8 @@ export default function AddActorsPage() {
         next.add(actor.id);
         return next;
       });
+      // Clear search to avoid showing "No results" for the search term
+      setFilter("");
     } catch (e) {
       console.error(e);
       alert("Could not add actor.");
