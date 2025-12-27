@@ -16,6 +16,7 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
+    Snackbar,
 } from "@mui/joy";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
@@ -54,8 +55,24 @@ export default function TimelineEditorPage() {
         [stashTags]
     );
 
-    // Performer count recommendations (placeholder - could be loaded from API)
-    const performerCountRecommendations: Record<number, string> = {};
+    // Performer count recommendations
+    const [performerCountRecommendations, setPerformerCountRecommendations] = useState<Record<number, string>>({});
+
+    // Load performer count recommendations
+    useEffect(() => {
+        const loadRecommendations = async () => {
+            try {
+                const response = await fetch('/api/settings/performer-count-recommendations');
+                const result = await response.json();
+                if (result.success) {
+                    setPerformerCountRecommendations(result.recommendations);
+                }
+            } catch (error) {
+                console.error('Failed to load performer count recommendations:', error);
+            }
+        };
+        loadRecommendations();
+    }, []);
 
     // Scene markers hook
     const {
@@ -87,6 +104,29 @@ export default function TimelineEditorPage() {
     // Delete confirmation dialog
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+    // Snackbar for notifications
+    const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "neutral" }>({
+        open: false,
+        msg: "",
+        color: "neutral",
+    });
+
+    // Time clipboard for copy/paste between markers
+    const [timeClipboard, setTimeClipboard] = useState<number | null>(null);
+
+    // Handle back navigation - trigger marker generate task
+    const handleGoBack = useCallback(async () => {
+        try {
+            // Fire-and-forget: trigger generate task for marker previews
+            fetch(`/api/scenes/${sceneId}/generate`, { method: "POST" });
+            setSnack({ open: true, msg: "Generating marker previews...", color: "neutral" });
+        } catch (error) {
+            console.error("Failed to trigger generate task:", error);
+        }
+        // Navigate back regardless of generate task result
+        router.back();
+    }, [sceneId, router]);
 
     // Calculate fallback duration from markers if video hasn't loaded
     const markerMaxTime = useMemo(() => {
@@ -235,6 +275,11 @@ export default function TimelineEditorPage() {
             }
         }
     }, [playerReady]);
+
+    // Stable callback for getting current time (avoids re-renders from timeupdate)
+    const getCurrentTime = useCallback(() => {
+        return playerRef.current?.currentTime() ?? 0;
+    }, []);
 
     // Timeline handlers
     const handleMarkerSelect = useCallback((id: string) => {
@@ -395,7 +440,7 @@ export default function TimelineEditorPage() {
                 <Tooltip title="Go back">
                     <IconButton
                         variant="soft"
-                        onClick={() => router.back()}
+                        onClick={handleGoBack}
                     >
                         <ArrowBackIcon />
                     </IconButton>
@@ -477,8 +522,10 @@ export default function TimelineEditorPage() {
                             isNew={isSelectedNew}
                             isDirty={isSelectedDirty || false}
                             isSaving={savingId === selectedMarkerId}
-                            currentTime={currentTime}
+                            getCurrentTime={getCurrentTime}
                             playerReady={playerReady}
+                            timeClipboard={timeClipboard}
+                            onTimeClipboardChange={setTimeClipboard}
                             onDraftChange={handleDraftChange}
                             onSave={handleSaveSelected}
                             onReset={handleResetSelected}
@@ -565,12 +612,23 @@ export default function TimelineEditorPage() {
                         <Button variant="plain" color="neutral" onClick={cancelDelete}>
                             Cancel
                         </Button>
-                        <Button variant="solid" color="danger" onClick={confirmDelete}>
+                        <Button variant="solid" color="danger" onClick={confirmDelete} autoFocus>
                             Delete
                         </Button>
                     </DialogActions>
                 </ModalDialog>
             </Modal>
+
+            {/* Snackbar for notifications */}
+            <Snackbar
+                open={snack.open}
+                onClose={() => setSnack((s) => ({ ...s, open: false }))}
+                color={snack.color ?? "neutral"}
+                variant="soft"
+                autoHideDuration={3000}
+            >
+                {snack.msg}
+            </Snackbar>
         </Box>
     );
 }

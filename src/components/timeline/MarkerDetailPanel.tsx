@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
     Box,
     Typography,
@@ -15,8 +16,11 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import ContentPasteIcon from "@mui/icons-material/ContentPaste";
 import TimeInput from "@/components/TimeInput";
 import type { Tag, Draft } from "@/types/markers";
+import { formatSecondsToMMSS } from "@/lib/formatLength";
 
 interface MarkerDetailPanelProps {
     selectedMarkerId: string | null;
@@ -25,23 +29,27 @@ interface MarkerDetailPanelProps {
     isNew: boolean;
     isDirty: boolean;
     isSaving: boolean;
-    currentTime: number;
+    getCurrentTime: () => number;
     playerReady: boolean;
+    timeClipboard: number | null;
+    onTimeClipboardChange: (time: number | null) => void;
     onDraftChange: (patch: Partial<Draft>) => void;
     onSave: () => void;
     onReset: () => void;
     onDelete: () => void;
 }
 
-export function MarkerDetailPanel({
+function MarkerDetailPanelInner({
     selectedMarkerId,
     draft,
     tagOptions,
     isNew,
     isDirty,
     isSaving,
-    currentTime,
+    getCurrentTime,
     playerReady,
+    timeClipboard,
+    onTimeClipboardChange,
     onDraftChange,
     onSave,
     onReset,
@@ -150,7 +158,7 @@ export function MarkerDetailPanel({
                                     size="sm"
                                     variant="soft"
                                     disabled={!playerReady}
-                                    onClick={() => onDraftChange({ seconds: Math.round(currentTime) })}
+                                    onClick={() => onDraftChange({ seconds: Math.round(getCurrentTime()) })}
                                     sx={{ minWidth: 28, minHeight: 28 }}
                                 >
                                     <AccessTimeIcon sx={{ fontSize: 16 }} />
@@ -164,6 +172,34 @@ export function MarkerDetailPanel({
                             placeholder="0:00"
                             sx={{ width: 70, "& input": { textAlign: "center" } }}
                         />
+                        <Tooltip title="Copy start time" variant="soft">
+                            <IconButton
+                                size="sm"
+                                variant="plain"
+                                onClick={() => onTimeClipboardChange(draft.seconds)}
+                                sx={{ minWidth: 24, minHeight: 24, p: 0.25 }}
+                            >
+                                <ContentCopyIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title={timeClipboard !== null ? `Paste ${formatSecondsToMMSS(timeClipboard)}` : "No time copied"} variant="soft">
+                            <span>
+                                <IconButton
+                                    size="sm"
+                                    variant="plain"
+                                    disabled={timeClipboard === null}
+                                    onClick={() => {
+                                    if (timeClipboard !== null) {
+                                        onDraftChange({ seconds: timeClipboard });
+                                        onTimeClipboardChange(null);
+                                    }
+                                }}
+                                    sx={{ minWidth: 24, minHeight: 24, p: 0.25, opacity: timeClipboard === null ? 0.3 : 1 }}
+                                >
+                                    <ContentPasteIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                     </Box>
                 </Box>
                 <Box>
@@ -177,7 +213,7 @@ export function MarkerDetailPanel({
                                     size="sm"
                                     variant="soft"
                                     disabled={!playerReady}
-                                    onClick={() => onDraftChange({ end_seconds: Math.round(currentTime) })}
+                                    onClick={() => onDraftChange({ end_seconds: Math.round(getCurrentTime()) })}
                                     sx={{ minWidth: 28, minHeight: 28 }}
                                 >
                                     <AccessTimeIcon sx={{ fontSize: 16 }} />
@@ -193,6 +229,34 @@ export function MarkerDetailPanel({
                             placeholder="0:00"
                             sx={{ width: 70, "& input": { textAlign: "center" } }}
                         />
+                        <Tooltip title="Copy end time" variant="soft">
+                            <IconButton
+                                size="sm"
+                                variant="plain"
+                                onClick={() => onTimeClipboardChange(draft.end_seconds ?? 0)}
+                                sx={{ minWidth: 24, minHeight: 24, p: 0.25 }}
+                            >
+                                <ContentCopyIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title={timeClipboard !== null ? `Paste ${formatSecondsToMMSS(timeClipboard)}` : "No time copied"} variant="soft">
+                            <span>
+                                <IconButton
+                                    size="sm"
+                                    variant="plain"
+                                    disabled={timeClipboard === null}
+                                    onClick={() => {
+                                    if (timeClipboard !== null) {
+                                        onDraftChange({ end_seconds: timeClipboard === 0 ? null : timeClipboard });
+                                        onTimeClipboardChange(null);
+                                    }
+                                }}
+                                    sx={{ minWidth: 24, minHeight: 24, p: 0.25, opacity: timeClipboard === null ? 0.3 : 1 }}
+                                >
+                                    <ContentPasteIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                     </Box>
                 </Box>
             </Box>
@@ -333,3 +397,6 @@ export function MarkerDetailPanel({
         </Card>
     );
 }
+
+// Memoize to prevent re-renders from currentTime updates while typing
+export const MarkerDetailPanel = React.memo(MarkerDetailPanelInner);
