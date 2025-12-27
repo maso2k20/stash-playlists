@@ -392,14 +392,26 @@ export default function TimelineEditorPage() {
                     borderColor: "divider",
                 }}
             >
-                <Tooltip title="Back to scenes">
+                <Tooltip title="Go back">
                     <IconButton
                         variant="soft"
-                        onClick={() => router.push("/scenes")}
+                        onClick={() => router.back()}
                     >
                         <ArrowBackIcon />
                     </IconButton>
                 </Tooltip>
+
+                <Button
+                    size="sm"
+                    variant="solid"
+                    color="primary"
+                    startDecorator={<SaveIcon />}
+                    onClick={handleSaveAll}
+                    loading={savingAll}
+                    disabled={dirtyCount === 0}
+                >
+                    Save All {dirtyCount > 0 && `(${dirtyCount})`}
+                </Button>
 
                 {/* Performers */}
                 {scene?.performers && scene.performers.length > 0 && (
@@ -451,18 +463,6 @@ export default function TimelineEditorPage() {
                         List View
                     </Button>
                 </Tooltip>
-
-                <Button
-                    size="sm"
-                    variant="solid"
-                    color="primary"
-                    startDecorator={<SaveIcon />}
-                    onClick={handleSaveAll}
-                    loading={savingAll}
-                    disabled={dirtyCount === 0}
-                >
-                    Save All
-                </Button>
             </Box>
 
             {/* Top section - Marker panel + Video side by side */}
