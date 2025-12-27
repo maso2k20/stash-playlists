@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
     Box,
     Typography,
@@ -22,7 +22,7 @@ interface BulkTagsPanelProps {
     onApplyPerformerTags: (tagIds: string[], remove: boolean) => void;
 }
 
-export function BulkTagsPanel({
+function BulkTagsPanelInner({
     tagOptions,
     performerTags,
     performerCount,
@@ -210,3 +210,6 @@ export function BulkTagsPanel({
         </Card>
     );
 }
+
+// Memoize to prevent re-renders during video playback
+export const BulkTagsPanel = React.memo(BulkTagsPanelInner);

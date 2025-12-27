@@ -11,6 +11,7 @@ interface TimelineMarkerBarProps {
     laneHeight: number;
     isSelected: boolean;
     onSelect: (id: string) => void;
+    onDoubleClick?: (id: string) => void;
     onDragEnd: (id: string, newStart: number, newEnd: number) => void;
     maxDuration: number;
 }
@@ -21,6 +22,7 @@ export function TimelineMarkerBar({
     laneHeight,
     isSelected,
     onSelect,
+    onDoubleClick,
     onDragEnd,
     maxDuration,
 }: TimelineMarkerBarProps) {
@@ -138,9 +140,17 @@ export function TimelineMarkerBar({
         }
     };
 
+    const handleDoubleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onDoubleClick) {
+            onDoubleClick(marker.id);
+        }
+    };
+
     return (
         <Box
             onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
             onMouseDown={(e) => handleMouseDown(e, "move")}
             sx={{
                 position: "absolute",
@@ -149,15 +159,15 @@ export function TimelineMarkerBar({
                 width,
                 height: laneHeight - 4,
                 backgroundColor: colors.background,
-                border: `2px solid ${isSelected ? "#2196F3" : colors.border}`,
+                border: `2px solid ${isSelected ? "#00E676" : colors.border}`,
                 borderRadius: "4px",
                 cursor: isDragging ? "grabbing" : "grab",
                 display: "flex",
                 alignItems: "center",
                 overflow: "hidden",
-                transition: isDragging ? "none" : "box-shadow 0.2s",
+                transition: isDragging ? "none" : "box-shadow 0.2s, border-color 0.2s",
                 boxShadow: isSelected
-                    ? "0 0 0 2px rgba(33, 150, 243, 0.3), 0 2px 8px rgba(0,0,0,0.2)"
+                    ? "0 0 0 3px rgba(0, 230, 118, 0.4), 0 0 12px rgba(0, 230, 118, 0.5), 0 2px 8px rgba(0,0,0,0.3)"
                     : "0 1px 3px rgba(0,0,0,0.2)",
                 "&:hover": {
                     boxShadow: "0 2px 8px rgba(0,0,0,0.3)",

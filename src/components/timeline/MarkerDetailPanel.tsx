@@ -19,6 +19,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ContentPasteIcon from "@mui/icons-material/ContentPaste";
 import TimeInput from "@/components/TimeInput";
+import StarRating from "@/components/StarRating";
 import type { Tag, Draft } from "@/types/markers";
 import { formatSecondsToMMSS } from "@/lib/formatLength";
 
@@ -37,6 +38,8 @@ interface MarkerDetailPanelProps {
     onSave: () => void;
     onReset: () => void;
     onDelete: () => void;
+    rating?: number | null;
+    onRatingChange?: (rating: number | null) => void;
 }
 
 function MarkerDetailPanelInner({
@@ -54,6 +57,8 @@ function MarkerDetailPanelInner({
     onSave,
     onReset,
     onDelete,
+    rating,
+    onRatingChange,
 }: MarkerDetailPanelProps) {
     if (!selectedMarkerId || !draft) {
         return (
@@ -131,6 +136,20 @@ function MarkerDetailPanelInner({
                     </Chip>
                 )}
             </Box>
+
+            {/* Rating - only show for saved markers */}
+            {!isNew && onRatingChange && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Typography level="body-sm" color="neutral">
+                        Rating:
+                    </Typography>
+                    <StarRating
+                        value={rating}
+                        onChange={onRatingChange}
+                        size="sm"
+                    />
+                </Box>
+            )}
 
             {/* Title */}
             <Box>

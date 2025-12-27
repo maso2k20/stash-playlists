@@ -12,6 +12,7 @@ interface TimelineTrackProps {
     selectedMarkerId: string | null;
     duration: number;
     onMarkerSelect: (id: string) => void;
+    onMarkerDoubleClick?: (id: string) => void;
     onMarkerDragEnd: (id: string, newStart: number, newEnd: number) => void;
 }
 
@@ -25,6 +26,7 @@ export function TimelineTrack({
     selectedMarkerId,
     duration,
     onMarkerSelect,
+    onMarkerDoubleClick,
     onMarkerDragEnd,
 }: TimelineTrackProps) {
     const numLanes = Math.max(MIN_LANES, getMaxLanes(markers));
@@ -79,6 +81,7 @@ export function TimelineTrack({
                         laneHeight={LANE_HEIGHT}
                         isSelected={marker.id === selectedMarkerId}
                         onSelect={onMarkerSelect}
+                        onDoubleClick={onMarkerDoubleClick}
                         onDragEnd={onMarkerDragEnd}
                         maxDuration={duration}
                     />

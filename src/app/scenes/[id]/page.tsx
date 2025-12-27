@@ -101,9 +101,28 @@ export default function TimelineEditorPage() {
     const [playerReady, setPlayerReady] = useState(false);
     const playerRef = useRef<any>(null);
 
+    // Ratings state - keyed by marker ID
+    const [ratings, setRatings] = useState<Record<string, number | null>>({});
+
     // Delete confirmation dialog
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+    const deleteButtonRef = useRef<HTMLButtonElement>(null);
+
+    // Pause video and focus delete button when dialog opens
+    useEffect(() => {
+        if (deleteDialogOpen) {
+            // Pause the video to release focus
+            if (playerRef.current && !playerRef.current.paused()) {
+                playerRef.current.pause();
+            }
+            // Focus the delete button after a short delay to ensure dialog is rendered
+            const timer = setTimeout(() => {
+                deleteButtonRef.current?.focus();
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [deleteDialogOpen]);
 
     // Snackbar for notifications
     const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "neutral" }>({
@@ -114,6 +133,78 @@ export default function TimelineEditorPage() {
 
     // Time clipboard for copy/paste between markers
     const [timeClipboard, setTimeClipboard] = useState<number | null>(null);
+
+    // Fetch ratings for existing markers
+    useEffect(() => {
+        const existingIds = markers.map(m => m.id);
+        if (existingIds.length === 0) return;
+
+        const fetchRatings = async () => {
+            try {
+                const res = await fetch(`/api/items/ratings?ids=${existingIds.join(',')}`);
+                const data = await res.json();
+                if (data.success && data.ratings) {
+                    setRatings(data.ratings);
+                }
+            } catch (error) {
+                console.error('Failed to fetch ratings:', error);
+            }
+        };
+
+        fetchRatings();
+    }, [markers]);
+
+    // Handle rating change for a marker
+    const handleRatingChangeInternal = useCallback(async (markerId: string, newRating: number | null) => {
+        // Update local state immediately
+        setRatings(prev => ({ ...prev, [markerId]: newRating }));
+
+        try {
+            // Check if item exists
+            const checkRes = await fetch(`/api/items/${markerId}/rating`);
+
+            if (checkRes.status === 404) {
+                // Item doesn't exist - create it first
+                const marker = markers.find(m => m.id === markerId);
+                if (!marker) return;
+
+                await fetch('/api/items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: markerId,
+                        title: marker.title || '',
+                        startTime: marker.seconds,
+                        endTime: marker.end_seconds,
+                        rating: newRating,
+                        sceneId: sceneId,
+                    }),
+                });
+            } else {
+                // Item exists - update rating
+                await fetch(`/api/items/${markerId}/rating`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rating: newRating }),
+                });
+            }
+        } catch (error) {
+            console.error('Failed to update rating:', error);
+            // Revert on error
+            setRatings(prev => {
+                const revert = { ...prev };
+                delete revert[markerId];
+                return revert;
+            });
+        }
+    }, [markers, sceneId]);
+
+    // Memoized rating change handler for the selected marker
+    const handleSelectedRatingChange = useCallback((newRating: number | null) => {
+        if (selectedMarkerId && !isTemp(selectedMarkerId)) {
+            handleRatingChangeInternal(selectedMarkerId, newRating);
+        }
+    }, [selectedMarkerId, handleRatingChangeInternal, isTemp]);
 
     // Handle back navigation - trigger marker generate task
     const handleGoBack = useCallback(async () => {
@@ -283,9 +374,14 @@ export default function TimelineEditorPage() {
 
     // Timeline handlers
     const handleMarkerSelect = useCallback((id: string) => {
+        // Single click: just select the marker, don't seek
+        setSelectedMarkerId(id || null);
+    }, []);
+
+    const handleMarkerDoubleClick = useCallback((id: string) => {
+        // Double click: select AND seek to marker start
         setSelectedMarkerId(id || null);
 
-        // Seek to marker start
         if (id) {
             const draft = drafts[id];
             const marker = markers.find((m) => m.id === id);
@@ -368,7 +464,17 @@ export default function TimelineEditorPage() {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Don't handle shortcuts when typing in input fields
             const target = e.target as HTMLElement;
-            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+            if (
+                target.tagName === "INPUT" ||
+                target.tagName === "TEXTAREA" ||
+                target.isContentEditable ||
+                target.role === "combobox" ||
+                target.role === "listbox" ||
+                target.role === "textbox" ||
+                target.closest('[role="combobox"]') ||
+                target.closest('[role="listbox"]') ||
+                target.closest('.MuiAutocomplete-root')
+            ) {
                 return;
             }
 
@@ -530,6 +636,8 @@ export default function TimelineEditorPage() {
                             onSave={handleSaveSelected}
                             onReset={handleResetSelected}
                             onDelete={handleDeleteSelected}
+                            rating={selectedMarkerId ? ratings[selectedMarkerId] : null}
+                            onRatingChange={selectedMarkerId && !isSelectedNew ? handleSelectedRatingChange : undefined}
                         />
                     </Box>
                     <BulkTagsPanel
@@ -584,6 +692,7 @@ export default function TimelineEditorPage() {
                     currentTime={currentTime}
                     selectedMarkerId={selectedMarkerId}
                     onMarkerSelect={handleMarkerSelect}
+                    onMarkerDoubleClick={handleMarkerDoubleClick}
                     onMarkerDragEnd={handleMarkerDragEnd}
                     onSeek={handleSeek}
                     onAddMarker={handleAddMarker}
@@ -612,7 +721,7 @@ export default function TimelineEditorPage() {
                         <Button variant="plain" color="neutral" onClick={cancelDelete}>
                             Cancel
                         </Button>
-                        <Button variant="solid" color="danger" onClick={confirmDelete} autoFocus>
+                        <Button ref={deleteButtonRef} variant="solid" color="danger" onClick={confirmDelete} autoFocus>
                             Delete
                         </Button>
                     </DialogActions>

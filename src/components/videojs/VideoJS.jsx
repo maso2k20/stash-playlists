@@ -176,7 +176,9 @@ export const VideoJS = (props) => {
         autoplay: false, // Disable initial autoplay to ensure offset is applied first
         userActions: {
           ...options?.userActions,
-          doubleClick: false
+          doubleClick: false,
+          // Disable built-in hotkeys to prevent interference with page inputs
+          hotkeys: false
         }
       };
 
@@ -185,7 +187,18 @@ export const VideoJS = (props) => {
         if (offset) {
           player.offset(offset);
         }
-        
+
+        // Prevent the video element from stealing keyboard focus from inputs
+        const videoEl = player.el();
+        if (videoEl) {
+          videoEl.setAttribute('tabindex', '-1');
+          // Also set on the actual video element inside
+          const innerVideo = videoEl.querySelector('video');
+          if (innerVideo) {
+            innerVideo.setAttribute('tabindex', '-1');
+          }
+        }
+
         // Add custom skip controls to the control bar
         const controlBar = player.controlBar;
         

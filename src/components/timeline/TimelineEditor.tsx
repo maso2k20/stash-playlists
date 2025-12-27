@@ -22,6 +22,7 @@ interface TimelineEditorProps {
     currentTime: number;
     selectedMarkerId: string | null;
     onMarkerSelect: (id: string) => void;
+    onMarkerDoubleClick?: (id: string) => void;
     onMarkerDragEnd: (id: string, newStart: number, newEnd: number) => void;
     onSeek: (time: number) => void;
     onAddMarker: () => void;
@@ -50,6 +51,7 @@ export function TimelineEditor({
     currentTime,
     selectedMarkerId,
     onMarkerSelect,
+    onMarkerDoubleClick,
     onMarkerDragEnd,
     onSeek,
     onAddMarker,
@@ -285,6 +287,7 @@ export function TimelineEditor({
                             selectedMarkerId={selectedMarkerId}
                             duration={duration}
                             onMarkerSelect={onMarkerSelect}
+                            onMarkerDoubleClick={onMarkerDoubleClick}
                             onMarkerDragEnd={onMarkerDragEnd}
                         />
 
