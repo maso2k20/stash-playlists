@@ -113,6 +113,7 @@ export interface UseSceneMarkersReturn {
     handleDeleteRow: (id: string) => Promise<void>;
     handleSaveAll: () => Promise<void>;
     handleResetAll: () => void;
+    addMarkersOrganisedTag: () => Promise<void>;
 
     // Utilities
     isDirtyExisting: (marker: Marker, draft: Draft) => boolean;
@@ -581,6 +582,7 @@ export function useSceneMarkers(sceneId: string, tagOptions: Tag[] = []): UseSce
         handleDeleteRow,
         handleSaveAll,
         handleResetAll,
+        addMarkersOrganisedTag,
 
         // Utilities
         isDirtyExisting,

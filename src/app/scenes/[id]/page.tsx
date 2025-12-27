@@ -21,6 +21,7 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
 import ViewListIcon from "@mui/icons-material/ViewList";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { useSceneMarkers } from "@/hooks/useSceneMarkers";
 import { useStashTags } from "@/context/StashTagsContext";
 import { useSettings } from "@/app/context/SettingsContext";
@@ -90,6 +91,7 @@ export default function TimelineEditorPage() {
         handleResetRow,
         handleDeleteRow,
         handleSaveAll,
+        addMarkersOrganisedTag,
         isDirtyExisting,
         isTemp,
     } = useSceneMarkers(sceneId, tagOptions);
@@ -562,6 +564,19 @@ export default function TimelineEditorPage() {
                     disabled={dirtyCount === 0}
                 >
                     Save All {dirtyCount > 0 && `(${dirtyCount})`}
+                </Button>
+
+                <Button
+                    size="sm"
+                    variant="soft"
+                    color="success"
+                    startDecorator={<CheckCircleOutlineIcon />}
+                    onClick={async () => {
+                        await addMarkersOrganisedTag();
+                        setSnack({ open: true, msg: "Marked as organised", color: "success" });
+                    }}
+                >
+                    Mark Organised
                 </Button>
 
                 {/* Performers */}
