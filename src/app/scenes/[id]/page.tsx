@@ -280,9 +280,8 @@ export default function TimelineEditorPage() {
         for (const marker of markers) {
             const draft = drafts[marker.id];
             const effectiveSeconds = draft?.seconds ?? marker.seconds;
-            const effectiveEndSeconds = draft?.end_seconds ?? marker.end_seconds;
-
-            if (effectiveEndSeconds === null) continue;
+            // Default to start + 10 seconds if no end time set
+            const effectiveEndSeconds = draft?.end_seconds ?? marker.end_seconds ?? (effectiveSeconds + 10);
 
             const isDirty = draft ? isDirtyExisting(marker, draft) : false;
 
@@ -304,12 +303,14 @@ export default function TimelineEditorPage() {
         // Add new (temp) markers
         for (const id of newIds) {
             const draft = drafts[id];
-            if (!draft || draft.end_seconds === null) continue;
+            if (!draft) continue;
+            // Default to start + 10 seconds if no end time set
+            const effectiveEndSeconds = draft.end_seconds ?? (draft.seconds + 10);
 
             result.push({
                 id,
                 start: draft.seconds,
-                end: draft.end_seconds,
+                end: effectiveEndSeconds,
                 title: draft.title,
                 primaryTagName: draft.primary_tag_id
                     ? tagOptions.find((t) => t.id === draft.primary_tag_id)?.name

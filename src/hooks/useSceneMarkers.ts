@@ -154,10 +154,14 @@ export function useSceneMarkers(sceneId: string, tagOptions: Tag[] = []): UseSce
                 ? Array.from(new Set([m.primary_tag.id, ...markerTagIds]))
                 : markerTagIds;
 
+            const seconds = Number(m.seconds || 0);
+            // Default to start + 10 seconds if no end time set
+            const end_seconds = m.end_seconds != null ? Number(m.end_seconds) : seconds + 10;
+
             next[m.id] = {
                 title: m.title || "",
-                seconds: Number(m.seconds || 0),
-                end_seconds: m.end_seconds != null ? Number(m.end_seconds) : null,
+                seconds,
+                end_seconds,
                 primary_tag_id: m.primary_tag?.id ?? null,
                 tag_ids: normalizedMarkerTagIds,
             };
