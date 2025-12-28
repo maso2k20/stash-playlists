@@ -158,7 +158,7 @@ export async function buildItemsForPlaylist(
     : [];
 
   const minRating = conditions.minRating;
-  const perPage = Math.max(1, Number(conditions.perPage ?? 5000));
+  const perPage = Math.max(1, Number(conditions.perPage ?? 10000));
 
   // Get default clip settings from database if not specified in playlist conditions
   const defaultClipSettings = await getDefaultClipSettings();
