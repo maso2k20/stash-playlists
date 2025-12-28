@@ -136,6 +136,8 @@ export function TimelineMarkerBar({
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!isDragging) {
+            // Blur any focused element so keyboard shortcuts work
+            (document.activeElement as HTMLElement)?.blur?.();
             onSelect(marker.id);
         }
     };
