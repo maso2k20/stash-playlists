@@ -95,3 +95,11 @@ model RefreshLog {
 
   @@index([createdAt])
 }
+
+model PlaylistTemplate {
+  id        String   @id @default(uuid())
+  name      String   // Template name like "Outdoors" - becomes suffix in generated playlist name
+  tagIds    Json     // Array of tag IDs: ["123", "456"]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}

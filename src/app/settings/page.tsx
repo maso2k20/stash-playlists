@@ -31,6 +31,7 @@ import {
 import { useColorScheme } from "@mui/joy/styles";
 import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload, CheckCircle, XCircle } from "lucide-react";
 import PerformerCountTagSettings from "@/components/PerformerCountTagSettings";
+import TemplateManager from "@/components/TemplateManager";
 import { 
   getSettingsByCategory, 
   getSettingDefinition, 
@@ -744,6 +745,7 @@ export default function SettingsPage() {
             <Tab>Configuration</Tab>
             <Tab>Automation</Tab>
             <Tab>Backup</Tab>
+            <Tab>Templates</Tab>
           </TabList>
 
           {/* Configuration Tab */}
@@ -1796,6 +1798,11 @@ export default function SettingsPage() {
                 )}
               </Box>
             ))}
+          </TabPanel>
+
+          {/* Templates Tab */}
+          <TabPanel value={3}>
+            <TemplateManager />
           </TabPanel>
         </Tabs>
       )}

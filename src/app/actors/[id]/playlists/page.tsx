@@ -29,7 +29,8 @@ import {
   Typography,
 } from "@mui/joy";
 import { PlaylistType } from "@/components/PlaylistCard";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Layers } from "lucide-react";
+import BuildPlaylistsDialog from "@/components/BuildPlaylistsDialog";
 
 export default function ActorPlaylistsPage() {
   const params = useParams<{ id: string }>();
@@ -68,6 +69,10 @@ export default function ActorPlaylistsPage() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [toDeleteId, setToDeleteId] = useState<string | null>(null);
 
+  // Build from templates dialog
+  const [isBuildOpen, setIsBuildOpen] = useState(false);
+  const [actorName, setActorName] = useState<string>("");
+
   // Initial load - fetch playlists for this actor
   useEffect(() => {
     if (!actorId) return;
@@ -83,6 +88,23 @@ export default function ActorPlaylistsPage() {
         setError(e?.message ?? "Failed to load playlists");
       } finally {
         setLoading(false);
+      }
+    })();
+  }, [actorId]);
+
+  // Fetch actor name for build dialog
+  useEffect(() => {
+    if (!actorId) return;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/actors/${actorId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setActorName(data.name || "");
+        }
+      } catch (e) {
+        console.error("Failed to fetch actor:", e);
       }
     })();
   }, [actorId]);
@@ -309,15 +331,27 @@ export default function ActorPlaylistsPage() {
           />
         </FormControl>
 
-        <Button
-          startDecorator={<Plus size={16} />}
-          color="primary"
-          variant="solid"
-          size="sm"
-          onClick={() => setIsCreateOpen(true)}
-        >
-          Add Playlist
-        </Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button
+            startDecorator={<Layers size={16} />}
+            color="primary"
+            variant="soft"
+            size="sm"
+            onClick={() => setIsBuildOpen(true)}
+            disabled={!actorName}
+          >
+            Build from Templates
+          </Button>
+          <Button
+            startDecorator={<Plus size={16} />}
+            color="primary"
+            variant="solid"
+            size="sm"
+            onClick={() => setIsCreateOpen(true)}
+          >
+            Add Playlist
+          </Button>
+        </Box>
       </Stack>
 
       {loading && (
@@ -488,6 +522,26 @@ export default function ActorPlaylistsPage() {
           </Stack>
         </ModalDialog>
       </Modal>
+
+      {/* Build from Templates Dialog */}
+      <BuildPlaylistsDialog
+        open={isBuildOpen}
+        onClose={() => setIsBuildOpen(false)}
+        actorId={actorId}
+        actorName={actorName}
+        onSuccess={async () => {
+          // Refresh playlists after building
+          try {
+            const res = await fetch(`/api/actors/${actorId}/playlists`);
+            if (res.ok) {
+              const data = await res.json();
+              setPlaylists(data);
+            }
+          } catch (e) {
+            console.error("Failed to refresh playlists:", e);
+          }
+        }}
+      />
     </Sheet>
   );
 }
