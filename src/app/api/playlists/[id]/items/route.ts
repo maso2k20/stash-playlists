@@ -87,6 +87,9 @@ async function syncItems(
 ) {
   const preserveTimings = !!opts.preserveTimings;
 
+  // Use longer timeout for large playlists (5 minutes)
+  const timeout = incoming.length > 1000 ? 300000 : 60000;
+
   return prisma.$transaction(async (tx) => {
     const existingLinks = await tx.playlistItem.findMany({
       where: { playlistId },
@@ -99,35 +102,24 @@ async function syncItems(
       where: { id: { in: incomingIds } },
       select: { id: true },
     });
-    const existingItemMap = new Map(existingItems.map((x) => [x.id, x]));
+    const existingItemIds = new Set(existingItems.map((x) => x.id));
 
-    let upsertedItems = 0;
-    let linkedCreated = 0;
-    let linkedUpdated = 0;
-    let deleted = 0;
+    // Separate into new items (need create) and existing items (need update)
+    const newItems: IncomingItem[] = [];
+    const updateItems: IncomingItem[] = [];
 
-    for (let index = 0; index < incoming.length; index++) {
-      const it = incoming[index];
-      const exists = existingItemMap.has(it.id);
+    for (const it of incoming) {
+      if (existingItemIds.has(it.id)) {
+        updateItems.push(it);
+      } else {
+        newItems.push(it);
+      }
+    }
 
-      const shouldWriteTimings = !preserveTimings || !exists;
-
-      const updateData = pickDefined({
-        title: it.title,
-        startTime: shouldWriteTimings ? it.startTime : undefined,
-        endTime: shouldWriteTimings ? it.endTime : undefined,
-        // Media only if present (undefined keys are dropped)
-        screenshot: it.screenshot,
-        stream: it.stream,
-        preview: it.preview,
-        rating: it.rating,
-        sceneId: it.sceneId,
-      });
-
-      await tx.item.upsert({
-        where: { id: it.id },
-        update: updateData,
-        create: {
+    // Bulk create new items
+    if (newItems.length > 0) {
+      await tx.item.createMany({
+        data: newItems.map((it) => ({
           id: it.id,
           title: it.title ?? "",
           startTime: it.startTime ?? 0,
@@ -137,36 +129,87 @@ async function syncItems(
           preview: it.preview ?? null,
           rating: it.rating ?? null,
           sceneId: it.sceneId ?? null,
-        },
+        })),
+        skipDuplicates: true,
       });
-      upsertedItems++;
+    }
 
-      const desiredOrder =
-        typeof it.itemOrder === "number" ? it.itemOrder : index;
+    // Update existing items in batches (parallel within batch, sequential between batches)
+    const BATCH_SIZE = 100;
+    let updatedCount = 0;
+    for (let i = 0; i < updateItems.length; i += BATCH_SIZE) {
+      const batch = updateItems.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map((it) => {
+          const shouldWriteTimings = !preserveTimings;
+          const updateData = pickDefined({
+            title: it.title,
+            startTime: shouldWriteTimings ? it.startTime : undefined,
+            endTime: shouldWriteTimings ? it.endTime : undefined,
+            screenshot: it.screenshot,
+            stream: it.stream,
+            preview: it.preview,
+            rating: it.rating,
+            sceneId: it.sceneId,
+          });
+          return tx.item.update({
+            where: { id: it.id },
+            data: updateData,
+          });
+        })
+      );
+      updatedCount += batch.length;
+    }
+
+    // Prepare playlist links - separate new links from order updates
+    const newLinks: { itemId: string; itemOrder: number }[] = [];
+    const orderUpdates: { linkId: string; itemOrder: number }[] = [];
+
+    for (let index = 0; index < incoming.length; index++) {
+      const it = incoming[index];
+      const desiredOrder = typeof it.itemOrder === "number" ? it.itemOrder : index;
       const link = existingByItemId.get(it.id);
 
       if (link) {
         if (link.itemOrder !== desiredOrder) {
-          await tx.playlistItem.update({
-            where: { id: link.id },
-            data: { itemOrder: desiredOrder },
-          });
-          linkedUpdated++;
+          orderUpdates.push({ linkId: link.id, itemOrder: desiredOrder });
         }
       } else {
-        const created = await tx.playlistItem.create({
-          data: { playlistId, itemId: it.id, itemOrder: desiredOrder },
-        });
-        existingByItemId.set(created.itemId, created);
-        linkedCreated++;
+        newLinks.push({ itemId: it.id, itemOrder: desiredOrder });
       }
     }
 
-    // prune removed links
+    // Bulk create new playlist links
+    if (newLinks.length > 0) {
+      await tx.playlistItem.createMany({
+        data: newLinks.map((l) => ({
+          playlistId,
+          itemId: l.itemId,
+          itemOrder: l.itemOrder,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Update link orders in batches
+    for (let i = 0; i < orderUpdates.length; i += BATCH_SIZE) {
+      const batch = orderUpdates.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map((u) =>
+          tx.playlistItem.update({
+            where: { id: u.linkId },
+            data: { itemOrder: u.itemOrder },
+          })
+        )
+      );
+    }
+
+    // Prune removed links
     const incomingSet = new Set(incomingIds);
     const toDelete = existingLinks
       .filter((e) => !incomingSet.has(e.itemId))
       .map((e) => e.id);
+    let deleted = 0;
     if (toDelete.length) {
       const res = await tx.playlistItem.deleteMany({
         where: { id: { in: toDelete } },
@@ -174,8 +217,13 @@ async function syncItems(
       deleted = res.count;
     }
 
-    return { upsertedItems, linkedCreated, linkedUpdated, deleted };
-  });
+    return {
+      upsertedItems: newItems.length + updatedCount,
+      linkedCreated: newLinks.length,
+      linkedUpdated: orderUpdates.length,
+      deleted,
+    };
+  }, { timeout });
 }
 
 // POST /api/playlists/[id]/items
@@ -202,52 +250,65 @@ export async function POST(request: NextRequest) {
 
   // Refresh/regenerate path (or missing items array)
   if (payload?.refresh === true || payload?.regenerate === true || !Array.isArray(payload?.items)) {
-    const built = await buildItemsForPlaylist(playlistId);
-    const incoming = normalizeIncoming(built ?? []);
+    try {
+      const built = await buildItemsForPlaylist(playlistId);
+      const incoming = normalizeIncoming(built ?? []);
 
-    // Check if this is a smart playlist with rating filter that returned no results
-    // In this case, don't clear the playlist, just return current state
-    if (incoming.length === 0) {
-      const playlist = await prisma.playlist.findUnique({
-        where: { id: playlistId },
-        select: { type: true, conditions: true }
-      });
-      
-      if (playlist?.type === "SMART") {
-        const conditions = (playlist.conditions as any) || {};
-        const hasRatingFilter = conditions.minRating && conditions.minRating >= 1;
-        
-        if (hasRatingFilter) {
-          // Don't clear playlist when rating filter returns no results
-          // This preserves existing items until markers are actually rated
-          const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
-          return NextResponse.json(
-            {
-              message: "No items match rating filter - playlist unchanged",
-              upsertedItems: 0,
-              linkedCreated: 0,
-              linkedUpdated: 0,
-              deleted: 0,
-              totalLinkedNow,
-            },
-            { status: 200 }
-          );
+      console.log(`[PlaylistItems] Refreshing playlist ${playlistId}: ${incoming.length} items from Stash`);
+
+      // Check if this is a smart playlist with rating filter that returned no results
+      // In this case, don't clear the playlist, just return current state
+      if (incoming.length === 0) {
+        const playlist = await prisma.playlist.findUnique({
+          where: { id: playlistId },
+          select: { type: true, conditions: true }
+        });
+
+        if (playlist?.type === "SMART") {
+          const conditions = (playlist.conditions as any) || {};
+          const hasRatingFilter = conditions.minRating && conditions.minRating >= 1;
+
+          if (hasRatingFilter) {
+            // Don't clear playlist when rating filter returns no results
+            // This preserves existing items until markers are actually rated
+            const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
+            return NextResponse.json(
+              {
+                message: "No items match rating filter - playlist unchanged",
+                upsertedItems: 0,
+                linkedCreated: 0,
+                linkedUpdated: 0,
+                deleted: 0,
+                totalLinkedNow,
+              },
+              { status: 200 }
+            );
+          }
         }
       }
-    }
 
-    const result = await syncItems(playlistId, incoming, {
-      preserveTimings: payload?.refresh === true && payload?.regenerate !== true,
-    });
-    const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
-    return NextResponse.json(
-      {
-        message: payload?.regenerate ? "Regenerated from rules" : "Refreshed from rules",
-        ...result,
-        totalLinkedNow,
-      },
-      { status: 200 }
-    );
+      const result = await syncItems(playlistId, incoming, {
+        preserveTimings: payload?.refresh === true && payload?.regenerate !== true,
+      });
+      const totalLinkedNow = await prisma.playlistItem.count({ where: { playlistId } });
+      return NextResponse.json(
+        {
+          message: payload?.regenerate ? "Regenerated from rules" : "Refreshed from rules",
+          ...result,
+          totalLinkedNow,
+        },
+        { status: 200 }
+      );
+    } catch (error: any) {
+      console.error(`[PlaylistItems] Error refreshing playlist ${playlistId}:`, error);
+      let code: string | undefined;
+      let meta: any;
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        code = error.code;
+        meta = error.meta;
+      }
+      return jsonError(500, `Failed to refresh playlist: ${error.message || error}`, { code, meta });
+    }
   }
 
   // Manual sync (editor Save)
