@@ -117,7 +117,8 @@ async function syncItems(
     }
 
     // Bulk create new items in batches (SQLite has limits on single createMany)
-    const CREATE_BATCH_SIZE = 100;
+    // Note: skipDuplicates not supported in SQLite, but newItems already filtered to non-existing
+    const CREATE_BATCH_SIZE = 50;
     for (let i = 0; i < newItems.length; i += CREATE_BATCH_SIZE) {
       const batch = newItems.slice(i, i + CREATE_BATCH_SIZE);
       await tx.item.createMany({
@@ -132,7 +133,6 @@ async function syncItems(
           rating: it.rating ?? null,
           sceneId: it.sceneId ?? null,
         })),
-        skipDuplicates: true,
       });
     }
 
@@ -190,7 +190,6 @@ async function syncItems(
           itemId: l.itemId,
           itemOrder: l.itemOrder,
         })),
-        skipDuplicates: true,
       });
     }
 
