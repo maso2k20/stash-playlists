@@ -22,17 +22,20 @@ import Chip from '@mui/joy/Chip';
 import Alert from '@mui/joy/Alert';
 import LinearProgress from '@mui/joy/LinearProgress';
 import { formatLength } from "@/lib/formatLength";
+import { makeStashUrl } from "@/lib/urlUtils";
 
 import SmartPlaylistRuleBuilder from '@/components/SmartPlaylistRuleBuilder';
+import StarRating from '@/components/StarRating';
 import PlaylistImageUpload from '@/components/PlaylistImageUpload';
 import { useSettings } from '@/app/context/SettingsContext';
 import { useStashTags } from '@/context/StashTagsContext';
 
 // 🔁 Shared query + helpers used by both editor and refresh API
 import {
-  SMART_PLAYLIST_BUILDER,
+  getSmartPlaylistQuery,
   buildSmartVars,
   mapMarkersToItems,
+  filterByOptionalTags,
   type SmartRules as Rules,
 } from '@/shared/smartPlaylistQuery';
 
@@ -46,17 +49,27 @@ export default function EditAutomaticPlaylistPage() {
   const [description, setDescription] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [rules, setRules] = useState<Rules>({ actorIds: [], tagIds: [], minRating: null });
+  const [rules, setRules] = useState<Rules>({
+    actorIds: [],
+    tagIds: [],
+    requiredTagIds: [],
+    optionalTagIds: [],
+    minRating: null,
+  });
 
   const settings = useSettings();
   const stashServer = settings['STASH_SERVER'];
   const stashAPI = settings['STASH_API'];
 
+  // Get the appropriate query based on current rules
+  const smartQuery = useMemo(() => getSmartPlaylistQuery(rules), [rules]);
+
   const [fetchMarkers, { data: previewData, loading: previewLoading, error: previewError }] =
-    useLazyQuery(SMART_PLAYLIST_BUILDER, { fetchPolicy: "no-cache" });
+    useLazyQuery(smartQuery, { fetchPolicy: "no-cache" });
 
   const [filteredMarkers, setFilteredMarkers] = useState<any[]>([]);
   const [filteringLoading, setFilteringLoading] = useState(false);
+  const [markerRatings, setMarkerRatings] = useState<Record<string, number>>({});
 
   // Load playlist meta + rules
   useEffect(() => {
@@ -82,9 +95,20 @@ export default function EditAutomaticPlaylistPage() {
             console.warn('Failed to parse conditions string:', e);
           }
         }
+        // Handle both legacy and new tag formats
+        const legacyTagIds = Array.isArray(cond.tagIds) ? cond.tagIds.map(String) : [];
+        const requiredTagIds = Array.isArray(cond.requiredTagIds) && cond.requiredTagIds.length > 0
+          ? cond.requiredTagIds.map(String)
+          : legacyTagIds; // Fallback to legacy
+        const optionalTagIds = Array.isArray(cond.optionalTagIds)
+          ? cond.optionalTagIds.map(String)
+          : [];
+
         setRules({
           actorIds: Array.isArray(cond.actorIds) ? cond.actorIds.map(String) : [],
-          tagIds: Array.isArray(cond.tagIds) ? cond.tagIds.map(String) : [],
+          tagIds: legacyTagIds,
+          requiredTagIds,
+          optionalTagIds,
           minRating: typeof cond.minRating === 'number' ? cond.minRating : null,
         });
       } catch (e) {
@@ -109,7 +133,7 @@ export default function EditAutomaticPlaylistPage() {
     [previewData]
   );
 
-  // Apply rating filter to preview results
+  // Apply optional tag and rating filters to preview results
   useEffect(() => {
     if (!rawMarkers.length) {
       setFilteredMarkers([]);
@@ -119,21 +143,32 @@ export default function EditAutomaticPlaylistPage() {
     (async () => {
       setFilteringLoading(true);
       try {
-        // Convert markers to items format for filtering
-        const items = mapMarkersToItems(rawMarkers, { stashServer, stashAPI });
-        
+        // First apply optional tag filter if both required and optional tags are set
+        let markersAfterTagFilter = rawMarkers;
+        const requiredTagIds = rules.requiredTagIds ?? [];
+        const optionalTagIds = rules.optionalTagIds ?? [];
+
+        if (requiredTagIds.length && optionalTagIds.length) {
+          // When both are set, we queried with INCLUDES_ALL for required,
+          // now filter client-side for optional tags
+          markersAfterTagFilter = filterByOptionalTags(rawMarkers, optionalTagIds);
+        }
+
+        // Convert markers to items format for rating filtering
+        const items = mapMarkersToItems(markersAfterTagFilter, { stashServer, stashAPI });
+
         // Apply rating filter if specified
         let filteredItems = items;
         if (rules.minRating && rules.minRating >= 1) {
           const response = await fetch('/api/items/filter', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               itemIds: items.map(item => item.id),
-              minRating: rules.minRating 
+              minRating: rules.minRating
             }),
           });
-          
+
           if (response.ok) {
             const { filteredIds } = await response.json();
             const filteredIdSet = new Set(filteredIds);
@@ -143,15 +178,29 @@ export default function EditAutomaticPlaylistPage() {
 
         // Convert back to marker format for display
         const filteredMarkerIds = new Set(filteredItems.map(item => item.id));
-        setFilteredMarkers(rawMarkers.filter((marker: any) => filteredMarkerIds.has(marker.id)));
+        setFilteredMarkers(markersAfterTagFilter.filter((marker: any) => filteredMarkerIds.has(marker.id)));
       } catch (error) {
-        console.error('Error filtering markers by rating:', error);
+        console.error('Error filtering markers:', error);
         setFilteredMarkers(rawMarkers); // Fallback to unfiltered
       } finally {
         setFilteringLoading(false);
       }
     })();
-  }, [rawMarkers, rules.minRating, stashServer, stashAPI]);
+  }, [rawMarkers, rules.requiredTagIds, rules.optionalTagIds, rules.minRating, stashServer, stashAPI]);
+
+  // Fetch ratings for preview markers
+  useEffect(() => {
+    if (!filteredMarkers.length) {
+      setMarkerRatings({});
+      return;
+    }
+    const markerIds = filteredMarkers.slice(0, 50).map((m: any) => m.id);
+    const idsParam = markerIds.join(',');
+    fetch(`/api/items/ratings?ids=${encodeURIComponent(idsParam)}`)
+      .then(res => res.json())
+      .then(data => setMarkerRatings(data.ratings || {}))
+      .catch(console.error);
+  }, [filteredMarkers]);
 
   async function handleSave() {
     setLoading(true);
@@ -368,18 +417,20 @@ export default function EditAutomaticPlaylistPage() {
                       </Box>
                     ) : (
                       <Box>
-                        <Grid container spacing={2}>
-                          {filteredMarkers.slice(0, 50).map((m: any) => (
-                            <Grid xs={12} sm={6} key={m.id}>
+                        <Stack spacing={2}>
+                          {filteredMarkers.slice(0, 50).map((m: any) => {
+                            const rating = markerRatings[m.id];
+                            const tags = m.tags ?? [];
+                            const performers = m.scene?.performers ?? [];
+                            const screenshotUrl = m.screenshot ? makeStashUrl(m.screenshot, stashServer, stashAPI) : null;
+
+                            return (
                               <Sheet
+                                key={m.id}
                                 variant="soft"
                                 sx={{
                                   p: 2,
                                   borderRadius: 'md',
-                                  display: 'grid',
-                                  gridTemplateColumns: '100px 1fr',
-                                  gap: 2,
-                                  alignItems: 'center',
                                   transition: 'all 0.2s ease',
                                   '&:hover': {
                                     bgcolor: 'background.level1',
@@ -388,44 +439,91 @@ export default function EditAutomaticPlaylistPage() {
                                   }
                                 }}
                               >
-                                <Box sx={{ 
-                                  width: 100, 
-                                  height: 56, 
-                                  borderRadius: 'sm', 
-                                  overflow: 'hidden', 
-                                  bgcolor: 'neutral.softBg',
-                                  border: '1px solid',
-                                  borderColor: 'divider'
-                                }}>
-                                  {m.screenshot ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={m.screenshot}
-                                      alt={m.title ?? 'marker'}
-                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    />
-                                  ) : <Box sx={{ width: '100%', height: '100%' }} />}
-                                </Box>
-                                <Box sx={{ minWidth: 0 }}>
-                                  <Typography 
-                                    level="body-md" 
-                                    sx={{ 
-                                      fontWeight: 600,
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap'
-                                    }}
-                                  >
-                                    {m.title || 'Untitled marker'}
-                                  </Typography>
-                                  <Typography level="body-sm" color="neutral">
-                                    {formatLength((Number(m.end_seconds ?? 0)) - (Number(m.seconds ?? 0)))}
-                                  </Typography>
+                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                  {/* Left: Image */}
+                                  <Box sx={{
+                                    width: 200,
+                                    height: 112,
+                                    flexShrink: 0,
+                                    borderRadius: 'sm',
+                                    overflow: 'hidden',
+                                    bgcolor: 'neutral.softBg',
+                                    border: '1px solid',
+                                    borderColor: 'divider'
+                                  }}>
+                                    {screenshotUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={screenshotUrl}
+                                        alt={m.title ?? 'marker'}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      />
+                                    ) : <Box sx={{ width: '100%', height: '100%' }} />}
+                                  </Box>
+
+                                  {/* Right: Content */}
+                                  <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                    {/* Header row: Title + Rating */}
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+                                      <Typography
+                                        level="title-sm"
+                                        sx={{
+                                          fontWeight: 600,
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap',
+                                          flex: 1
+                                        }}
+                                      >
+                                        {m.title || 'Untitled marker'}
+                                      </Typography>
+                                      {rating && (
+                                        <StarRating value={rating} readonly size="sm" showClearButton={false} />
+                                      )}
+                                    </Box>
+
+                                    {/* Duration */}
+                                    <Typography level="body-xs" color="neutral">
+                                      {formatLength((Number(m.end_seconds ?? 0)) - (Number(m.seconds ?? 0)))}
+                                    </Typography>
+
+                                    {/* Performers */}
+                                    {performers.length > 0 && (
+                                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {performers.slice(0, 3).map((p: { id: string; name: string }) => (
+                                          <Chip key={p.id} size="sm" variant="soft" color="primary">
+                                            {p.name}
+                                          </Chip>
+                                        ))}
+                                        {performers.length > 3 && (
+                                          <Chip size="sm" variant="outlined" color="primary">
+                                            +{performers.length - 3}
+                                          </Chip>
+                                        )}
+                                      </Box>
+                                    )}
+
+                                    {/* Tags */}
+                                    {tags.length > 0 && (
+                                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {tags.slice(0, 4).map((tag: { id: string; name: string }) => (
+                                          <Chip key={tag.id} size="sm" variant="soft" color="neutral">
+                                            {tag.name}
+                                          </Chip>
+                                        ))}
+                                        {tags.length > 4 && (
+                                          <Chip size="sm" variant="outlined" color="neutral">
+                                            +{tags.length - 4}
+                                          </Chip>
+                                        )}
+                                      </Box>
+                                    )}
+                                  </Box>
                                 </Box>
                               </Sheet>
-                            </Grid>
-                          ))}
-                        </Grid>
+                            );
+                          })}
+                        </Stack>
                         {filteredMarkers.length > 50 && (
                           <Box sx={{ mt: 3, textAlign: 'center' }}>
                             <Chip variant="outlined" color="neutral">
