@@ -114,7 +114,9 @@ export async function stashGraph<T>(
 
 type SmartPlaylistConditions = {
   actorIds?: string[];
-  tagIds?: string[];
+  tagIds?: string[];           // Legacy format (treated as requiredTagIds for backward compat)
+  requiredTagIds?: string[];   // ALL must match (INCLUDES_ALL)
+  optionalTagIds?: string[];   // ANY must match (INCLUDES)
   minRating?: number | null;
   perPage?: number;
   clip?: { before?: number; after?: number };
@@ -145,16 +147,26 @@ export async function buildItemsForPlaylist(
 
   const conditions: SmartPlaylistConditions = (playlist.conditions as any) || {};
   const actorIds = Array.isArray(conditions.actorIds) ? conditions.actorIds : [];
-  const tagIds = Array.isArray(conditions.tagIds) ? conditions.tagIds : [];
+
+  // Handle both legacy and new tag formats
+  const legacyTagIds = Array.isArray(conditions.tagIds) ? conditions.tagIds : [];
+  const requiredTagIds = Array.isArray(conditions.requiredTagIds)
+    ? conditions.requiredTagIds
+    : legacyTagIds; // Fallback to legacy format
+  const optionalTagIds = Array.isArray(conditions.optionalTagIds)
+    ? conditions.optionalTagIds
+    : [];
+
   const minRating = conditions.minRating;
   const perPage = Math.max(1, Number(conditions.perPage ?? 5000));
-  
+
   // Get default clip settings from database if not specified in playlist conditions
   const defaultClipSettings = await getDefaultClipSettings();
   const before = Math.max(0, Number(conditions.clip?.before ?? defaultClipSettings.before));
   const after = Math.max(0, Number(conditions.clip?.after ?? defaultClipSettings.after));
 
-  if (!actorIds.length && !tagIds.length) {
+  // Need at least one filter criteria
+  if (!actorIds.length && !requiredTagIds.length && !optionalTagIds.length) {
     return [];
   }
 
@@ -167,13 +179,30 @@ export async function buildItemsForPlaylist(
     filterParts.push(`performers: { modifier: INCLUDES_ALL, value: $actorIds }`);
     varDecls.push("$actorIds: [ID!]"); vars.actorIds = actorIds;
   }
-  if (tagIds.length) {
-    filterParts.push(`tags: { modifier: INCLUDES_ALL, value: $tagIds }`);
-    varDecls.push("$tagIds: [ID!]"); vars.tagIds = tagIds;
+
+  // Tag filtering logic:
+  // - If only required tags: use INCLUDES_ALL
+  // - If only optional tags: use INCLUDES
+  // - If both: use INCLUDES_ALL for required, filter optional client-side
+  if (requiredTagIds.length && !optionalTagIds.length) {
+    // Only required tags - all must match
+    filterParts.push(`tags: { modifier: INCLUDES_ALL, value: $requiredTagIds }`);
+    varDecls.push("$requiredTagIds: [ID!]"); vars.requiredTagIds = requiredTagIds;
+  } else if (!requiredTagIds.length && optionalTagIds.length) {
+    // Only optional tags - any must match
+    filterParts.push(`tags: { modifier: INCLUDES, value: $optionalTagIds }`);
+    varDecls.push("$optionalTagIds: [ID!]"); vars.optionalTagIds = optionalTagIds;
+  } else if (requiredTagIds.length && optionalTagIds.length) {
+    // Both required and optional - query with required, filter optional client-side
+    filterParts.push(`tags: { modifier: INCLUDES_ALL, value: $requiredTagIds }`);
+    varDecls.push("$requiredTagIds: [ID!]"); vars.requiredTagIds = requiredTagIds;
   }
 
   const sceneMarkerFilter =
     filterParts.length > 0 ? `scene_marker_filter: { ${filterParts.join("\n")} }` : "";
+
+  // Include tags in query when we need to filter by optional tags
+  const needsTagData = requiredTagIds.length && optionalTagIds.length;
 
   const query = `
     query BuildMarkers(${varDecls.join(", ")}) {
@@ -188,6 +217,7 @@ export async function buildItemsForPlaylist(
           seconds
           end_seconds
           scene { id title }
+          ${needsTagData ? "tags { id }" : ""}
         }
       }
     }
@@ -202,6 +232,7 @@ export async function buildItemsForPlaylist(
         seconds: number;
         end_seconds?: number | null;
         scene: { id: string; title?: string | null } | null;
+        tags?: Array<{ id: string }>;
       }>;
     };
   };
@@ -278,10 +309,28 @@ export async function buildItemsForPlaylist(
     }
   );
 
+  // Apply optional tag filter when both required and optional tags are specified
+  // We filter client-side because Stash doesn't support combined INCLUDES_ALL + INCLUDES
+  let filteredItems = items;
+  if (requiredTagIds.length && optionalTagIds.length) {
+    const optionalTagSet = new Set(optionalTagIds);
+    const markersData = data.findSceneMarkers?.scene_markers ?? [];
+
+    // Build a map of marker ID to whether it has at least one optional tag
+    const markerHasOptionalTag = new Map<string, boolean>();
+    for (const m of markersData) {
+      const markerTagIds = (m.tags ?? []).map(t => t.id);
+      const hasOptional = markerTagIds.some(tagId => optionalTagSet.has(tagId));
+      markerHasOptionalTag.set(m.id, hasOptional);
+    }
+
+    filteredItems = items.filter(item => markerHasOptionalTag.get(item.id) === true);
+  }
+
   // Apply rating filter if specified
   if (minRating && minRating >= 1) {
-    const itemIds = items.map(item => item.id);
-    
+    const itemIds = filteredItems.map(item => item.id);
+
     // Only include items that already exist in database with rating >= minRating
     // This ensures consistency with the editor preview behavior
     const itemsWithSufficientRating = await prisma.item.findMany({
@@ -293,8 +342,8 @@ export async function buildItemsForPlaylist(
     });
 
     const ratedItemIds = new Set(itemsWithSufficientRating.map(item => item.id));
-    return items.filter(item => ratedItemIds.has(item.id));
+    return filteredItems.filter(item => ratedItemIds.has(item.id));
   }
 
-  return items;
+  return filteredItems;
 }

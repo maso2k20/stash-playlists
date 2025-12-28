@@ -36,19 +36,43 @@ export async function PUT(
 
   try {
     const data = await request.json();
-    const { name, tagIds } = data;
+    const { name, tagIds, requiredTagIds, optionalTagIds } = data;
 
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return NextResponse.json({ error: 'Template name cannot be empty' }, { status: 400 });
     }
 
-    if (tagIds !== undefined && (!Array.isArray(tagIds) || tagIds.length === 0)) {
+    // Check for new format fields
+    const hasRequiredTags = requiredTagIds && Array.isArray(requiredTagIds) && requiredTagIds.length > 0;
+    const hasOptionalTags = optionalTagIds && Array.isArray(optionalTagIds) && optionalTagIds.length > 0;
+    const hasLegacyTags = tagIds && Array.isArray(tagIds) && tagIds.length > 0;
+
+    // If any tags are being updated, ensure at least one tag exists
+    if ((requiredTagIds !== undefined || optionalTagIds !== undefined || tagIds !== undefined) &&
+        !hasRequiredTags && !hasOptionalTags && !hasLegacyTags) {
       return NextResponse.json({ error: 'At least one tag is required' }, { status: 400 });
     }
 
-    const updateData: { name?: string; tagIds?: string[] } = {};
+    const updateData: {
+      name?: string;
+      tagIds?: string[];
+      requiredTagIds?: string[] | null;
+      optionalTagIds?: string[] | null;
+    } = {};
+
     if (name) updateData.name = name.trim();
-    if (tagIds) updateData.tagIds = tagIds;
+
+    // Handle tag updates
+    if (requiredTagIds !== undefined || optionalTagIds !== undefined) {
+      // New format being used
+      updateData.requiredTagIds = requiredTagIds ?? null;
+      updateData.optionalTagIds = optionalTagIds ?? null;
+      // Update legacy tagIds for backward compatibility
+      updateData.tagIds = [...(requiredTagIds || []), ...(optionalTagIds || [])];
+    } else if (tagIds !== undefined) {
+      // Only legacy format provided
+      updateData.tagIds = tagIds;
+    }
 
     const template = await prisma.playlistTemplate.update({
       where: { id },

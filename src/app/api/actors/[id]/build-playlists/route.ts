@@ -91,6 +91,13 @@ export async function POST(
         }
 
         // Create the smart playlist with the actor and template tags
+        // Use new format if available, fall back to legacy tagIds
+        const templateTagIds = template.tagIds as string[];
+        const requiredTagIds = (template.requiredTagIds as string[] | null)?.length
+          ? (template.requiredTagIds as string[])
+          : templateTagIds;
+        const optionalTagIds = (template.optionalTagIds as string[] | null) ?? [];
+
         const playlist = await prisma.playlist.create({
           data: {
             name: playlistName,
@@ -98,7 +105,10 @@ export async function POST(
             type: 'SMART',
             conditions: {
               actorIds: [actorId],
-              tagIds: template.tagIds,
+              requiredTagIds,
+              optionalTagIds,
+              // Keep legacy tagIds for backward compatibility
+              tagIds: templateTagIds,
             },
           },
         });

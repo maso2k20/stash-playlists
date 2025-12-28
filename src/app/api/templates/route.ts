@@ -21,20 +21,33 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { name, tagIds } = data;
+    const { name, tagIds, requiredTagIds, optionalTagIds } = data;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Template name is required' }, { status: 400 });
     }
 
-    if (!tagIds || !Array.isArray(tagIds) || tagIds.length === 0) {
+    // Check for new format fields
+    const hasRequiredTags = requiredTagIds && Array.isArray(requiredTagIds) && requiredTagIds.length > 0;
+    const hasOptionalTags = optionalTagIds && Array.isArray(optionalTagIds) && optionalTagIds.length > 0;
+    const hasLegacyTags = tagIds && Array.isArray(tagIds) && tagIds.length > 0;
+
+    // Need at least one tag in any format
+    if (!hasRequiredTags && !hasOptionalTags && !hasLegacyTags) {
       return NextResponse.json({ error: 'At least one tag is required' }, { status: 400 });
     }
+
+    // Build tagIds for backward compatibility if not provided
+    const finalTagIds = hasLegacyTags
+      ? tagIds
+      : [...(requiredTagIds || []), ...(optionalTagIds || [])];
 
     const template = await prisma.playlistTemplate.create({
       data: {
         name: name.trim(),
-        tagIds,
+        tagIds: finalTagIds,
+        requiredTagIds: requiredTagIds ?? null,
+        optionalTagIds: optionalTagIds ?? null,
       },
     });
 

@@ -6,7 +6,6 @@ import Autocomplete from '@mui/joy/Autocomplete';
 import Grid from '@mui/joy/Grid';
 import Select from '@mui/joy/Select';
 import Option from '@mui/joy/Option';
-import StarRating from './StarRating';
 
 interface Actor {
   id: string;
@@ -16,10 +15,26 @@ interface Tag {
   id: string;
   label: string;
 }
+
+// New flexible rules format
+interface SmartRulesOutput {
+  actorIds: string[];
+  tagIds?: string[];           // Legacy format (kept for backward compat)
+  requiredTagIds?: string[];   // ALL must match
+  optionalTagIds?: string[];   // ANY must match
+  minRating?: number | null;
+}
+
 interface SmartPlaylistRuleBuilderProps {
   tags?: Tag[];
-  onChange: (rules: { actorIds: string[]; tagIds: string[]; minRating?: number | null }) => void;
-  initialRules?: { actorIds: string[]; tagIds: string[]; minRating?: number | null };
+  onChange: (rules: SmartRulesOutput) => void;
+  initialRules?: {
+    actorIds: string[];
+    tagIds?: string[];
+    requiredTagIds?: string[];
+    optionalTagIds?: string[];
+    minRating?: number | null;
+  };
 }
 
 function normalizeActors(data: any): Actor[] {
@@ -34,25 +49,36 @@ function normalizeActors(data: any): Actor[] {
 }
 
 function initializeSelections(
-  initialRules: { actorIds: string[]; tagIds: string[]; minRating?: number | null } | undefined,
+  initialRules: SmartPlaylistRuleBuilderProps['initialRules'],
   actors: Actor[],
   tags: Tag[],
   setSelectedActors: React.Dispatch<React.SetStateAction<Actor[]>>,
-  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>,
+  setRequiredTags: React.Dispatch<React.SetStateAction<Tag[]>>,
+  setOptionalTags: React.Dispatch<React.SetStateAction<Tag[]>>,
   setMinRating: React.Dispatch<React.SetStateAction<number | null>>,
 ) {
   if (!initialRules) return;
 
   const actorIds = (initialRules.actorIds ?? []).map(String);
-  const tagIds = (initialRules.tagIds ?? []).map(String);
+
+  // Handle both legacy and new tag formats
+  // Only fall back to legacy tagIds if requiredTagIds is not defined at all
+  const legacyTagIds = (initialRules.tagIds ?? []).map(String);
+  const hasNewFormat = Array.isArray(initialRules.requiredTagIds) || Array.isArray(initialRules.optionalTagIds);
+  const requiredTagIds = hasNewFormat
+    ? (initialRules.requiredTagIds ?? []).map(String)
+    : legacyTagIds; // Fallback to legacy only if new format not present
+  const optionalTagIds = (initialRules.optionalTagIds ?? []).map(String);
 
   if (actors.length) {
     const presetActors = actors.filter((a) => actorIds.includes(String(a.id)));
     setSelectedActors(presetActors);
   }
   if (tags.length) {
-    const presetTags = tags.filter((t) => tagIds.includes(String(t.id)));
-    setSelectedTags(presetTags);
+    const presetRequiredTags = tags.filter((t) => requiredTagIds.includes(String(t.id)));
+    const presetOptionalTags = tags.filter((t) => optionalTagIds.includes(String(t.id)));
+    setRequiredTags(presetRequiredTags);
+    setOptionalTags(presetOptionalTags);
   }
   if (initialRules.minRating !== undefined) {
     setMinRating(initialRules.minRating);
@@ -66,7 +92,8 @@ export default function SmartPlaylistRuleBuilder({
 }: SmartPlaylistRuleBuilderProps) {
   const [actors, setActors] = useState<Actor[]>([]);
   const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
-  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [requiredTags, setRequiredTags] = useState<Tag[]>([]);
+  const [optionalTags, setOptionalTags] = useState<Tag[]>([]);
   const [minRating, setMinRating] = useState<number | null>(null);
 
   // Track whether we've applied the initial selections
@@ -75,9 +102,10 @@ export default function SmartPlaylistRuleBuilder({
   // If initialRules actually changes (different IDs), allow re-initialization
   const initKey = useMemo(() => {
     const a = (initialRules?.actorIds ?? []).map(String).join(',');
-    const t = (initialRules?.tagIds ?? []).map(String).join(',');
+    const rt = (initialRules?.requiredTagIds ?? initialRules?.tagIds ?? []).map(String).join(',');
+    const ot = (initialRules?.optionalTagIds ?? []).map(String).join(',');
     const r = String(initialRules?.minRating ?? '');
-    return `${a}|${t}|${r}`;
+    return `${a}|${rt}|${ot}|${r}`;
   }, [initialRules]);
   const lastInitKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -119,7 +147,7 @@ export default function SmartPlaylistRuleBuilder({
     if (!actors.length) return;           // wait for actors
     if (!tags.length) return;             // wait for tags
 
-    initializeSelections(initialRules, actors, tags, setSelectedActors, setSelectedTags, setMinRating);
+    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setMinRating);
     hasInitializedRef.current = true;
   }, [initialRules, actors, tags]);
 
@@ -136,24 +164,40 @@ export default function SmartPlaylistRuleBuilder({
     const shouldBubble = hasInitializedRef.current || !initialRules;
     if (!shouldBubble) return;
 
+    const requiredTagIds = requiredTags.map((t) => String(t.id));
+    const optionalTagIds = optionalTags.map((t) => String(t.id));
+
     onChangeRef.current({
       actorIds: selectedActors.map((a) => String(a.id)),
-      tagIds: selectedTags.map((t) => String(t.id)),
+      requiredTagIds,
+      optionalTagIds,
+      // Keep legacy tagIds for backward compatibility (combine both for display purposes)
+      tagIds: [...requiredTagIds, ...optionalTagIds],
       minRating,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedActors, selectedTags, minRating]);
+  }, [selectedActors, requiredTags, optionalTags, minRating]);
 
   const sortedActors = useMemo(
     () => [...actors].sort((a, b) => a.name.localeCompare(b.name)),
     [actors]
   );
 
+  // Filter out tags that are already selected in the other group
+  const availableRequiredTags = useMemo(
+    () => tags.filter(t => !optionalTags.some(ot => ot.id === t.id)),
+    [tags, optionalTags]
+  );
+  const availableOptionalTags = useMemo(
+    () => tags.filter(t => !requiredTags.some(rt => rt.id === t.id)),
+    [tags, requiredTags]
+  );
+
   return (
     <Box sx={{ width: '100%' }}>
       <Grid container spacing={2}>
-        {/* Actors and Tags in top row */}
-        <Grid xs={12} sm={6}>
+        {/* Actors row */}
+        <Grid xs={12}>
           <Box>
             <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Actors</Typography>
             <Autocomplete
@@ -179,29 +223,87 @@ export default function SmartPlaylistRuleBuilder({
           </Box>
         </Grid>
 
+        {/* Required Tags (ALL must match) */}
         <Grid xs={12} sm={6}>
           <Box>
-            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Tags</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Typography level="title-sm" sx={{ fontWeight: 600 }}>
+                Required Tags
+              </Typography>
+              <Chip size="sm" variant="soft" color="primary">
+                ALL must match
+              </Chip>
+            </Box>
             <Autocomplete<Tag, true, false, false>
               multiple
-              options={tags}
+              options={availableRequiredTags}
               getOptionLabel={(option) => option.label}
               isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
-              value={selectedTags}
-              onChange={(_, newValue) => setSelectedTags(newValue)}
+              value={requiredTags}
+              onChange={(_, newValue) => {
+                // Ensure no overlap with optional tags
+                const optionalIds = new Set(optionalTags.map(t => String(t.id)));
+                const filtered = newValue.filter(t => !optionalIds.has(String(t.id)));
+                setRequiredTags(filtered);
+              }}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => {
                   const { key, ...tagProps } = getTagProps({ index });
                   return (
-                    <Chip key={`${option.id}-${index}`} {...tagProps} size="sm">
+                    <Chip key={`${option.id}-${index}`} {...tagProps} size="sm" color="primary">
                       {option.label}
                     </Chip>
                   );
                 })
               }
-              placeholder="Search tags..."
+              placeholder="Tags that MUST be present..."
               size="sm"
             />
+            <Typography level="body-xs" sx={{ color: 'neutral.500', mt: 0.5 }}>
+              Markers must have ALL of these tags
+            </Typography>
+          </Box>
+        </Grid>
+
+        {/* Optional Tags (ANY must match) */}
+        <Grid xs={12} sm={6}>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Typography level="title-sm" sx={{ fontWeight: 600 }}>
+                Optional Tags
+              </Typography>
+              <Chip size="sm" variant="soft" color="success">
+                ANY must match
+              </Chip>
+            </Box>
+            <Autocomplete<Tag, true, false, false>
+              multiple
+              options={availableOptionalTags}
+              getOptionLabel={(option) => option.label}
+              isOptionEqualToValue={(opt, val) => String(opt.id) === String(val.id)}
+              value={optionalTags}
+              onChange={(_, newValue) => {
+                // Ensure no overlap with required tags
+                const requiredIds = new Set(requiredTags.map(t => String(t.id)));
+                const filtered = newValue.filter(t => !requiredIds.has(String(t.id)));
+                setOptionalTags(filtered);
+              }}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip key={`${option.id}-${index}`} {...tagProps} size="sm" color="success">
+                      {option.label}
+                    </Chip>
+                  );
+                })
+              }
+              placeholder="At least ONE of these tags..."
+              size="sm"
+            />
+            <Typography level="body-xs" sx={{ color: 'neutral.500', mt: 0.5 }}>
+              Markers must have at least one of these tags (leave empty for any)
+            </Typography>
           </Box>
         </Grid>
 
@@ -224,7 +326,6 @@ export default function SmartPlaylistRuleBuilder({
                 <Option value={4}>4+ stars</Option>
                 <Option value={5}>5 stars only</Option>
               </Select>
-              
             </Box>
           </Box>
         </Grid>

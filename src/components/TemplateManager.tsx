@@ -28,7 +28,9 @@ type Tag = { id: string; name: string };
 type PlaylistTemplate = {
   id: string;
   name: string;
-  tagIds: string[];
+  tagIds: string[];          // Legacy
+  requiredTagIds?: string[]; // ALL must match
+  optionalTagIds?: string[]; // ANY must match
   createdAt: string;
   updatedAt: string;
 };
@@ -43,7 +45,8 @@ export default function TemplateManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
-  const [formTagIds, setFormTagIds] = useState<string[]>([]);
+  const [formRequiredTagIds, setFormRequiredTagIds] = useState<string[]>([]);
+  const [formOptionalTagIds, setFormOptionalTagIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Delete confirmation
@@ -83,14 +86,20 @@ export default function TemplateManager() {
   const openCreateModal = () => {
     setEditingId(null);
     setFormName("");
-    setFormTagIds([]);
+    setFormRequiredTagIds([]);
+    setFormOptionalTagIds([]);
     setIsModalOpen(true);
   };
 
   const openEditModal = (template: PlaylistTemplate) => {
     setEditingId(template.id);
     setFormName(template.name);
-    setFormTagIds(template.tagIds);
+    // Handle both legacy and new formats
+    const requiredTags = template.requiredTagIds?.length
+      ? template.requiredTagIds
+      : template.tagIds; // Fallback to legacy
+    setFormRequiredTagIds(requiredTags);
+    setFormOptionalTagIds(template.optionalTagIds ?? []);
     setIsModalOpen(true);
   };
 
@@ -98,11 +107,13 @@ export default function TemplateManager() {
     setIsModalOpen(false);
     setEditingId(null);
     setFormName("");
-    setFormTagIds([]);
+    setFormRequiredTagIds([]);
+    setFormOptionalTagIds([]);
   };
 
   const handleSave = async () => {
-    if (!formName.trim() || formTagIds.length === 0) return;
+    // Need at least a name and one tag in either group
+    if (!formName.trim() || (formRequiredTagIds.length === 0 && formOptionalTagIds.length === 0)) return;
 
     setSaving(true);
     try {
@@ -114,7 +125,10 @@ export default function TemplateManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formName.trim(),
-          tagIds: formTagIds,
+          requiredTagIds: formRequiredTagIds,
+          optionalTagIds: formOptionalTagIds,
+          // Keep legacy tagIds for backward compatibility
+          tagIds: [...formRequiredTagIds, ...formOptionalTagIds],
         }),
       });
 
@@ -163,10 +177,33 @@ export default function TemplateManager() {
     return tag?.name || tagId;
   };
 
-  const getSelectedTags = (): Tag[] => {
-    return formTagIds
+  const getSelectedRequiredTags = (): Tag[] => {
+    return formRequiredTagIds
       .map((id) => tagOptions.find((t) => t.id === id))
       .filter(Boolean) as Tag[];
+  };
+
+  const getSelectedOptionalTags = (): Tag[] => {
+    return formOptionalTagIds
+      .map((id) => tagOptions.find((t) => t.id === id))
+      .filter(Boolean) as Tag[];
+  };
+
+  // Filter out tags selected in the other group
+  const availableRequiredTags = useMemo(
+    () => tagOptions.filter(t => !formOptionalTagIds.includes(t.id)),
+    [tagOptions, formOptionalTagIds]
+  );
+  const availableOptionalTags = useMemo(
+    () => tagOptions.filter(t => !formRequiredTagIds.includes(t.id)),
+    [tagOptions, formRequiredTagIds]
+  );
+
+  // Get display tags for a template
+  const getTemplateRequiredTags = (template: PlaylistTemplate): string[] => {
+    return template.requiredTagIds?.length
+      ? template.requiredTagIds
+      : template.tagIds; // Fallback to legacy
   };
 
   if (loading) {
@@ -195,8 +232,7 @@ export default function TemplateManager() {
       </Box>
 
       <Typography level="body-sm" sx={{ color: "neutral.600" }}>
-        Define reusable tag combinations that can be quickly applied to create
-        actor playlists.
+        Define reusable tag combinations for creating actor playlists. Use Required tags for tags that MUST be present, and Optional tags for tags where at least one must match.
       </Typography>
 
       {error && (
@@ -235,56 +271,79 @@ export default function TemplateManager() {
         </Box>
       ) : (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {templates.map((template) => (
-            <Sheet
-              key={template.id}
-              variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: "md",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 2,
-              }}
-            >
-              <Box sx={{ flex: 1 }}>
-                <Typography level="title-sm" sx={{ mb: 1 }}>
-                  {template.name}
-                </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                  {template.tagIds.map((tagId) => (
-                    <Chip key={tagId} size="sm" variant="soft" color="primary">
-                      {getTagName(tagId)}
-                    </Chip>
-                  ))}
+          {templates.map((template) => {
+            const requiredTags = getTemplateRequiredTags(template);
+            const optionalTags = template.optionalTagIds ?? [];
+            return (
+              <Sheet
+                key={template.id}
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  borderRadius: "md",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 2,
+                }}
+              >
+                <Box sx={{ flex: 1 }}>
+                  <Typography level="title-sm" sx={{ mb: 1 }}>
+                    {template.name}
+                  </Typography>
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    {requiredTags.length > 0 && (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                        <Chip size="sm" variant="soft" color="neutral" sx={{ fontSize: "0.65rem" }}>
+                          ALL:
+                        </Chip>
+                        {requiredTags.map((tagId) => (
+                          <Chip key={tagId} size="sm" variant="soft" color="primary">
+                            {getTagName(tagId)}
+                          </Chip>
+                        ))}
+                      </Box>
+                    )}
+                    {optionalTags.length > 0 && (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                        <Chip size="sm" variant="soft" color="neutral" sx={{ fontSize: "0.65rem" }}>
+                          ANY:
+                        </Chip>
+                        {optionalTags.map((tagId) => (
+                          <Chip key={tagId} size="sm" variant="soft" color="success">
+                            {getTagName(tagId)}
+                          </Chip>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <IconButton
-                  size="sm"
-                  variant="plain"
-                  color="neutral"
-                  onClick={() => openEditModal(template)}
-                >
-                  <Pencil size={14} />
-                </IconButton>
-                <IconButton
-                  size="sm"
-                  variant="plain"
-                  color="danger"
-                  onClick={() => setDeleteId(template.id)}
-                >
-                  <Trash2 size={14} />
-                </IconButton>
-              </Box>
-            </Sheet>
-          ))}
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <IconButton
+                    size="sm"
+                    variant="plain"
+                    color="neutral"
+                    onClick={() => openEditModal(template)}
+                  >
+                    <Pencil size={14} />
+                  </IconButton>
+                  <IconButton
+                    size="sm"
+                    variant="plain"
+                    color="danger"
+                    onClick={() => setDeleteId(template.id)}
+                  >
+                    <Trash2 size={14} />
+                  </IconButton>
+                </Box>
+              </Sheet>
+            );
+          })}
         </Box>
       )}
 
       {/* Create/Edit Modal */}
       <Modal open={isModalOpen} onClose={closeModal}>
-        <ModalDialog sx={{ minWidth: 400 }}>
+        <ModalDialog sx={{ minWidth: 500 }}>
           <ModalClose />
           <Typography level="title-lg">
             {editingId ? "Edit Template" : "Create Template"}
@@ -304,22 +363,71 @@ export default function TemplateManager() {
               </Typography>
             </FormControl>
 
-            <FormControl required>
-              <FormLabel>Tags</FormLabel>
+            <FormControl>
+              <FormLabel sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                Required Tags
+                <Chip size="sm" variant="soft" color="primary" component="span">
+                  ALL must match
+                </Chip>
+              </FormLabel>
               <Autocomplete
                 multiple
-                options={tagOptions}
-                value={getSelectedTags()}
-                onChange={(_e, val) => setFormTagIds(val.map((t) => t.id))}
+                options={availableRequiredTags}
+                value={getSelectedRequiredTags()}
+                onChange={(_e, val) => setFormRequiredTagIds(val.map((t) => t.id))}
                 getOptionLabel={(option) =>
                   typeof option === "string" ? option : option.name
                 }
                 isOptionEqualToValue={(a, b) => a?.id === b?.id}
-                placeholder="Select tags..."
+                placeholder="Tags that MUST be present..."
                 loading={tagsLoading}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => {
+                    const { key, ...tagProps } = getTagProps({ index });
+                    return (
+                      <Chip key={key} {...tagProps} size="sm" color="primary">
+                        {option.name}
+                      </Chip>
+                    );
+                  })
+                }
               />
               <Typography level="body-xs" sx={{ color: "neutral.500", mt: 0.5 }}>
-                Playlists will include markers matching ALL selected tags
+                Markers must have ALL of these tags
+              </Typography>
+            </FormControl>
+
+            <FormControl>
+              <FormLabel sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                Optional Tags
+                <Chip size="sm" variant="soft" color="success" component="span">
+                  ANY must match
+                </Chip>
+              </FormLabel>
+              <Autocomplete
+                multiple
+                options={availableOptionalTags}
+                value={getSelectedOptionalTags()}
+                onChange={(_e, val) => setFormOptionalTagIds(val.map((t) => t.id))}
+                getOptionLabel={(option) =>
+                  typeof option === "string" ? option : option.name
+                }
+                isOptionEqualToValue={(a, b) => a?.id === b?.id}
+                placeholder="At least ONE of these tags..."
+                loading={tagsLoading}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => {
+                    const { key, ...tagProps } = getTagProps({ index });
+                    return (
+                      <Chip key={key} {...tagProps} size="sm" color="success">
+                        {option.name}
+                      </Chip>
+                    );
+                  })
+                }
+              />
+              <Typography level="body-xs" sx={{ color: "neutral.500", mt: 0.5 }}>
+                Markers must have at least one of these tags (leave empty for any)
               </Typography>
             </FormControl>
           </Stack>
@@ -331,7 +439,7 @@ export default function TemplateManager() {
             <Button
               onClick={handleSave}
               loading={saving}
-              disabled={!formName.trim() || formTagIds.length === 0}
+              disabled={!formName.trim() || (formRequiredTagIds.length === 0 && formOptionalTagIds.length === 0)}
               startDecorator={<Save size={14} />}
             >
               {editingId ? "Save Changes" : "Create Template"}
