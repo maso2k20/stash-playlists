@@ -122,48 +122,68 @@ export async function POST(
 
           // Sync items to the playlist
           if (items.length > 0) {
-            // First, clear any existing items
-            await prisma.playlistItem.deleteMany({
-              where: { playlistId: playlist.id },
-            });
-
-            // Create or update items and link to playlist
-            for (let i = 0; i < items.length; i++) {
-              const item = items[i];
-
-              // Upsert the item
-              await prisma.item.upsert({
-                where: { id: item.id },
-                create: {
-                  id: item.id,
-                  title: item.title ?? 'Untitled',
-                  startTime: item.startTime ?? 0,
-                  endTime: item.endTime ?? 0,
-                  screenshot: item.screenshot,
-                  stream: item.stream,
-                  preview: item.preview,
-                  sceneId: item.sceneId,
-                },
-                update: {
-                  title: item.title ?? 'Untitled',
-                  startTime: item.startTime ?? 0,
-                  endTime: item.endTime ?? 0,
-                  screenshot: item.screenshot,
-                  stream: item.stream,
-                  preview: item.preview,
-                  sceneId: item.sceneId,
-                },
+            // Use a transaction for better performance
+            await prisma.$transaction(async (tx) => {
+              // Clear any existing playlist items
+              await tx.playlistItem.deleteMany({
+                where: { playlistId: playlist.id },
               });
 
-              // Create the playlist item link
-              await prisma.playlistItem.create({
-                data: {
+              // Check which items already exist
+              const itemIds = items.map(item => item.id);
+              const existingItems = await tx.item.findMany({
+                where: { id: { in: itemIds } },
+                select: { id: true },
+              });
+              const existingIds = new Set(existingItems.map(i => i.id));
+
+              // Separate into new items and existing items
+              const newItems = items.filter(item => !existingIds.has(item.id));
+              const updateItems = items.filter(item => existingIds.has(item.id));
+
+              // Bulk create new items
+              if (newItems.length > 0) {
+                await tx.item.createMany({
+                  data: newItems.map(item => ({
+                    id: item.id,
+                    title: item.title ?? 'Untitled',
+                    startTime: item.startTime ?? 0,
+                    endTime: item.endTime ?? 0,
+                    screenshot: item.screenshot,
+                    stream: item.stream,
+                    preview: item.preview,
+                    sceneId: item.sceneId,
+                  })),
+                });
+              }
+
+              // Update existing items in parallel
+              if (updateItems.length > 0) {
+                await Promise.all(updateItems.map(item =>
+                  tx.item.update({
+                    where: { id: item.id },
+                    data: {
+                      title: item.title ?? 'Untitled',
+                      startTime: item.startTime ?? 0,
+                      endTime: item.endTime ?? 0,
+                      screenshot: item.screenshot,
+                      stream: item.stream,
+                      preview: item.preview,
+                      sceneId: item.sceneId,
+                    },
+                  })
+                ));
+              }
+
+              // Bulk create playlist item links
+              await tx.playlistItem.createMany({
+                data: items.map((item, i) => ({
                   playlistId: playlist.id,
                   itemId: item.id,
                   itemOrder: i,
-                },
+                })),
               });
-            }
+            });
           }
         } catch (refreshError) {
           // Playlist created but refresh failed - still count as created
