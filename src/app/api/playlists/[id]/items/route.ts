@@ -116,10 +116,12 @@ async function syncItems(
       }
     }
 
-    // Bulk create new items
-    if (newItems.length > 0) {
+    // Bulk create new items in batches (SQLite has limits on single createMany)
+    const CREATE_BATCH_SIZE = 100;
+    for (let i = 0; i < newItems.length; i += CREATE_BATCH_SIZE) {
+      const batch = newItems.slice(i, i + CREATE_BATCH_SIZE);
       await tx.item.createMany({
-        data: newItems.map((it) => ({
+        data: batch.map((it) => ({
           id: it.id,
           title: it.title ?? "",
           startTime: it.startTime ?? 0,
@@ -179,10 +181,11 @@ async function syncItems(
       }
     }
 
-    // Bulk create new playlist links
-    if (newLinks.length > 0) {
+    // Bulk create new playlist links in batches
+    for (let i = 0; i < newLinks.length; i += CREATE_BATCH_SIZE) {
+      const batch = newLinks.slice(i, i + CREATE_BATCH_SIZE);
       await tx.playlistItem.createMany({
-        data: newLinks.map((l) => ({
+        data: batch.map((l) => ({
           playlistId,
           itemId: l.itemId,
           itemOrder: l.itemOrder,
