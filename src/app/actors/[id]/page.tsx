@@ -302,7 +302,9 @@ export default function Page() {
   }, []);
 
   const pathname = usePathname();
-  const isMarkersPage = !pathname?.includes("/scenes");
+  const isMarkersPage = !pathname?.includes("/scenes") && !pathname?.includes("/playlists");
+  const isScenesPage = pathname?.includes("/scenes");
+  const isPlaylistsPage = pathname?.includes("/playlists");
   
   // Function to update URL with current filter state
   const updateURLWithFilters = (tags?: string[], search?: string, sort?: SortOption, page?: number) => {
@@ -539,6 +541,14 @@ export default function Page() {
 
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexGrow: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Link href={`/actors/${actorId}/playlists`} passHref>
+              <Button
+                size="sm"
+                variant={isPlaylistsPage ? "solid" : "soft"}
+              >
+                Playlists
+              </Button>
+            </Link>
             <Link href={`/actors/${actorId}`} passHref>
               <Button
                 size="sm"
@@ -550,7 +560,7 @@ export default function Page() {
             <Link href={`/actors/${actorId}/scenes`} passHref>
               <Button
                 size="sm"
-                variant={isMarkersPage ? "soft" : "solid"}
+                variant={isScenesPage ? "solid" : "soft"}
               >
                 Scenes
               </Button>

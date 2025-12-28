@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useLazyQuery } from '@apollo/client';
 
 import Sheet from '@mui/joy/Sheet';
@@ -39,6 +39,8 @@ import {
 export default function EditAutomaticPlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get('returnTo') || '/playlists';
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -193,7 +195,7 @@ export default function EditAutomaticPlaylistPage() {
         throw new Error(msg);
       }
 
-      router.push('/playlists');
+      router.push(returnTo);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || 'Failed to save playlist.');

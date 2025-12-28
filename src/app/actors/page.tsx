@@ -148,7 +148,7 @@ export default function MyActorsPage() {
         <Grid container spacing={2}>
           {filteredActors.map((actor) => (
             <Grid key={actor.id} xs={6} sm={4} md={3} lg={2}>
-              <Link href={`/actors/${actor.id}`} style={{ textDecoration: "none" }}>
+              <Link href={`/actors/${actor.id}/playlists`} style={{ textDecoration: "none" }}>
                 <Card
                   sx={{
                     borderRadius: "lg",

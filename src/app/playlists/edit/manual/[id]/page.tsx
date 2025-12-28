@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Box,
   Button,
@@ -30,6 +30,8 @@ import { makeStashUrl } from "@/lib/urlUtils";
 export default function EditManualPlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get('returnTo') || '/playlists';
   const settings = useSettings();
 
   const [name, setName] = useState("");
@@ -85,7 +87,7 @@ export default function EditManualPlaylistPage() {
       });
 
       if (res.ok && orderRes.ok) {
-        router.push("/playlists");
+        router.push(returnTo);
       } else {
         throw new Error("Failed to save changes");
       }

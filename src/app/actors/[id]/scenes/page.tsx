@@ -154,6 +154,8 @@ export default function ActorScenesPage() {
 
     const pathname = usePathname();
     const isScenesPage = pathname?.includes("/scenes");
+    const isPlaylistsPage = pathname?.includes("/playlists");
+    const isMarkersPage = !isScenesPage && !isPlaylistsPage;
 
     // Filters
     const [hasMarkers, setHasMarkers] = useState<"true" | "false">("true");
@@ -234,10 +236,18 @@ export default function ActorScenesPage() {
         <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
             {/* Header / Nav */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1 }}>
+                <Link href={`/actors/${actorId}/playlists`} passHref>
+                    <Button
+                        size="sm"
+                        variant={isPlaylistsPage ? "solid" : "soft"}
+                    >
+                        Playlists
+                    </Button>
+                </Link>
                 <Link href={`/actors/${actorId}`} passHref>
                     <Button
                         size="sm"
-                        variant={isScenesPage ? "soft" : "solid"} // swap for opposite
+                        variant={isMarkersPage ? "solid" : "soft"}
                     >
                         Markers
                     </Button>
@@ -245,7 +255,7 @@ export default function ActorScenesPage() {
                 <Link href={`/actors/${actorId}/scenes`} passHref>
                     <Button
                         size="sm"
-                        variant={isScenesPage ? "solid" : "soft"} // current page highlighted
+                        variant={isScenesPage ? "solid" : "soft"}
                     >
                         Scenes
                     </Button>

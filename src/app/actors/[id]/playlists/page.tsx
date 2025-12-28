@@ -1,8 +1,15 @@
-// file: src/app/playlists/page.tsx
+// src/app/actors/[id]/playlists/page.tsx
 "use client";
 
 import { useState, useEffect, ChangeEvent, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useStashTags } from "@/context/StashTagsContext";
+import PlaylistCard, {
+  Playlist,
+  PlaylistStats,
+  ParsedConds,
+} from "@/components/PlaylistCard";
 import {
   Box,
   Button,
@@ -10,7 +17,6 @@ import {
   FormControl,
   FormLabel,
   Grid,
-  IconButton,
   Input,
   LinearProgress,
   Modal,
@@ -18,39 +24,26 @@ import {
   ModalDialog,
   Radio,
   RadioGroup,
-  Select,
-  Option,
   Sheet,
   Stack,
   Typography,
 } from "@mui/joy";
-import {
-  Plus,
-  RefreshCcw,
-  Search,
-  ArrowUpDown,
-} from "lucide-react";
-import { useStashTags } from "@/context/StashTagsContext";
-import PlaylistCard, {
-  Playlist,
-  PlaylistStats,
-  ParsedConds,
-  PlaylistType,
-} from "@/components/PlaylistCard";
+import { PlaylistType } from "@/components/PlaylistCard";
+import { Plus, Search } from "lucide-react";
 
-type SortOption =
-  | "name-asc"
-  | "name-desc"
-  | "items-desc"
-  | "items-asc"
-  | "duration-desc"
-  | "duration-asc";
-
-export default function PlaylistsPage() {
+export default function ActorPlaylistsPage() {
+  const params = useParams<{ id: string }>();
+  const actorId = params.id;
   const router = useRouter();
-  const { stashTags } = useStashTags(); // [{id, name, ...}] from Stash GraphQL
+  const pathname = usePathname();
 
-  // Lists & UI state
+  // Tab state
+  const isPlaylistsPage = pathname?.includes("/playlists");
+  const isScenesPage = pathname?.includes("/scenes");
+
+  const { stashTags } = useStashTags();
+
+  // Playlist state
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,13 +54,9 @@ export default function PlaylistsPage() {
 
   // Per-playlist "refreshing" state
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
-  
-  // Bulk refresh state
-  const [bulkRefreshing, setBulkRefreshing] = useState(false);
 
-  // Search and sort state
+  // Search state
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortOption, setSortOption] = useState<SortOption>("name-asc");
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -79,12 +68,14 @@ export default function PlaylistsPage() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [toDeleteId, setToDeleteId] = useState<string | null>(null);
 
-  // Initial load
+  // Initial load - fetch playlists for this actor
   useEffect(() => {
+    if (!actorId) return;
+
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch("/api/playlists");
+        const res = await fetch(`/api/actors/${actorId}/playlists`);
         if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
         const data = await res.json();
         setPlaylists(data);
@@ -94,7 +85,7 @@ export default function PlaylistsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [actorId]);
 
   // Stats via /api/playlists/[id]/stats
   useEffect(() => {
@@ -127,7 +118,6 @@ export default function PlaylistsPage() {
   }, [playlists]);
 
   // SMART playlist conditions via /api/playlists/[id]
-  // Resolve actor names from API, tag names via StashTagsContext
   useEffect(() => {
     const smarts = playlists.filter((p) => p.type === "SMART");
     if (!smarts.length) return;
@@ -142,7 +132,6 @@ export default function PlaylistsPage() {
           const res = await fetch(`/api/playlists/${p.id}`);
           if (!res.ok) throw new Error("playlist fetch failed");
           const data = await res.json();
-          // API returns: conditionsResolved.actors [{id,name}], and tagIds (string[])
           const actorNames = (data.conditionsResolved?.actors ?? [])
             .map((a: any) => a?.name ?? a?.id)
             .filter(Boolean);
@@ -171,7 +160,7 @@ export default function PlaylistsPage() {
     return () => {
       cancelled = true;
     };
-  }, [playlists, stashTags]); // re-run if tags load later
+  }, [playlists, stashTags]);
 
   // Helpers
   const resetCreateForm = () => {
@@ -181,27 +170,41 @@ export default function PlaylistsPage() {
   };
 
   const createPlaylist = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || !actorId) return;
+
+    // Build request body based on type
+    const body: any = {
+      name: newName.trim(),
+      description: newDesc.trim(),
+      type: newType,
+    };
+
+    // For SMART playlists, pre-select this actor
+    if (newType === "SMART") {
+      body.conditions = { actorIds: [actorId] };
+    }
+
     const response = await fetch("/api/playlists", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newName.trim(),
-        description: newDesc.trim(),
-        type: newType,
-      }),
+      body: JSON.stringify(body),
     });
     if (response.ok) {
       const created = await response.json();
+      setPlaylists((prev) => [created, ...prev]);
+      // optimistic seeds
+      setStats((prev) => ({ ...prev, [created.id]: { itemCount: 0, durationMs: 0 } }));
+      if (created.type === "SMART") {
+        setConds((prev) => ({ ...prev, [created.id]: { actors: [], tags: [], minRating: null } }));
+      }
       resetCreateForm();
       setIsCreateOpen(false);
 
-      // Navigate to the appropriate playlist editor
-      const returnTo = encodeURIComponent('/playlists');
+      // Navigate to the appropriate playlist editor with return URL
+      const returnTo = encodeURIComponent(`/actors/${actorId}/playlists`);
       router.push(`/playlists/edit/${newType.toLowerCase()}/${created.id}?returnTo=${returnTo}`);
     }
   };
-
 
   const deletePlaylist = async () => {
     if (!toDeleteId) return;
@@ -213,7 +216,7 @@ export default function PlaylistsPage() {
     }
   };
 
-  // 🔁 Refresh a SMART playlist using your unified items route
+  // Refresh a SMART playlist
   const refreshSmart = async (playlistId: string) => {
     setRefreshing((r) => ({ ...r, [playlistId]: true }));
     try {
@@ -236,7 +239,6 @@ export default function PlaylistsPage() {
           },
         }));
       }
-      // (no need to re-fetch conditions—they don't change on refresh)
     } catch (e) {
       console.error("Refresh failed", e);
     } finally {
@@ -244,163 +246,78 @@ export default function PlaylistsPage() {
     }
   };
 
-  // 🔁 Refresh all smart playlists at once
-  const refreshAllSmart = async () => {
-    setBulkRefreshing(true);
-    try {
-      const res = await fetch("/api/smart-playlists/refresh-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      
-      if (res.ok) {
-        const result = await res.json();
-        
-        // Re-fetch stats for all playlists to update counts
-        const results = await Promise.allSettled(
-          playlists.map(async (p) => {
-            if (p.type === "SMART") {
-              const sRes = await fetch(`/api/playlists/${p.id}/stats`);
-              if (sRes.ok) {
-                const sData = await sRes.json();
-                return [p.id, { itemCount: sData.itemCount ?? 0, durationMs: sData.durationMs ?? 0 }] as const;
-              }
-            }
-            return null;
-          })
-        );
-
-        setStats((prev) => {
-          const next = { ...prev };
-          for (const r of results) {
-            if (r.status === "fulfilled" && r.value) {
-              const [id, s] = r.value;
-              next[id] = s;
-            }
-          }
-          return next;
-        });
-
-        // Show success message
-        console.log("Bulk refresh completed:", result.message);
-      } else {
-        console.error("Bulk refresh failed");
-      }
-    } catch (e) {
-      console.error("Bulk refresh error:", e);
-    } finally {
-      setBulkRefreshing(false);
-    }
-  };
-
-  // Filtered and sorted playlists
-  const filteredAndSortedPlaylists = useMemo(() => {
+  // Filtered playlists
+  const filteredPlaylists = useMemo(() => {
     let filtered = playlists;
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter(playlist => 
+      filtered = filtered.filter(playlist =>
         playlist.name.toLowerCase().includes(query) ||
         (playlist.description && playlist.description.toLowerCase().includes(query))
       );
     }
 
-    // Apply sorting
-    const sorted = [...filtered].sort((a, b) => {
-      const statsA = stats[a.id] || { itemCount: 0, durationMs: 0 };
-      const statsB = stats[b.id] || { itemCount: 0, durationMs: 0 };
-
-      switch (sortOption) {
-        case "name-asc":
-          return a.name.localeCompare(b.name);
-        case "name-desc":
-          return b.name.localeCompare(a.name);
-        case "items-desc":
-          return statsB.itemCount - statsA.itemCount;
-        case "items-asc":
-          return statsA.itemCount - statsB.itemCount;
-        case "duration-desc":
-          return (statsB.durationMs || 0) - (statsA.durationMs || 0);
-        case "duration-asc":
-          return (statsA.durationMs || 0) - (statsB.durationMs || 0);
-        default:
-          return 0;
-      }
-    });
-
-    return sorted;
-  }, [playlists, stats, searchQuery, sortOption]);
+    return filtered;
+  }, [playlists, searchQuery]);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
-      {/* Header with title, search, sort, and add button */}
-      <Stack spacing={2} sx={{ mb: 3 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography level="h3">Playlists</Typography>
-          <Stack direction="row" spacing={1}>
-            {/* Bulk refresh button - only show if there are smart playlists */}
-            {playlists.some(p => p.type === "SMART") && (
-              <Button 
-                startDecorator={bulkRefreshing ? <RefreshCcw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
-                color="neutral" 
-                variant="outlined" 
-                onClick={refreshAllSmart}
-                disabled={bulkRefreshing}
-              >
-                {bulkRefreshing ? "Refreshing..." : "Refresh Smart Playlists"}
-              </Button>
-            )}
-            <Button startDecorator={<Plus size={16} />} color="primary" variant="solid" onClick={() => setIsCreateOpen(true)}>
-              Add Playlist
-            </Button>
-          </Stack>
-        </Stack>
-        
-        {/* Search and Sort Controls */}
-        <Stack 
-          direction={{ xs: "column", sm: "row" }} 
-          spacing={2} 
-          alignItems={{ xs: "stretch", sm: "center" }}
+    <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
+      {/* Header / Nav */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1, mb: 2 }}>
+        <Link href={`/actors/${actorId}/playlists`} passHref>
+          <Button
+            size="sm"
+            variant={isPlaylistsPage ? "solid" : "soft"}
+          >
+            Playlists
+          </Button>
+        </Link>
+        <Link href={`/actors/${actorId}`} passHref>
+          <Button
+            size="sm"
+            variant={!isPlaylistsPage && !isScenesPage ? "solid" : "soft"}
+          >
+            Markers
+          </Button>
+        </Link>
+        <Link href={`/actors/${actorId}/scenes`} passHref>
+          <Button
+            size="sm"
+            variant={isScenesPage ? "solid" : "soft"}
+          >
+            Scenes
+          </Button>
+        </Link>
+      </Box>
+
+      {/* Search and Add button */}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        alignItems={{ xs: "stretch", sm: "center" }}
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
+        <FormControl sx={{ flexGrow: 1, maxWidth: { sm: 400 } }}>
+          <Input
+            placeholder="Search playlists..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            startDecorator={<Search size={16} />}
+            size="sm"
+          />
+        </FormControl>
+
+        <Button
+          startDecorator={<Plus size={16} />}
+          color="primary"
+          variant="solid"
+          size="sm"
+          onClick={() => setIsCreateOpen(true)}
         >
-          <FormControl sx={{ flexGrow: 1, maxWidth: { sm: 400 } }}>
-            <Input
-              placeholder="Search playlists..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              startDecorator={<Search size={16} />}
-              endDecorator={
-                searchQuery && (
-                  <IconButton
-                    size="sm"
-                    variant="plain"
-                    onClick={() => setSearchQuery("")}
-                    sx={{ minHeight: 0, minWidth: 0 }}
-                  >
-                    ×
-                  </IconButton>
-                )
-              }
-              size="lg"
-            />
-          </FormControl>
-          
-          <FormControl sx={{ minWidth: 200 }}>
-            <Select
-              value={sortOption}
-              onChange={(_, value) => setSortOption(value as SortOption)}
-              startDecorator={<ArrowUpDown size={16} />}
-              size="lg"
-            >
-              <Option value="name-asc">Name (A-Z)</Option>
-              <Option value="name-desc">Name (Z-A)</Option>
-              <Option value="items-desc">Most Items</Option>
-              <Option value="items-asc">Fewest Items</Option>
-              <Option value="duration-desc">Longest Duration</Option>
-              <Option value="duration-asc">Shortest Duration</Option>
-            </Select>
-          </FormControl>
-        </Stack>
+          Add Playlist
+        </Button>
       </Stack>
 
       {loading && (
@@ -432,10 +349,10 @@ export default function PlaylistsPage() {
           }}
         >
           <Typography level="title-lg" sx={{ mb: 1 }}>
-            You haven&apos;t added any playlists yet.
+            No playlists for this actor yet.
           </Typography>
           <Typography level="body-sm" sx={{ mb: 2 }}>
-            Create your first manual or smart playlist to get started.
+            Create a smart playlist to get started.
           </Typography>
           <Button startDecorator={<Plus size={16} />} onClick={() => setIsCreateOpen(true)}>
             Add Playlist
@@ -443,7 +360,7 @@ export default function PlaylistsPage() {
         </Sheet>
       )}
 
-      {!loading && playlists.length > 0 && filteredAndSortedPlaylists.length === 0 && (
+      {!loading && playlists.length > 0 && filteredPlaylists.length === 0 && (
         <Sheet
           variant="outlined"
           sx={{
@@ -462,22 +379,19 @@ export default function PlaylistsPage() {
             Try adjusting your search terms or create a new playlist.
           </Typography>
           {searchQuery && (
-            <Button 
-              variant="plain" 
+            <Button
+              variant="plain"
               onClick={() => setSearchQuery("")}
               sx={{ mr: 2 }}
             >
               Clear Search
             </Button>
           )}
-          <Button startDecorator={<Plus size={16} />} onClick={() => setIsCreateOpen(true)}>
-            Add Playlist
-          </Button>
         </Sheet>
       )}
 
       <Grid container spacing={2}>
-        {filteredAndSortedPlaylists.map((playlist) => (
+        {filteredPlaylists.map((playlist) => (
           <Grid xs={12} sm={6} lg={4} key={playlist.id}>
             <PlaylistCard
               playlist={playlist}
@@ -489,6 +403,8 @@ export default function PlaylistsPage() {
                 setToDeleteId(id);
                 setIsDeleteOpen(true);
               }}
+              hideActorFilter={true}
+              returnTo={`/actors/${actorId}/playlists`}
             />
           </Grid>
         ))}
@@ -499,7 +415,7 @@ export default function PlaylistsPage() {
         <ModalDialog aria-labelledby="create-playlist" sx={{ minWidth: 420 }}>
           <ModalClose />
           <Typography id="create-playlist" level="title-lg">
-            Create Playlist
+            Create Playlist for Actor
           </Typography>
           <Divider />
           <Stack spacing={2} sx={{ pt: 1 }}>
@@ -525,7 +441,7 @@ export default function PlaylistsPage() {
               <RadioGroup
                 orientation="horizontal"
                 value={newType}
-                onChange={(event) => setNewType((event.target as HTMLInputElement).value as "SMART" | "MANUAL")}
+                onChange={(event) => setNewType((event.target as HTMLInputElement).value as PlaylistType)}
                 sx={{ gap: 2 }}
               >
                 <Radio value="SMART" label="Smart" />
@@ -534,7 +450,9 @@ export default function PlaylistsPage() {
             </FormControl>
             <Box sx={{ p: 2, bgcolor: 'neutral.softBg', borderRadius: 'sm' }}>
               <Typography level="body-sm" color="neutral">
-                💡 You can add a cover image after creating the playlist by using the edit button.
+                {newType === "SMART"
+                  ? "A smart playlist will be created with this actor pre-selected. You can add more conditions in the editor."
+                  : "A manual playlist will be created. You can add items manually in the editor."}
               </Typography>
             </Box>
           </Stack>
@@ -570,6 +488,6 @@ export default function PlaylistsPage() {
           </Stack>
         </ModalDialog>
       </Modal>
-    </Box>
+    </Sheet>
   );
 }
