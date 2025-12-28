@@ -231,7 +231,7 @@ export default function TemplateManager() {
         </Button>
       </Box>
 
-      <Typography level="body-sm" sx={{ color: "neutral.600" }}>
+      <Typography level="body-sm" sx={{ color: "text.secondary" }}>
         Define reusable tag combinations for creating actor playlists. Use Required tags for tags that MUST be present, and Optional tags for tags where at least one must match.
       </Typography>
 
@@ -251,12 +251,12 @@ export default function TemplateManager() {
             p: 4,
             textAlign: "center",
             border: "1px dashed",
-            borderColor: "neutral.300",
+            borderColor: "neutral.outlinedBorder",
             borderRadius: "md",
-            bgcolor: "neutral.50",
+            bgcolor: "background.level1",
           }}
         >
-          <Typography level="body-sm" sx={{ color: "neutral.600", mb: 2 }}>
+          <Typography level="body-sm" sx={{ color: "text.secondary", mb: 2 }}>
             No templates yet. Create a template to quickly build playlists for
             any actor.
           </Typography>

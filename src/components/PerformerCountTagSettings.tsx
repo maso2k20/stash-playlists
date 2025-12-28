@@ -141,12 +141,12 @@ export default function PerformerCountTagSettings({
             p: 3,
             textAlign: 'center',
             border: '1px dashed',
-            borderColor: 'neutral.300',
+            borderColor: 'neutral.outlinedBorder',
             borderRadius: 'md',
-            bgcolor: 'neutral.50'
+            bgcolor: 'background.level1'
           }}
         >
-          <Typography level="body-sm" sx={{ color: 'neutral.600' }}>
+          <Typography level="body-sm" sx={{ color: 'text.secondary' }}>
             No rules configured. Click "Add Rule" to create performer count based tag recommendations.
           </Typography>
         </Box>
@@ -160,10 +160,8 @@ export default function PerformerCountTagSettings({
                 alignItems: 'center',
                 gap: 2,
                 p: 2,
-                border: '1px solid',
-                borderColor: error ? 'danger.300' : 'neutral.200',
                 borderRadius: 'md',
-                bgcolor: 'background.surface'
+                bgcolor: 'background.level1'
               }}
             >
               <FormControl sx={{ minWidth: 120 }}>
@@ -213,7 +211,7 @@ export default function PerformerCountTagSettings({
 
       {rules.length > 0 && (
         <Box sx={{ mt: 1 }}>
-          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 1 }}>
+          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 1 }}>
             Preview: When editing markers for scenes with...
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>

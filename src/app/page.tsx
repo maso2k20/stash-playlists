@@ -272,16 +272,21 @@ function HomeContent() {
 
       {/* Empty state */}
       {!anyLoading && !error && scenes.length === 0 && totalCount === 0 && (
-        <Sheet
-          variant="soft"
-          color="success"
-          sx={{ p: 3, borderRadius: "lg", textAlign: "center" }}
+        <Box
+          sx={{
+            p: 3,
+            borderRadius: "lg",
+            textAlign: "center",
+            border: "1px dashed",
+            borderColor: "neutral.outlinedBorder",
+            bgcolor: "background.level1",
+          }}
         >
           <Typography level="title-md">There are no unorganised scenes</Typography>
-          <Typography level="body-sm" sx={{ mt: 1 }}>
+          <Typography level="body-sm" sx={{ mt: 1, color: "text.secondary" }}>
             All scenes with markers have been organised.
           </Typography>
-        </Sheet>
+        </Box>
       )}
 
       {/* Scene Cards */}

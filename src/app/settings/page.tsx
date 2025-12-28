@@ -29,7 +29,7 @@ import {
   TabPanel,
 } from "@mui/joy";
 import { useColorScheme } from "@mui/joy/styles";
-import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload, CheckCircle, XCircle } from "lucide-react";
+import { Check, RotateCcw, Save, RefreshCw, RefreshCcw, ChevronDown, AlertCircle, Wifi, WifiOff, Database, Download, Trash2, Upload, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
 import PerformerCountTagSettings from "@/components/PerformerCountTagSettings";
 import TemplateManager from "@/components/TemplateManager";
 import { 
@@ -122,6 +122,7 @@ export default function SettingsPage() {
   } | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [showApiKey, setShowApiKey] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
     msg: "",
@@ -617,6 +618,37 @@ export default function SettingsPage() {
       );
     }
 
+    // Special handling for API key - obscure when saved
+    if (s.key === 'STASH_API') {
+      const origVal = original?.find((o) => o.key === s.key)?.value ?? "";
+      const hasSavedValue = !!origVal;
+      const isDirty = (s.value ?? "") !== origVal;
+
+      return (
+        <Input
+          type={showApiKey || isDirty ? 'text' : 'password'}
+          value={s.value ?? ""}
+          onChange={(e) => updateOne(s.key, e.target.value)}
+          placeholder="Enter API key…"
+          size="sm"
+          sx={{ width: "100%" }}
+          error={hasError || undefined}
+          endDecorator={
+            hasSavedValue && !isDirty ? (
+              <IconButton
+                variant="plain"
+                size="sm"
+                onClick={() => setShowApiKey(!showApiKey)}
+                sx={{ mr: -0.5 }}
+              >
+                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </IconButton>
+            ) : null
+          }
+        />
+      );
+    }
+
     // text/url/number inputs
     return (
       <Input
@@ -653,9 +685,8 @@ export default function SettingsPage() {
     const tabs = {
       configuration: [
         'Stash Integration',
-        'Appearance', 
-        'Playback',
-        'Recommended Tags'
+        'Appearance',
+        'Playback'
       ],
       automation: [
         'Smart Playlist Refresh',
@@ -663,13 +694,17 @@ export default function SettingsPage() {
       ],
       backup: [
         'Database Backup'
+      ],
+      recommendedTags: [
+        'Recommended Tags'
       ]
     };
 
     const result: Record<string, Record<string, Array<{ setting: Setting; definition: SettingDefinition }>>> = {
       configuration: {},
       automation: {},
-      backup: {}
+      backup: {},
+      recommendedTags: {}
     };
 
     Object.entries(tabs).forEach(([tab, categories]) => {
@@ -728,7 +763,7 @@ export default function SettingsPage() {
       {loading ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <Box key={i} sx={{ p: 2, border: '1px solid', borderColor: 'neutral.200', borderRadius: 'lg' }}>
+            <Box key={i} sx={{ p: 2, border: '1px solid', borderColor: 'neutral.outlinedBorder', borderRadius: 'lg' }}>
               <Skeleton variant="text" width="200px" height="24px" sx={{ mb: 2 }} />
               {Array.from({ length: 2 }).map((_, j) => (
                 <Box key={j} sx={{ mb: 2 }}>
@@ -745,6 +780,7 @@ export default function SettingsPage() {
             <Tab>Configuration</Tab>
             <Tab>Automation</Tab>
             <Tab>Backup</Tab>
+            <Tab>Recommended Tags</Tab>
             <Tab>Templates</Tab>
           </TabList>
 
@@ -808,7 +844,7 @@ export default function SettingsPage() {
                           <FormHelperText>{definition.description}</FormHelperText>
                         )}
                         
-                        <Typography level="body-xs" sx={{ color: "neutral.500", mt: 0.5 }}>
+                        <Typography level="body-xs" sx={{ color: "text.tertiary", mt: 0.5 }}>
                           Last updated: {fmt(setting.updatedAt)}
                         </Typography>
                       </FormControl>
@@ -817,7 +853,7 @@ export default function SettingsPage() {
                   
                   {/* Add test connection for Stash Integration category */}
                   {category === 'Stash Integration' && (
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                         <Button
                           startDecorator={testingConnection ? <RefreshCw className="animate-spin" size={16} /> : <Wifi size={16} />}
@@ -859,13 +895,13 @@ export default function SettingsPage() {
                           </Typography>
                           
                           {connectionResult.success && connectionResult.version && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                               Stash Version: {connectionResult.version}
                             </Typography>
                           )}
                           
                           {!connectionResult.success && connectionResult.details && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mt: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mt: 0.5 }}>
                               {connectionResult.details}
                             </Typography>
                           )}
@@ -876,14 +912,14 @@ export default function SettingsPage() {
                   
                   {/* Add backup controls for Database Backup category */}
                   {category === 'Database Backup' && (
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                       <Typography level="title-md" sx={{ mb: 2 }}>
                         Backup Management
                       </Typography>
                       
                       {/* Backup Status */}
                       {backupStatus && (
-                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                             <Database size={16} />
                             <Typography level="body-sm" fontWeight="lg">
@@ -892,13 +928,13 @@ export default function SettingsPage() {
                           </Box>
                           
                           {backupStatus.lastBackup && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                               Last backup: {new Date(backupStatus.lastBackup).toLocaleString()}
                             </Typography>
                           )}
                           
                           {backupStatus.nextBackup && backupStatus.enabled && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                               Next backup: {new Date(backupStatus.nextBackup).toLocaleString()}
                             </Typography>
                           )}
@@ -945,7 +981,7 @@ export default function SettingsPage() {
                                   gap: 2,
                                   p: 2,
                                   border: '1px solid',
-                                  borderColor: 'neutral.200',
+                                  borderColor: 'neutral.outlinedBorder',
                                   borderRadius: 'md',
                                   bgcolor: 'background.surface',
                                 }}
@@ -954,7 +990,7 @@ export default function SettingsPage() {
                                   <Typography level="body-sm" fontWeight="lg">
                                     {backup.filename}
                                   </Typography>
-                                  <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                  <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                                     {new Date(backup.created).toLocaleString()} • {backup.sizeFormatted}
                                   </Typography>
                                 </Box>
@@ -1002,14 +1038,14 @@ export default function SettingsPage() {
 
                   {/* Add refresh controls for Smart Playlist Refresh category */}
                   {category === 'Smart Playlist Refresh' && (
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                       <Typography level="title-md" sx={{ mb: 2 }}>
                         Refresh Management
                       </Typography>
                       
                       {/* Refresh Status */}
                       {refreshStatus && (
-                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                             <RefreshCcw size={16} />
                             <Typography level="body-sm" fontWeight="lg">
@@ -1023,7 +1059,7 @@ export default function SettingsPage() {
                           </Box>
                           
                           {refreshStatus.enabled && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                               {refreshStatus.interval === 'hourly' ? (
                                 'Interval: Every hour at the top of the hour (e.g., 1:00, 2:00, 3:00...)'
                               ) : refreshStatus.interval === 'weekly' ? (
@@ -1035,13 +1071,13 @@ export default function SettingsPage() {
                           )}
                           
                           {refreshStatus.lastRefresh && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                               Last refresh: {new Date(refreshStatus.lastRefresh).toLocaleString()}
                             </Typography>
                           )}
                           
                           {refreshStatus.nextRefresh && refreshStatus.enabled && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                               Next refresh: {new Date(refreshStatus.nextRefresh).toLocaleString()}
                             </Typography>
                           )}
@@ -1061,7 +1097,7 @@ export default function SettingsPage() {
                         </Button>
                       </Box>
                       
-                      <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                      <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                         Manual refresh will immediately update all smart playlists with new content from your Stash server. 
                         Automatic refresh runs on the schedule configured above when enabled.
                       </Typography>
@@ -1083,7 +1119,7 @@ export default function SettingsPage() {
                                   gap: 2,
                                   p: 2,
                                   border: '1px solid',
-                                  borderColor: 'neutral.200',
+                                  borderColor: 'neutral.outlinedBorder',
                                   borderRadius: 'md',
                                   bgcolor: 'background.surface',
                                 }}
@@ -1110,7 +1146,7 @@ export default function SettingsPage() {
                                       `Failed - refreshed ${log.refreshedPlaylists} playlist(s)`
                                     }
                                   </Typography>
-                                  <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                  <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                                     {new Date(log.createdAt).toLocaleString()} • {log.duration}ms
                                     {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
                                   </Typography>
@@ -1125,14 +1161,14 @@ export default function SettingsPage() {
 
                   {/* Add maintenance controls for Database Maintenance category */}
                   {category === 'Database Maintenance' && (
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                       <Typography level="title-md" sx={{ mb: 2 }}>
                         Maintenance Management
                       </Typography>
                       
                       {/* Maintenance Status */}
                       {maintenanceStatus && (
-                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                             <Database size={16} />
                             <Typography level="body-sm" fontWeight="lg">
@@ -1146,13 +1182,13 @@ export default function SettingsPage() {
                           </Box>
                           
                           {maintenanceStatus.enabled && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                               Schedule: Daily at {maintenanceStatus.hour}:00 UTC
                             </Typography>
                           )}
                           
                           {maintenanceStatus.nextRun && maintenanceStatus.enabled && (
-                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                               Next run: {new Date(maintenanceStatus.nextRun).toLocaleString()}
                             </Typography>
                           )}
@@ -1173,14 +1209,14 @@ export default function SettingsPage() {
                         </Button>
                       </Box>
                       
-                      <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 3 }}>
+                      <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 3 }}>
                         Maintenance checks verify that all markers in your database still have valid parent scenes in Stash. 
                         Orphaned markers are automatically removed to keep playlists clean.
                       </Typography>
 
                       {/* Maintenance History */}
                       {maintenanceHistory.length > 0 && (
-                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                           <Typography level="title-sm" sx={{ mb: 2 }}>
                             Recent Maintenance History
                           </Typography>
@@ -1213,7 +1249,7 @@ export default function SettingsPage() {
                                       `Maintenance failed`
                                     }
                                   </Typography>
-                                  <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                  <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                                     {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('maintenance-', '')}
                                     {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
                                   </Typography>
@@ -1225,23 +1261,23 @@ export default function SettingsPage() {
                       )}
 
                       {/* Scene ID Backfill Section */}
-                      <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 3 }}>
+                      <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 3 }}>
                         <Typography level="title-sm" sx={{ mb: 2 }}>
                           Scene ID Backfill
                         </Typography>
                         
                         {backfillStatus && (
-                          <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                          <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                             <Typography level="body-sm" fontWeight="lg" sx={{ mb: 1 }}>
                               Database Status
                             </Typography>
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                               Total items: {backfillStatus.totalItems}
                             </Typography>
-                            <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                               Items with scene ID: {backfillStatus.itemsWithSceneId} ({backfillStatus.backfillPercentage}%)
                             </Typography>
-                            <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                            <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                               Items needing backfill: {backfillStatus.itemsNeedingBackfill}
                             </Typography>
                           </Box>
@@ -1259,7 +1295,7 @@ export default function SettingsPage() {
                           </Button>
                         </Box>
                         
-                        <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                        <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                           Scene ID backfill extracts scene IDs from existing marker stream URLs to enable maintenance checks. 
                           This is a one-time operation for existing data. New markers automatically include scene IDs.
                         </Typography>
@@ -1270,7 +1306,7 @@ export default function SettingsPage() {
                 
                 {/* Add connection testing for Stash Integration category */}
                 {category === 'Stash Integration' && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                     <Button
                       startDecorator={testingConnection ? <RefreshCw className="animate-spin" size={16} /> : <Wifi size={16} />}
                       onClick={testConnection}
@@ -1306,13 +1342,13 @@ export default function SettingsPage() {
                         </Box>
                         
                         {connectionResult.success && connectionResult.version && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Stash Version: {connectionResult.version}
                           </Typography>
                         )}
                         
                         {!connectionResult.success && connectionResult.details && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600', mt: 0.5 }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mt: 0.5 }}>
                             {connectionResult.details}
                           </Typography>
                         )}
@@ -1384,14 +1420,14 @@ export default function SettingsPage() {
                 
                 {/* Add special controls for automation categories */}
                 {category === 'Smart Playlist Refresh' && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                     <Typography level="title-md" sx={{ mb: 2 }}>
                       Refresh Management
                     </Typography>
                     
                     {/* Refresh Status */}
                     {refreshStatus && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <RefreshCw size={16} />
                           <Typography level="body-sm" fontWeight="lg">
@@ -1405,13 +1441,13 @@ export default function SettingsPage() {
                         </Box>
                         
                         {refreshStatus.lastRefresh && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                             Last refresh: {new Date(refreshStatus.lastRefresh).toLocaleString()}
                           </Typography>
                         )}
                         
                         {refreshStatus.nextRefresh && refreshStatus.enabled && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Next refresh: {new Date(refreshStatus.nextRefresh).toLocaleString()}
                           </Typography>
                         )}
@@ -1433,7 +1469,7 @@ export default function SettingsPage() {
                     
                     {/* Refresh History */}
                     {refreshHistory.length > 0 && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Typography level="title-sm" sx={{ mb: 2 }}>
                           Recent Refresh History
                         </Typography>
@@ -1466,7 +1502,7 @@ export default function SettingsPage() {
                                     `Refresh failed`
                                   }
                                 </Typography>
-                                <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                                   {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('refresh-', '')}
                                   {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
                                 </Typography>
@@ -1480,14 +1516,14 @@ export default function SettingsPage() {
                 )}
                 
                 {category === 'Database Maintenance' && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                     <Typography level="title-md" sx={{ mb: 2 }}>
                       Maintenance Management
                     </Typography>
                     
                     {/* Maintenance Status */}
                     {maintenanceStatus && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <Database size={16} />
                           <Typography level="body-sm" fontWeight="lg">
@@ -1496,7 +1532,7 @@ export default function SettingsPage() {
                         </Box>
                         
                         {maintenanceStatus.nextRun && maintenanceStatus.enabled && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Next maintenance: {new Date(maintenanceStatus.nextRun).toLocaleString()}
                           </Typography>
                         )}
@@ -1516,14 +1552,14 @@ export default function SettingsPage() {
                       </Button>
                     </Box>
                     
-                    <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 3 }}>
+                    <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 3 }}>
                       Maintenance checks verify that all markers in your database still have valid parent scenes in Stash. 
                       Orphaned markers are automatically removed to keep playlists clean.
                     </Typography>
 
                     {/* Maintenance History */}
                     {maintenanceHistory.length > 0 && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Typography level="title-sm" sx={{ mb: 2 }}>
                           Recent Maintenance History
                         </Typography>
@@ -1556,7 +1592,7 @@ export default function SettingsPage() {
                                     `Maintenance failed`
                                   }
                                 </Typography>
-                                <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                                   {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('maintenance-', '')}
                                   {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
                                 </Typography>
@@ -1568,23 +1604,23 @@ export default function SettingsPage() {
                     )}
 
                     {/* Scene ID Backfill Section */}
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 3 }}>
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 3 }}>
                       <Typography level="title-sm" sx={{ mb: 2 }}>
                         Scene ID Backfill
                       </Typography>
                       
                       {backfillStatus && (
-                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                           <Typography level="body-sm" fontWeight="lg" sx={{ mb: 1 }}>
                             Database Status
                           </Typography>
-                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                             Total items: {backfillStatus.totalItems}
                           </Typography>
-                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                             Items with scene ID: {backfillStatus.itemsWithSceneId} ({backfillStatus.backfillPercentage}%)
                           </Typography>
-                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Items needing backfill: {backfillStatus.itemsNeedingBackfill}
                           </Typography>
                         </Box>
@@ -1602,7 +1638,7 @@ export default function SettingsPage() {
                         </Button>
                       </Box>
                       
-                      <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                      <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                         Scene ID backfill extracts scene IDs from existing marker stream URLs to enable maintenance checks. 
                         This is a one-time operation for existing data. New markers automatically include scene IDs.
                       </Typography>
@@ -1673,14 +1709,14 @@ export default function SettingsPage() {
                 
                 {/* Add backup controls for Database Backup category */}
                 {category === 'Database Backup' && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.200', pt: 3, mt: 2 }}>
+                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
                     <Typography level="title-md" sx={{ mb: 2 }}>
                       Backup Management
                     </Typography>
                     
                     {/* Backup Status */}
                     {backupStatus && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'neutral.50' }}>
+                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <Database size={16} />
                           <Typography level="body-sm" fontWeight="lg">
@@ -1689,13 +1725,13 @@ export default function SettingsPage() {
                         </Box>
                         
                         {backupStatus.lastBackup && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600', mb: 0.5 }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                             Last backup: {new Date(backupStatus.lastBackup).toLocaleString()}
                           </Typography>
                         )}
                         
                         {backupStatus.nextBackup && backupStatus.enabled && (
-                          <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Next backup: {new Date(backupStatus.nextBackup).toLocaleString()}
                           </Typography>
                         )}
@@ -1742,7 +1778,7 @@ export default function SettingsPage() {
                                 gap: 2,
                                 p: 2,
                                 border: '1px solid',
-                                borderColor: 'neutral.200',
+                                borderColor: 'neutral.outlinedBorder',
                                 borderRadius: 'md',
                                 bgcolor: 'background.surface',
                               }}
@@ -1751,7 +1787,7 @@ export default function SettingsPage() {
                                 <Typography level="body-sm" fontWeight="lg">
                                   {backup.filename}
                                 </Typography>
-                                <Typography level="body-xs" sx={{ color: 'neutral.600' }}>
+                                <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                                   {new Date(backup.created).toLocaleString()} • {backup.sizeFormatted}
                                 </Typography>
                               </Box>
@@ -1800,8 +1836,79 @@ export default function SettingsPage() {
             ))}
           </TabPanel>
 
-          {/* Templates Tab */}
+          {/* Recommended Tags Tab */}
           <TabPanel value={3}>
+            {Object.entries(tabGroupedSettings.recommendedTags).map(([category, items]) => (
+              <Box key={category} sx={{ mb: 4 }}>
+                <Typography level="title-lg" sx={{ mb: 2 }}>{category}</Typography>
+                <Typography level="body-sm" sx={{ color: "text.secondary", mb: 3 }}>
+                  Configure tag recommendations based on performer count. These suggestions appear when editing scene markers.
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {items.map(({ setting, definition }) => {
+                    const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                    const dirty = (setting.value ?? "") !== origVal;
+                    const hasError = !!validationErrors[setting.key];
+
+                    return (
+                      <FormControl key={setting.key} error={hasError || undefined}>
+                        <FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {definition.label}
+                            {dirty && (
+                              <Chip size="sm" color="warning" variant="soft">
+                                Modified
+                              </Chip>
+                            )}
+                          </Box>
+                        </FormLabel>
+
+                        <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                          <Box sx={{ flexGrow: 1 }}>
+                            {renderEditor(setting, definition)}
+                          </Box>
+
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={16} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+
+                            <Tooltip title="Reset to default value">
+                              <IconButton size="sm" variant="plain" onClick={() => resetToDefault(setting.key)}>
+                                <RefreshCw size={16} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </Box>
+
+                        {hasError ? (
+                          <FormHelperText>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <AlertCircle size={16} />
+                              {validationErrors[setting.key]}
+                            </Box>
+                          </FormHelperText>
+                        ) : (
+                          <FormHelperText>{definition.description}</FormHelperText>
+                        )}
+
+                        <Typography level="body-xs" sx={{ color: "text.tertiary", mt: 0.5 }}>
+                          Last updated: {fmt(setting.updatedAt)}
+                        </Typography>
+                      </FormControl>
+                    );
+                  })}
+                </Box>
+              </Box>
+            ))}
+          </TabPanel>
+
+          {/* Templates Tab */}
+          <TabPanel value={4}>
             <TemplateManager />
           </TabPanel>
         </Tabs>
