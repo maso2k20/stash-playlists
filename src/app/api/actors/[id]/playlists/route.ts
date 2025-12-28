@@ -22,9 +22,10 @@ export async function GET(
   }
 
   try {
-    // Fetch all playlists
+    // Fetch all playlists, ordered by name
     const allPlaylists = await prisma.playlist.findMany({
-      include: { items: { orderBy: { itemOrder: 'asc' } } }
+      include: { items: { orderBy: { itemOrder: 'asc' } } },
+      orderBy: { name: 'asc' }
     });
 
     // Filter SMART playlists that include this actor

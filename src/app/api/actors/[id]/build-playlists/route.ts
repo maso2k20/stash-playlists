@@ -74,7 +74,7 @@ export async function POST(
 
     // Process each template
     for (const template of templates) {
-      const playlistName = `${actor.name} ${template.name}`;
+      const playlistName = `${actor.name} - ${template.name}`;
 
       try {
         // Check if a playlist with this name already exists
@@ -92,10 +92,11 @@ export async function POST(
 
         // Create the smart playlist with the actor and template tags
         // Use new format if available, fall back to legacy tagIds
+        // Check if requiredTagIds exists (even if empty) vs undefined/null (legacy)
         const templateTagIds = template.tagIds as string[];
-        const requiredTagIds = (template.requiredTagIds as string[] | null)?.length
+        const requiredTagIds = template.requiredTagIds !== undefined && template.requiredTagIds !== null
           ? (template.requiredTagIds as string[])
-          : templateTagIds;
+          : templateTagIds; // Fallback to legacy only if new fields don't exist
         const optionalTagIds = (template.optionalTagIds as string[] | null) ?? [];
 
         const playlist = await prisma.playlist.create({

@@ -95,9 +95,10 @@ export default function TemplateManager() {
     setEditingId(template.id);
     setFormName(template.name);
     // Handle both legacy and new formats
-    const requiredTags = template.requiredTagIds?.length
+    // Check if requiredTagIds exists (even if empty) vs undefined/null (legacy)
+    const requiredTags = template.requiredTagIds !== undefined && template.requiredTagIds !== null
       ? template.requiredTagIds
-      : template.tagIds; // Fallback to legacy
+      : template.tagIds; // Fallback to legacy only if new fields don't exist
     setFormRequiredTagIds(requiredTags);
     setFormOptionalTagIds(template.optionalTagIds ?? []);
     setIsModalOpen(true);
@@ -201,9 +202,10 @@ export default function TemplateManager() {
 
   // Get display tags for a template
   const getTemplateRequiredTags = (template: PlaylistTemplate): string[] => {
-    return template.requiredTagIds?.length
+    // Check if requiredTagIds exists (even if empty) vs undefined/null (legacy)
+    return template.requiredTagIds !== undefined && template.requiredTagIds !== null
       ? template.requiredTagIds
-      : template.tagIds; // Fallback to legacy
+      : template.tagIds; // Fallback to legacy only if new fields don't exist
   };
 
   if (loading) {

@@ -96,10 +96,12 @@ export default function EditAutomaticPlaylistPage() {
           }
         }
         // Handle both legacy and new tag formats
+        // Check if new format exists (requiredTagIds or optionalTagIds as arrays, even if empty)
         const legacyTagIds = Array.isArray(cond.tagIds) ? cond.tagIds.map(String) : [];
-        const requiredTagIds = Array.isArray(cond.requiredTagIds) && cond.requiredTagIds.length > 0
-          ? cond.requiredTagIds.map(String)
-          : legacyTagIds; // Fallback to legacy
+        const hasNewFormat = Array.isArray(cond.requiredTagIds) || Array.isArray(cond.optionalTagIds);
+        const requiredTagIds = hasNewFormat
+          ? (Array.isArray(cond.requiredTagIds) ? cond.requiredTagIds.map(String) : [])
+          : legacyTagIds; // Fallback to legacy only if new format doesn't exist
         const optionalTagIds = Array.isArray(cond.optionalTagIds)
           ? cond.optionalTagIds.map(String)
           : [];

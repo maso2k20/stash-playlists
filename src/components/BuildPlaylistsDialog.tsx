@@ -120,7 +120,7 @@ export default function BuildPlaylistsDialog({
   const previewPlaylists = useMemo(() => {
     return templates
       .filter((t) => selectedIds.has(t.id))
-      .map((t) => `${actorName} ${t.name}`);
+      .map((t) => `${actorName} - ${t.name}`);
   }, [templates, selectedIds, actorName]);
 
   const handleBuild = async () => {
