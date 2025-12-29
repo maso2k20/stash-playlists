@@ -13,6 +13,7 @@ import PlaylistCard, {
 import {
   Box,
   Button,
+  Checkbox,
   Divider,
   FormControl,
   FormLabel,
@@ -58,6 +59,7 @@ export default function ActorPlaylistsPage() {
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
+  const [hideEmpty, setHideEmpty] = useState(true);
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -280,8 +282,15 @@ export default function ActorPlaylistsPage() {
       );
     }
 
+    if (hideEmpty) {
+      filtered = filtered.filter(playlist => {
+        const playlistStats = stats[playlist.id];
+        return playlistStats && playlistStats.itemCount > 0;
+      });
+    }
+
     return filtered;
-  }, [playlists, searchQuery]);
+  }, [playlists, searchQuery, hideEmpty, stats]);
 
   return (
     <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
@@ -321,15 +330,23 @@ export default function ActorPlaylistsPage() {
         justifyContent="space-between"
         sx={{ mb: 2 }}
       >
-        <FormControl sx={{ flexGrow: 1, maxWidth: { sm: 400 } }}>
-          <Input
-            placeholder="Search playlists..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            startDecorator={<Search size={16} />}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1 }}>
+          <FormControl sx={{ flexGrow: 1, maxWidth: { sm: 300 } }}>
+            <Input
+              placeholder="Search playlists..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              startDecorator={<Search size={16} />}
+              size="sm"
+            />
+          </FormControl>
+          <Checkbox
+            label="Hide empty"
+            checked={hideEmpty}
+            onChange={(e) => setHideEmpty(e.target.checked)}
             size="sm"
           />
-        </FormControl>
+        </Box>
 
         <Box sx={{ display: "flex", gap: 1 }}>
           <Button

@@ -97,11 +97,12 @@ model RefreshLog {
 }
 
 model PlaylistTemplate {
-  id             String   @id @default(uuid())
-  name           String   // Template name like "Outdoors" - becomes suffix in generated playlist name
-  tagIds         Json     // Legacy: Array of tag IDs (kept for backward compatibility)
-  requiredTagIds Json?    // Array of required tag IDs - ALL must match
-  optionalTagIds Json?    // Array of optional tag IDs - ANY must match
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now()) @updatedAt
+  id                       String   @id @default(uuid())
+  name                     String   // Template name like "Outdoors" - becomes suffix in generated playlist name
+  tagIds                   Json     // Legacy: Array of tag IDs (kept for backward compatibility)
+  requiredTagIds           Json?    // Array of required tag IDs - ALL must match
+  optionalTagIds           Json?    // Array of optional tag IDs - ANY must match
+  excludeFromAutoGeneration Boolean @default(false) // Exclude from nightly automatic generation
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @default(now()) @updatedAt
 }

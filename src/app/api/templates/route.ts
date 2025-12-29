@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const { name, tagIds, requiredTagIds, optionalTagIds } = data;
+    const { name, tagIds, requiredTagIds, optionalTagIds, excludeFromAutoGeneration } = data;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Template name is required' }, { status: 400 });
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
         tagIds: finalTagIds,
         requiredTagIds: requiredTagIds ?? null,
         optionalTagIds: optionalTagIds ?? null,
+        excludeFromAutoGeneration: excludeFromAutoGeneration ?? false,
       },
     });
 

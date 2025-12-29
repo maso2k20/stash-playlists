@@ -121,7 +121,25 @@ export default function SettingsPage() {
     backfillPercentage: number;
   } | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState<{
+    enabled: boolean;
+    hour: number;
+    isRunning: boolean;
+    nextRun?: string;
+    cronActive: boolean;
+  } | null>(null);
+  const [generationHistory, setGenerationHistory] = useState<{
+    id: string;
+    refreshType: string;
+    success: boolean;
+    refreshedPlaylists: number;
+    errors: string[] | null;
+    duration: number;
+    createdAt: string;
+  }[]>([]);
+  const [generationLoading, setGenerationLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [automationSubTab, setAutomationSubTab] = useState(0);
   const [showApiKey, setShowApiKey] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "danger" | "neutral" }>({
     open: false,
@@ -162,6 +180,7 @@ export default function SettingsPage() {
     loadRefreshInfo();
     loadMaintenanceInfo();
     loadBackfillStatus();
+    loadGenerationInfo();
   }, []);
 
   const loadBackupInfo = async () => {
@@ -235,6 +254,29 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load backfill status:', error);
+    }
+  };
+
+  const loadGenerationInfo = async () => {
+    try {
+      // Load generation status
+      const res = await fetch("/api/actor-playlist-generation", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setGenerationStatus(data.data);
+      }
+
+      // Load generation history
+      const historyRes = await fetch("/api/actor-playlist-generation?action=history", {
+        method: "GET",
+        cache: "no-store"
+      });
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setGenerationHistory(historyData.data);
+      }
+    } catch (error) {
+      console.error('Failed to load generation info:', error);
     }
   };
 
@@ -397,10 +439,10 @@ export default function SettingsPage() {
       }
 
       // Update maintenance scheduler if maintenance settings changed
-      const maintenanceSettingsChanged = changed.some(c => 
+      const maintenanceSettingsChanged = changed.some(c =>
         ['MAINTENANCE_ENABLED', 'MAINTENANCE_HOUR', 'MAINTENANCE_ACTION'].includes(c.key)
       );
-      
+
       if (maintenanceSettingsChanged) {
         try {
           await fetch('/api/maintenance', {
@@ -412,13 +454,31 @@ export default function SettingsPage() {
           console.error('Failed to update maintenance scheduler:', error);
         }
       }
-      
+
+      // Update generation scheduler if generation settings changed
+      const generationSettingsChanged = changed.some(c =>
+        ['ACTOR_PLAYLIST_GENERATION_ENABLED', 'ACTOR_PLAYLIST_GENERATION_HOUR'].includes(c.key)
+      );
+
+      if (generationSettingsChanged) {
+        try {
+          await fetch('/api/actor-playlist-generation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'restart-scheduler' }),
+          });
+        } catch (error) {
+          console.error('Failed to update generation scheduler:', error);
+        }
+      }
+
       // Refresh to sync updatedAt, also re-apply theme from server source of truth
       await load();
       await loadBackupInfo();
       await loadRefreshInfo();
       await loadMaintenanceInfo();
       await loadBackfillStatus();
+      await loadGenerationInfo();
       setSnack({ open: true, msg: "Settings saved", color: "success" });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to save";
@@ -550,31 +610,67 @@ export default function SettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      
+
       const result = await res.json();
-      
+
       if (result.success) {
-        setSnack({ 
-          open: true, 
-          msg: result.message, 
-          color: 'success' 
+        setSnack({
+          open: true,
+          msg: result.message,
+          color: 'success'
         });
       } else {
-        setSnack({ 
-          open: true, 
-          msg: result.error || 'Backfill failed', 
+        setSnack({
+          open: true,
+          msg: result.error || 'Backfill failed',
           color: 'danger'
         });
       }
       await loadBackfillStatus();
     } catch (error) {
-      setSnack({ 
-        open: true, 
-        msg: 'Scene ID backfill failed', 
-        color: 'danger' 
+      setSnack({
+        open: true,
+        msg: 'Scene ID backfill failed',
+        color: 'danger'
       });
     } finally {
       setBackfillLoading(false);
+    }
+  };
+
+  const handleGenerationAction = async () => {
+    setGenerationLoading(true);
+    try {
+      const res = await fetch('/api/actor-playlist-generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generate' }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setSnack({
+          open: true,
+          msg: result.message,
+          color: 'success'
+        });
+      } else {
+        setSnack({
+          open: true,
+          msg: result.message || 'Generation failed',
+          color: 'danger'
+        });
+      }
+      await loadGenerationInfo();
+    } catch (error) {
+      setSnack({
+        open: true,
+        msg: 'Actor playlist generation failed',
+        color: 'danger'
+      });
+    } finally {
+      setGenerationLoading(false);
     }
   };
 
@@ -690,6 +786,7 @@ export default function SettingsPage() {
       ],
       automation: [
         'Smart Playlist Refresh',
+        'Template Generation',
         'Database Maintenance'
       ],
       backup: [
@@ -1362,37 +1459,34 @@ export default function SettingsPage() {
 
           {/* Automation Tab */}
           <TabPanel value={1}>
-            {Object.entries(tabGroupedSettings.automation).map(([category, items]) => (
-              <Box key={category} sx={{ mb: 4 }}>
-                <Typography level="title-lg" sx={{ mb: 3 }}>{category}</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {items.map(({ setting, definition }) => {
-                    const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
-                    const dirty = (setting.value ?? "") !== origVal;
-                    const hasError = !!validationErrors[setting.key];
-                    
-                    return (
-                      <FormControl key={setting.key} error={hasError || undefined}>
-                        <FormLabel>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {definition.label}
-                            {definition.required && (
-                              <Typography color="danger" level="body-sm">*</Typography>
-                            )}
-                            {dirty && (
-                              <Chip size="sm" color="warning" variant="soft">
-                                Modified
-                              </Chip>
-                            )}
-                          </Box>
-                        </FormLabel>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
-                          <Box sx={{ flexGrow: 1 }}>
-                            {renderEditor(setting, definition)}
-                          </Box>
-                          
-                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tabs value={automationSubTab} onChange={(_, value) => setAutomationSubTab(value as number)} sx={{ bgcolor: 'transparent' }}>
+              <TabList sx={{ mb: 2 }}>
+                <Tab>Playlist Refresh</Tab>
+                <Tab>Template Generation</Tab>
+                <Tab>Maintenance</Tab>
+              </TabList>
+
+              {/* Smart Playlist Refresh Sub-Tab */}
+              <TabPanel value={0} sx={{ p: 0 }}>
+                {tabGroupedSettings.automation['Smart Playlist Refresh'] && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {tabGroupedSettings.automation['Smart Playlist Refresh'].map(({ setting, definition }) => {
+                      const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                      const dirty = (setting.value ?? "") !== origVal;
+                      const hasError = !!validationErrors[setting.key];
+
+                      return (
+                        <FormControl key={setting.key} error={hasError || undefined}>
+                          <FormLabel>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {definition.label}
+                              {dirty && (
+                                <Chip size="sm" color="warning" variant="soft">Modified</Chip>
+                              )}
+                            </Box>
+                          </FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                            <Box sx={{ flexGrow: 1 }}>{renderEditor(setting, definition)}</Box>
                             {dirty && (
                               <Tooltip title="Revert to saved value">
                                 <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
@@ -1401,51 +1495,29 @@ export default function SettingsPage() {
                               </Tooltip>
                             )}
                           </Box>
-                        </Box>
-                        
-                        <FormHelperText>
-                          {hasError && (
-                            <Typography color="danger" level="body-xs">
-                              {validationErrors[setting.key]}
-                            </Typography>
-                          )}
-                          <Typography level="body-xs" sx={{ opacity: 0.8 }}>
-                            {definition.description}
-                          </Typography>
-                        </FormHelperText>
-                      </FormControl>
-                    );
-                  })}
-                </Box>
-                
-                {/* Add special controls for automation categories */}
-                {category === 'Smart Playlist Refresh' && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
-                    <Typography level="title-md" sx={{ mb: 2 }}>
-                      Refresh Management
-                    </Typography>
-                    
+                          <FormHelperText>
+                            {hasError && <Typography color="danger" level="body-xs">{validationErrors[setting.key]}</Typography>}
+                            <Typography level="body-xs" sx={{ opacity: 0.8 }}>{definition.description}</Typography>
+                          </FormHelperText>
+                        </FormControl>
+                      );
+                    })}
+
                     {/* Refresh Status */}
                     {refreshStatus && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <RefreshCw size={16} />
                           <Typography level="body-sm" fontWeight="lg">
                             Status: {refreshStatus.enabled ? 'Enabled' : 'Disabled'}
                           </Typography>
-                          {refreshStatus.isRunning && (
-                            <Chip size="sm" variant="soft" color="primary">
-                              Running
-                            </Chip>
-                          )}
+                          {refreshStatus.isRunning && <Chip size="sm" variant="soft" color="primary">Running</Chip>}
                         </Box>
-                        
                         {refreshStatus.lastRefresh && (
                           <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
                             Last refresh: {new Date(refreshStatus.lastRefresh).toLocaleString()}
                           </Typography>
                         )}
-                        
                         {refreshStatus.nextRefresh && refreshStatus.enabled && (
                           <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Next refresh: {new Date(refreshStatus.nextRefresh).toLocaleString()}
@@ -1453,58 +1525,33 @@ export default function SettingsPage() {
                         )}
                       </Box>
                     )}
-                    
+
                     {/* Manual Refresh Controls */}
-                    <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-                      <Button
-                        startDecorator={refreshLoading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
-                        onClick={handleRefreshAction}
-                        disabled={refreshLoading}
-                        variant="solid"
-                        color="primary"
-                      >
-                        {refreshLoading ? 'Refreshing...' : 'Refresh All Playlists Now'}
-                      </Button>
-                    </Box>
-                    
+                    <Button
+                      startDecorator={refreshLoading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+                      onClick={handleRefreshAction}
+                      disabled={refreshLoading}
+                      variant="solid"
+                      color="primary"
+                      sx={{ alignSelf: 'flex-start' }}
+                    >
+                      {refreshLoading ? 'Refreshing...' : 'Refresh All Playlists Now'}
+                    </Button>
+
                     {/* Refresh History */}
                     {refreshHistory.length > 0 && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
-                        <Typography level="title-sm" sx={{ mb: 2 }}>
-                          Recent Refresh History
-                        </Typography>
-                        
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>Recent History</Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
                           {refreshHistory.map((log) => (
-                            <Box
-                              key={log.id}
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 2,
-                                p: 1.5,
-                                borderRadius: 'sm',
-                                bgcolor: log.success ? 'success.50' : 'danger.50',
-                              }}
-                            >
-                              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'fit-content' }}>
-                                {log.success ? (
-                                  <CheckCircle size={16} color="var(--joy-palette-success-500)" />
-                                ) : (
-                                  <XCircle size={16} color="var(--joy-palette-danger-500)" />
-                                )}
-                              </Box>
-                              
+                            <Box key={log.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 1.5, borderRadius: 'sm', bgcolor: log.success ? 'success.50' : 'danger.50' }}>
+                              {log.success ? <CheckCircle size={16} color="var(--joy-palette-success-500)" /> : <XCircle size={16} color="var(--joy-palette-danger-500)" />}
                               <Box sx={{ flexGrow: 1 }}>
                                 <Typography level="body-sm" fontWeight="lg">
-                                  {log.success ? 
-                                    `${log.refreshedPlaylists} playlist(s) refreshed` : 
-                                    `Refresh failed`
-                                  }
+                                  {log.success ? `${log.refreshedPlaylists} playlist(s) refreshed` : 'Refresh failed'}
                                 </Typography>
                                 <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
-                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('refresh-', '')}
-                                  {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
+                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms
                                 </Typography>
                               </Box>
                             </Box>
@@ -1514,23 +1561,155 @@ export default function SettingsPage() {
                     )}
                   </Box>
                 )}
-                
-                {category === 'Database Maintenance' && (
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 2 }}>
-                    <Typography level="title-md" sx={{ mb: 2 }}>
-                      Maintenance Management
-                    </Typography>
-                    
+              </TabPanel>
+
+              {/* Template Generation Sub-Tab */}
+              <TabPanel value={1} sx={{ p: 0 }}>
+                {tabGroupedSettings.automation['Template Generation'] && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {tabGroupedSettings.automation['Template Generation'].map(({ setting, definition }) => {
+                      const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                      const dirty = (setting.value ?? "") !== origVal;
+                      const hasError = !!validationErrors[setting.key];
+
+                      return (
+                        <FormControl key={setting.key} error={hasError || undefined}>
+                          <FormLabel>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {definition.label}
+                              {dirty && (
+                                <Chip size="sm" color="warning" variant="soft">Modified</Chip>
+                              )}
+                            </Box>
+                          </FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                            <Box sx={{ flexGrow: 1 }}>{renderEditor(setting, definition)}</Box>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={14} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                          <FormHelperText>
+                            {hasError && <Typography color="danger" level="body-xs">{validationErrors[setting.key]}</Typography>}
+                            <Typography level="body-xs" sx={{ opacity: 0.8 }}>{definition.description}</Typography>
+                          </FormHelperText>
+                        </FormControl>
+                      );
+                    })}
+
+                    {/* Generation Status */}
+                    {generationStatus && (
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <RefreshCw size={16} />
+                          <Typography level="body-sm" fontWeight="lg">
+                            Status: {generationStatus.enabled ? 'Enabled' : 'Disabled'}
+                          </Typography>
+                          {generationStatus.isRunning && <Chip size="sm" variant="soft" color="primary">Running</Chip>}
+                        </Box>
+                        {generationStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                            Schedule: Daily at {generationStatus.hour}:00 UTC
+                          </Typography>
+                        )}
+                        {generationStatus.nextRun && generationStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
+                            Next generation: {new Date(generationStatus.nextRun).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+
+                    {/* Manual Generation Controls */}
+                    <Box>
+                      <Button
+                        startDecorator={generationLoading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+                        onClick={handleGenerationAction}
+                        disabled={generationLoading}
+                        variant="solid"
+                        color="primary"
+                      >
+                        {generationLoading ? 'Generating...' : 'Generate Playlists Now'}
+                      </Button>
+                      <Typography level="body-xs" sx={{ color: 'text.secondary', mt: 1 }}>
+                        Creates playlists for all actors using templates with auto-generation enabled. Existing playlists are skipped.
+                      </Typography>
+                    </Box>
+
+                    {/* Generation History */}
+                    {generationHistory.length > 0 && (
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>Recent History</Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
+                          {generationHistory.map((log) => (
+                            <Box key={log.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 1.5, borderRadius: 'sm', bgcolor: log.success ? 'success.50' : 'danger.50' }}>
+                              {log.success ? <CheckCircle size={16} color="var(--joy-palette-success-500)" /> : <XCircle size={16} color="var(--joy-palette-danger-500)" />}
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography level="body-sm" fontWeight="lg">
+                                  {log.success ? `${log.refreshedPlaylists} playlist(s) created` : 'Generation failed'}
+                                </Typography>
+                                <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
+                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms
+                                </Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </TabPanel>
+
+              {/* Database Maintenance Sub-Tab */}
+              <TabPanel value={2} sx={{ p: 0 }}>
+                {tabGroupedSettings.automation['Database Maintenance'] && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {tabGroupedSettings.automation['Database Maintenance'].map(({ setting, definition }) => {
+                      const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                      const dirty = (setting.value ?? "") !== origVal;
+                      const hasError = !!validationErrors[setting.key];
+
+                      return (
+                        <FormControl key={setting.key} error={hasError || undefined}>
+                          <FormLabel>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {definition.label}
+                              {dirty && (
+                                <Chip size="sm" color="warning" variant="soft">Modified</Chip>
+                              )}
+                            </Box>
+                          </FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                            <Box sx={{ flexGrow: 1 }}>{renderEditor(setting, definition)}</Box>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={14} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                          <FormHelperText>
+                            {hasError && <Typography color="danger" level="body-xs">{validationErrors[setting.key]}</Typography>}
+                            <Typography level="body-xs" sx={{ opacity: 0.8 }}>{definition.description}</Typography>
+                          </FormHelperText>
+                        </FormControl>
+                      );
+                    })}
+
                     {/* Maintenance Status */}
                     {maintenanceStatus && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <Database size={16} />
                           <Typography level="body-sm" fontWeight="lg">
                             Status: {maintenanceStatus.enabled ? 'Enabled' : 'Disabled'}
                           </Typography>
                         </Box>
-                        
                         {maintenanceStatus.nextRun && maintenanceStatus.enabled && (
                           <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
                             Next maintenance: {new Date(maintenanceStatus.nextRun).toLocaleString()}
@@ -1538,9 +1717,9 @@ export default function SettingsPage() {
                         )}
                       </Box>
                     )}
-                    
+
                     {/* Manual Maintenance Controls */}
-                    <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                    <Box>
                       <Button
                         startDecorator={maintenanceLoading ? <RefreshCw className="animate-spin" size={16} /> : <Database size={16} />}
                         onClick={handleMaintenanceAction}
@@ -1550,51 +1729,25 @@ export default function SettingsPage() {
                       >
                         {maintenanceLoading ? 'Checking...' : 'Run Maintenance Check'}
                       </Button>
+                      <Typography level="body-xs" sx={{ color: 'text.secondary', mt: 1 }}>
+                        Verifies markers have valid parent scenes. Orphaned markers are automatically removed.
+                      </Typography>
                     </Box>
-                    
-                    <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 3 }}>
-                      Maintenance checks verify that all markers in your database still have valid parent scenes in Stash. 
-                      Orphaned markers are automatically removed to keep playlists clean.
-                    </Typography>
 
                     {/* Maintenance History */}
                     {maintenanceHistory.length > 0 && (
-                      <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
-                        <Typography level="title-sm" sx={{ mb: 2 }}>
-                          Recent Maintenance History
-                        </Typography>
-                        
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>Recent History</Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
                           {maintenanceHistory.map((log) => (
-                            <Box
-                              key={log.id}
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 2,
-                                p: 1.5,
-                                borderRadius: 'sm',
-                                bgcolor: log.success ? 'success.50' : 'danger.50',
-                              }}
-                            >
-                              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 'fit-content' }}>
-                                {log.success ? (
-                                  <CheckCircle size={16} color="var(--joy-palette-success-500)" />
-                                ) : (
-                                  <XCircle size={16} color="var(--joy-palette-danger-500)" />
-                                )}
-                              </Box>
-                              
+                            <Box key={log.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 1.5, borderRadius: 'sm', bgcolor: log.success ? 'success.50' : 'danger.50' }}>
+                              {log.success ? <CheckCircle size={16} color="var(--joy-palette-success-500)" /> : <XCircle size={16} color="var(--joy-palette-danger-500)" />}
                               <Box sx={{ flexGrow: 1 }}>
                                 <Typography level="body-sm" fontWeight="lg">
-                                  {log.success ? 
-                                    `${log.refreshedPlaylists} orphaned item(s) removed` : 
-                                    `Maintenance failed`
-                                  }
+                                  {log.success ? `${log.refreshedPlaylists} orphaned item(s) removed` : 'Maintenance failed'}
                                 </Typography>
                                 <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
-                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms • {log.refreshType.replace('maintenance-', '')}
-                                  {log.errors && log.errors.length > 0 && ` • ${log.errors.length} error(s)`}
+                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms
                                 </Typography>
                               </Box>
                             </Box>
@@ -1604,49 +1757,30 @@ export default function SettingsPage() {
                     )}
 
                     {/* Scene ID Backfill Section */}
-                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3, mt: 3 }}>
-                      <Typography level="title-sm" sx={{ mb: 2 }}>
-                        Scene ID Backfill
-                      </Typography>
-                      
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'neutral.outlinedBorder', pt: 3 }}>
+                      <Typography level="title-sm" sx={{ mb: 2 }}>Scene ID Backfill</Typography>
                       {backfillStatus && (
-                        <Box sx={{ mb: 3, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
-                          <Typography level="body-sm" fontWeight="lg" sx={{ mb: 1 }}>
-                            Database Status
-                          </Typography>
-                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
-                            Total items: {backfillStatus.totalItems}
-                          </Typography>
-                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
-                            Items with scene ID: {backfillStatus.itemsWithSceneId} ({backfillStatus.backfillPercentage}%)
-                          </Typography>
+                        <Box sx={{ mb: 2, p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
                           <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
-                            Items needing backfill: {backfillStatus.itemsNeedingBackfill}
+                            Total items: {backfillStatus.totalItems} • With scene ID: {backfillStatus.itemsWithSceneId} ({backfillStatus.backfillPercentage}%) • Needing backfill: {backfillStatus.itemsNeedingBackfill}
                           </Typography>
                         </Box>
                       )}
-                      
-                      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-                        <Button
-                          startDecorator={backfillLoading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
-                          onClick={handleBackfillAction}
-                          disabled={backfillLoading || (backfillStatus?.itemsNeedingBackfill || 0) === 0}
-                          variant="outlined"
-                          color="primary"
-                        >
-                          {backfillLoading ? 'Processing...' : 'Backfill Scene IDs'}
-                        </Button>
-                      </Box>
-                      
-                      <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
-                        Scene ID backfill extracts scene IDs from existing marker stream URLs to enable maintenance checks. 
-                        This is a one-time operation for existing data. New markers automatically include scene IDs.
-                      </Typography>
+                      <Button
+                        startDecorator={backfillLoading ? <RefreshCw className="animate-spin" size={16} /> : <Upload size={16} />}
+                        onClick={handleBackfillAction}
+                        disabled={backfillLoading || (backfillStatus?.itemsNeedingBackfill || 0) === 0}
+                        variant="outlined"
+                        color="primary"
+                        size="sm"
+                      >
+                        {backfillLoading ? 'Processing...' : 'Backfill Scene IDs'}
+                      </Button>
                     </Box>
                   </Box>
                 )}
-              </Box>
-            ))}
+              </TabPanel>
+            </Tabs>
           </TabPanel>
 
           {/* Backup Tab */}

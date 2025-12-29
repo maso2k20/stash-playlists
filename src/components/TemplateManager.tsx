@@ -19,6 +19,8 @@ import {
   Stack,
   Sheet,
   CircularProgress,
+  Switch,
+  Tooltip,
 } from "@mui/joy";
 import { Plus, Pencil, Trash2, Save } from "lucide-react";
 import { useStashTags } from "@/context/StashTagsContext";
@@ -31,6 +33,7 @@ type PlaylistTemplate = {
   tagIds: string[];          // Legacy
   requiredTagIds?: string[]; // ALL must match
   optionalTagIds?: string[]; // ANY must match
+  excludeFromAutoGeneration: boolean; // Exclude from nightly generation
   createdAt: string;
   updatedAt: string;
 };
@@ -47,6 +50,7 @@ export default function TemplateManager() {
   const [formName, setFormName] = useState("");
   const [formRequiredTagIds, setFormRequiredTagIds] = useState<string[]>([]);
   const [formOptionalTagIds, setFormOptionalTagIds] = useState<string[]>([]);
+  const [formExcludeFromAutoGeneration, setFormExcludeFromAutoGeneration] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Delete confirmation
@@ -88,6 +92,7 @@ export default function TemplateManager() {
     setFormName("");
     setFormRequiredTagIds([]);
     setFormOptionalTagIds([]);
+    setFormExcludeFromAutoGeneration(false);
     setIsModalOpen(true);
   };
 
@@ -101,6 +106,7 @@ export default function TemplateManager() {
       : template.tagIds; // Fallback to legacy only if new fields don't exist
     setFormRequiredTagIds(requiredTags);
     setFormOptionalTagIds(template.optionalTagIds ?? []);
+    setFormExcludeFromAutoGeneration(template.excludeFromAutoGeneration ?? false);
     setIsModalOpen(true);
   };
 
@@ -110,6 +116,7 @@ export default function TemplateManager() {
     setFormName("");
     setFormRequiredTagIds([]);
     setFormOptionalTagIds([]);
+    setFormExcludeFromAutoGeneration(false);
   };
 
   const handleSave = async () => {
@@ -128,6 +135,7 @@ export default function TemplateManager() {
           name: formName.trim(),
           requiredTagIds: formRequiredTagIds,
           optionalTagIds: formOptionalTagIds,
+          excludeFromAutoGeneration: formExcludeFromAutoGeneration,
           // Keep legacy tagIds for backward compatibility
           tagIds: [...formRequiredTagIds, ...formOptionalTagIds],
         }),
@@ -289,9 +297,18 @@ export default function TemplateManager() {
                 }}
               >
                 <Box sx={{ flex: 1 }}>
-                  <Typography level="title-sm" sx={{ mb: 1 }}>
-                    {template.name}
-                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                    <Typography level="title-sm">
+                      {template.name}
+                    </Typography>
+                    {!template.excludeFromAutoGeneration && (
+                      <Tooltip title="Included in nightly auto-generation">
+                        <Chip size="sm" variant="soft" color="success" sx={{ fontSize: "0.6rem" }}>
+                          Auto
+                        </Chip>
+                      </Tooltip>
+                    )}
+                  </Box>
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     {requiredTags.length > 0 && (
                       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
@@ -431,6 +448,22 @@ export default function TemplateManager() {
               <Typography level="body-xs" sx={{ color: "neutral.500", mt: 0.5 }}>
                 Markers must have at least one of these tags (leave empty for any)
               </Typography>
+            </FormControl>
+
+            <Divider />
+
+            <FormControl orientation="horizontal" sx={{ justifyContent: "space-between" }}>
+              <Box>
+                <FormLabel>Include in Auto-Generation</FormLabel>
+                <Typography level="body-xs" sx={{ color: "neutral.500" }}>
+                  When enabled, playlists will be automatically created for all actors using this template
+                </Typography>
+              </Box>
+              <Switch
+                checked={!formExcludeFromAutoGeneration}
+                onChange={(e) => setFormExcludeFromAutoGeneration(!e.target.checked)}
+                color={formExcludeFromAutoGeneration ? "neutral" : "success"}
+              />
             </FormControl>
           </Stack>
 

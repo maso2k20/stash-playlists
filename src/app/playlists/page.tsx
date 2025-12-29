@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
+  Checkbox,
   Divider,
   FormControl,
   FormLabel,
@@ -68,6 +69,7 @@ export default function PlaylistsPage() {
   // Search and sort state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("name-asc");
+  const [hideEmpty, setHideEmpty] = useState(true);
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -300,10 +302,18 @@ export default function PlaylistsPage() {
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter(playlist => 
+      filtered = filtered.filter(playlist =>
         playlist.name.toLowerCase().includes(query) ||
         (playlist.description && playlist.description.toLowerCase().includes(query))
       );
+    }
+
+    // Apply hide empty filter
+    if (hideEmpty) {
+      filtered = filtered.filter(playlist => {
+        const playlistStats = stats[playlist.id];
+        return playlistStats && playlistStats.itemCount > 0;
+      });
     }
 
     // Apply sorting
@@ -330,7 +340,7 @@ export default function PlaylistsPage() {
     });
 
     return sorted;
-  }, [playlists, stats, searchQuery, sortOption]);
+  }, [playlists, stats, searchQuery, sortOption, hideEmpty]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
@@ -358,9 +368,9 @@ export default function PlaylistsPage() {
         </Stack>
         
         {/* Search and Sort Controls */}
-        <Stack 
-          direction={{ xs: "column", sm: "row" }} 
-          spacing={2} 
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
           alignItems={{ xs: "stretch", sm: "center" }}
         >
           <FormControl sx={{ flexGrow: 1, maxWidth: { sm: 400 } }}>
@@ -384,7 +394,14 @@ export default function PlaylistsPage() {
               size="lg"
             />
           </FormControl>
-          
+
+          <Checkbox
+            label="Hide empty"
+            checked={hideEmpty}
+            onChange={(e) => setHideEmpty(e.target.checked)}
+            size="sm"
+          />
+
           <FormControl sx={{ minWidth: 200 }}>
             <Select
               value={sortOption}

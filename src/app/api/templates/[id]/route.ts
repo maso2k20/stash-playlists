@@ -36,7 +36,7 @@ export async function PUT(
 
   try {
     const data = await request.json();
-    const { name, tagIds, requiredTagIds, optionalTagIds } = data;
+    const { name, tagIds, requiredTagIds, optionalTagIds, excludeFromAutoGeneration } = data;
 
     if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
       return NextResponse.json({ error: 'Template name cannot be empty' }, { status: 400 });
@@ -58,9 +58,11 @@ export async function PUT(
       tagIds?: string[];
       requiredTagIds?: string[] | null;
       optionalTagIds?: string[] | null;
+      excludeFromAutoGeneration?: boolean;
     } = {};
 
     if (name) updateData.name = name.trim();
+    if (excludeFromAutoGeneration !== undefined) updateData.excludeFromAutoGeneration = excludeFromAutoGeneration;
 
     // Handle tag updates
     if (requiredTagIds !== undefined || optionalTagIds !== undefined) {

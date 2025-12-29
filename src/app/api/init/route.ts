@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { initializeBackupService } from '@/lib/backupService';
 import { initializeRefreshService } from '@/lib/smartPlaylistRefreshService';
 import { maintenanceService } from '@/lib/maintenanceService';
+import { actorPlaylistGenerationService } from '@/lib/actorPlaylistGenerationService';
 
 let initialized = false;
 
@@ -13,26 +14,27 @@ export async function GET() {
       await initializeBackupService();
       await initializeRefreshService();
       await maintenanceService.startScheduler();
+      await actorPlaylistGenerationService.startScheduler();
       initialized = true;
       console.log('Application initialized successfully');
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Application initialized successfully' 
+      return NextResponse.json({
+        success: true,
+        message: 'Application initialized successfully'
       });
     } catch (error) {
       console.error('Failed to initialize application:', error);
       return NextResponse.json(
-        { 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
+        {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
         },
         { status: 500 }
       );
     }
   }
-  
-  return NextResponse.json({ 
-    success: true, 
-    message: 'Application already initialized' 
+
+  return NextResponse.json({
+    success: true,
+    message: 'Application already initialized'
   });
 }

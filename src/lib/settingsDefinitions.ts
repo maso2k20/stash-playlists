@@ -20,6 +20,7 @@ export const SETTING_CATEGORIES = {
   PLAYBACK: 'Playback',
   RECOMMENDED_TAGS: 'Recommended Tags',
   SMART_PLAYLIST_REFRESH: 'Smart Playlist Refresh',
+  ACTOR_PLAYLIST_GENERATION: 'Template Generation',
   BACKUP: 'Database Backup',
   MAINTENANCE: 'Database Maintenance',
 } as const;
@@ -241,6 +242,31 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
     category: SETTING_CATEGORIES.MAINTENANCE,
     label: 'Maintenance Time (Hour)',
     description: 'Hour of the day to run automatic maintenance checks (0-23, in server timezone)',
+    required: false,
+    validation: (value) => {
+      const num = parseInt(value);
+      if (isNaN(num)) return 'Must be a number';
+      if (num < 0 || num > 23) return 'Must be between 0-23 (24-hour format)';
+      return null;
+    },
+  },
+  {
+    key: 'ACTOR_PLAYLIST_GENERATION_ENABLED',
+    defaultValue: 'false',
+    type: 'select',
+    category: SETTING_CATEGORIES.ACTOR_PLAYLIST_GENERATION,
+    label: 'Enable Automatic Generation',
+    description: 'Automatically generate playlists for all actors using templates each night',
+    required: false,
+    options: ['true', 'false'],
+  },
+  {
+    key: 'ACTOR_PLAYLIST_GENERATION_HOUR',
+    defaultValue: '4',
+    type: 'number',
+    category: SETTING_CATEGORIES.ACTOR_PLAYLIST_GENERATION,
+    label: 'Generation Time (Hour)',
+    description: 'Hour of the day to run automatic generation (0-23, in server timezone). Should be different from refresh and maintenance times.',
     required: false,
     validation: (value) => {
       const num = parseInt(value);
