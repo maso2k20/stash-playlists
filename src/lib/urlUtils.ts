@@ -41,7 +41,7 @@ export function extractRelativePath(fullUrl: string | null | undefined): string 
  */
 export function makeStashUrl(
   relativePath: string | null | undefined,
-  stashServer: string,
+  stashServer: string | undefined,
   apiKey?: string
 ): string {
   if (!relativePath || !stashServer) return "";

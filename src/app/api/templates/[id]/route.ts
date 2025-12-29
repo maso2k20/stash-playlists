@@ -1,6 +1,6 @@
 // src/app/api/templates/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -53,22 +53,16 @@ export async function PUT(
       return NextResponse.json({ error: 'At least one tag is required' }, { status: 400 });
     }
 
-    const updateData: {
-      name?: string;
-      tagIds?: string[];
-      requiredTagIds?: string[] | null;
-      optionalTagIds?: string[] | null;
-      excludeFromAutoGeneration?: boolean;
-    } = {};
+    const updateData: Prisma.PlaylistTemplateUpdateInput = {};
 
     if (name) updateData.name = name.trim();
     if (excludeFromAutoGeneration !== undefined) updateData.excludeFromAutoGeneration = excludeFromAutoGeneration;
 
     // Handle tag updates
     if (requiredTagIds !== undefined || optionalTagIds !== undefined) {
-      // New format being used
-      updateData.requiredTagIds = requiredTagIds ?? null;
-      updateData.optionalTagIds = optionalTagIds ?? null;
+      // New format being used - use Prisma.DbNull for explicit null values
+      updateData.requiredTagIds = requiredTagIds ?? Prisma.DbNull;
+      updateData.optionalTagIds = optionalTagIds ?? Prisma.DbNull;
       // Update legacy tagIds for backward compatibility
       updateData.tagIds = [...(requiredTagIds || []), ...(optionalTagIds || [])];
     } else if (tagIds !== undefined) {

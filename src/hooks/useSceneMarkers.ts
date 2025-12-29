@@ -359,6 +359,7 @@ export function useSceneMarkers(sceneId: string, tagOptions: Tag[] = []): UseSce
                         }
                     }
                 });
+                await addMarkersOrganisedTag();
             } catch (e) {
                 console.error("Failed to update marker:", e);
             } finally {

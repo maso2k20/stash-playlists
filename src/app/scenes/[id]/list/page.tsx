@@ -127,13 +127,29 @@ type Draft = {
     tag_ids: string[];
 };
 
+// Type for GET_SCENE_FOR_TAG_MANAGEMENT query result
+type SceneData = {
+    findScene: {
+        id: string;
+        title: string;
+        paths: { screenshot: string | null; vtt: string | null };
+        tags: Tag[];
+        scene_markers: Marker[];
+        performers: Array<{
+            id: string;
+            name: string;
+            tags: Tag[];
+        }>;
+    } | null;
+};
+
 
 export default function SceneTagManagerPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const sceneId = params.id;
 
-    const { data, loading, error, refetch } = useQuery(GET_SCENE_FOR_TAG_MANAGEMENT, {
+    const { data, loading, error, refetch } = useQuery<SceneData>(GET_SCENE_FOR_TAG_MANAGEMENT, {
         variables: { id: sceneId },
         fetchPolicy: "cache-and-network",
     });
@@ -144,7 +160,7 @@ export default function SceneTagManagerPage() {
     const [updateScene] = useMutation(UPDATE_SCENE);
 
     const scene = data?.findScene;
-    const markers: Marker[] = (scene?.scene_markers ?? []) as any;
+    const markers: Marker[] = scene?.scene_markers ?? [];
 
     // Tag options from context
     const { stashTags, loading: tagsLoading, refetch: refetchTags } = useStashTags();
@@ -365,9 +381,10 @@ export default function SceneTagManagerPage() {
 
     // Keyboard shortcuts for video navigation
     useEffect(() => {
-        const handleKeyDown = (event) => {
+        const handleKeyDown = (event: KeyboardEvent) => {
             // Only activate when not typing in input fields
-            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            const target = event.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
                 return;
             }
 
@@ -585,9 +602,11 @@ export default function SceneTagManagerPage() {
 
     // Handle selecting a primary tag from recommendations
     const handleSelectPrimaryTag = (markerId: string, tagId: string) => {
+        const tag = tagOptions.find(t => t.id === tagId);
         setDraft(markerId, {
             primary_tag_id: tagId,
-            tag_ids: [tagId] // Include primary tag in tag_ids as well
+            tag_ids: [tagId], // Include primary tag in tag_ids as well
+            title: tag?.name || drafts[markerId]?.title || "",
         });
     };
 
@@ -693,16 +712,16 @@ export default function SceneTagManagerPage() {
                     update: (cache, { data }) => {
                         if (data?.sceneMarkerUpdate) {
                             // Update the cache with the updated marker
-                            const existingData = cache.readQuery({
+                            const existingData = cache.readQuery<SceneData>({
                                 query: GET_SCENE_FOR_TAG_MANAGEMENT,
                                 variables: { id: sceneId }
                             });
-                            
+
                             if (existingData?.findScene) {
-                                const updatedMarkers = existingData.findScene.scene_markers.map(marker =>
+                                const updatedMarkers = existingData.findScene.scene_markers.map((marker: Marker) =>
                                     marker.id === id ? data.sceneMarkerUpdate : marker
                                 );
-                                
+
                                 cache.writeQuery({
                                     query: GET_SCENE_FOR_TAG_MANAGEMENT,
                                     variables: { id: sceneId },
@@ -930,11 +949,11 @@ export default function SceneTagManagerPage() {
                     update: (cache, { data }) => {
                         if (data?.sceneMarkerCreate) {
                             // Update the cache to include the new marker
-                            const existingData = cache.readQuery({
+                            const existingData = cache.readQuery<SceneData>({
                                 query: GET_SCENE_FOR_TAG_MANAGEMENT,
                                 variables: { id: sceneId }
                             });
-                            
+
                             if (existingData?.findScene) {
                                 cache.writeQuery({
                                     query: GET_SCENE_FOR_TAG_MANAGEMENT,
@@ -975,16 +994,16 @@ export default function SceneTagManagerPage() {
                     update: (cache, { data }) => {
                         if (data?.sceneMarkerUpdate) {
                             // Update the cache with the updated marker
-                            const existingData = cache.readQuery({
+                            const existingData = cache.readQuery<SceneData>({
                                 query: GET_SCENE_FOR_TAG_MANAGEMENT,
                                 variables: { id: sceneId }
                             });
-                            
+
                             if (existingData?.findScene) {
-                                const updatedMarkers = existingData.findScene.scene_markers.map(marker =>
+                                const updatedMarkers = existingData.findScene.scene_markers.map((marker: Marker) =>
                                     marker.id === id ? data.sceneMarkerUpdate : marker
                                 );
-                                
+
                                 cache.writeQuery({
                                     query: GET_SCENE_FOR_TAG_MANAGEMENT,
                                     variables: { id: sceneId },
@@ -1730,7 +1749,7 @@ export default function SceneTagManagerPage() {
                                                                 ? tagOptions.find((t) => t.id === d.primary_tag_id) || null
                                                                 : null
                                                         }
-                                                        onChange={(_e, val) => setDraft(id, { primary_tag_id: val?.id ?? null })}
+                                                        onChange={(_e, val) => setDraft(id, { primary_tag_id: val?.id ?? null, title: val?.name || d.title })}
                                                         getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}
                                                         isOptionEqualToValue={(a, b) => a?.id === b?.id}
                                                         sx={{

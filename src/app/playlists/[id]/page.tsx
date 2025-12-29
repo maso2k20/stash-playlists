@@ -59,6 +59,24 @@ type Playlist = {
   items: PlaylistItem[];
 };
 
+// Type for marker details
+type MarkerDetails = {
+  id: string;
+  title: string;
+  seconds: number;
+  end_seconds: number | null;
+  primary_tag: { id: string; name: string } | null;
+  tags: Array<{ id: string; name: string }>;
+};
+
+// Type for GET_SCENE_MARKER_DETAILS query result
+type SceneMarkerDetailsData = {
+  findScene: {
+    id: string;
+    scene_markers: MarkerDetails[];
+  } | null;
+};
+
 export default function PlaylistPlayer() {
   const { id } = useParams();
   const searchParams = useSearchParams();
@@ -76,7 +94,7 @@ export default function PlaylistPlayer() {
   const playerRef = useRef<any>(null);
 
   // Tag editing state
-  const [currentMarkerDetails, setCurrentMarkerDetails] = useState<any>(null);
+  const [currentMarkerDetails, setCurrentMarkerDetails] = useState<MarkerDetails | null>(null);
 
   // GraphQL hooks for marker tag editing
   const [updateSceneMarker] = useMutation(UPDATE_SCENE_MARKER);
@@ -136,7 +154,7 @@ export default function PlaylistPlayer() {
   }, [playOrder, currentIndex, items]);
 
   // Query marker details when scene changes
-  const { data: sceneData, loading: sceneLoading, refetch: refetchSceneData } = useQuery(GET_SCENE_MARKER_DETAILS, {
+  const { data: sceneData, loading: sceneLoading, refetch: refetchSceneData } = useQuery<SceneMarkerDetailsData>(GET_SCENE_MARKER_DETAILS, {
     variables: { id: currentSceneId },
     skip: !currentSceneId,
     fetchPolicy: 'cache-and-network',
@@ -158,7 +176,7 @@ export default function PlaylistPlayer() {
     }
 
     // Find marker that matches the current item's ID
-    const marker = sceneData.findScene.scene_markers.find((m: any) => m.id === currentItem.item.id);
+    const marker = sceneData.findScene.scene_markers.find((m) => m.id === currentItem.item.id);
     setCurrentMarkerDetails(marker || null);
   }, [sceneData, currentIndex, playOrder, items]);
 
@@ -177,13 +195,13 @@ export default function PlaylistPlayer() {
         update: (cache, { data }) => {
           if (data?.sceneMarkerUpdate && currentSceneId) {
             try {
-              const existingData = cache.readQuery({
+              const existingData = cache.readQuery<SceneMarkerDetailsData>({
                 query: GET_SCENE_MARKER_DETAILS,
                 variables: { id: currentSceneId },
               });
 
               if (existingData?.findScene?.scene_markers) {
-                const updatedMarkers = existingData.findScene.scene_markers.map((marker: any) =>
+                const updatedMarkers = existingData.findScene.scene_markers.map((marker) =>
                   marker.id === markerId ? data.sceneMarkerUpdate : marker
                 );
 

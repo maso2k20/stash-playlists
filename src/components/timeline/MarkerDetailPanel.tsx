@@ -99,9 +99,11 @@ function MarkerDetailPanelInner({
 
     // Handle selecting a primary tag from recommendations
     const handleSelectPrimaryTag = (tagId: string) => {
+        const tag = tagOptions.find(t => t.id === tagId);
         onDraftChange({
             primary_tag_id: tagId,
             tag_ids: Array.from(new Set([tagId, ...draft.tag_ids])),
+            title: tag?.name || draft.title,
         });
     };
 
@@ -296,6 +298,7 @@ function MarkerDetailPanelInner({
                             tag_ids: newPrimaryId
                                 ? Array.from(new Set([newPrimaryId, ...draft.tag_ids.filter(id => id !== draft.primary_tag_id)]))
                                 : draft.tag_ids.filter(id => id !== draft.primary_tag_id),
+                            title: val?.name || draft.title,
                         });
                     }}
                     getOptionLabel={(o) => (typeof o === "string" ? o : o.name)}

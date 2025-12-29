@@ -390,14 +390,16 @@ function ScenesContent() {
   }, [allScenes, sortOption]);
 
   // Prepare options for filters
-  const performerOptions = useMemo(() => {
+  type FilterOption = { id: string; label: string };
+
+  const performerOptions: FilterOption[] = useMemo(() => {
     return (performersData?.findPerformers?.performers || []).map((p: { id: string; name: string }) => ({
       id: String(p.id),
       label: p.name
     }));
   }, [performersData]);
 
-  const tagOptions = useMemo(() => {
+  const tagOptions: FilterOption[] = useMemo(() => {
     return (stashTags || []).map((t: { id: string; name: string }) => ({
       id: String(t.id),
       label: t.name
@@ -405,15 +407,15 @@ function ScenesContent() {
   }, [stashTags]);
 
   const selectedPerformerOptions = useMemo(() => {
-    return selectedPerformerIds.map(id => 
-      performerOptions.find((p) => p.id === id)
-    ).filter(Boolean);
+    return selectedPerformerIds.map(id =>
+      performerOptions.find((p: FilterOption) => p.id === id)
+    ).filter((v): v is FilterOption => v !== undefined);
   }, [selectedPerformerIds, performerOptions]);
 
   const selectedTagOptions = useMemo(() => {
-    return selectedTagIds.map(id => 
-      tagOptions.find((t) => t.id === id)
-    ).filter(Boolean);
+    return selectedTagIds.map(id =>
+      tagOptions.find((t: FilterOption) => t.id === id)
+    ).filter((v): v is FilterOption => v !== undefined);
   }, [selectedTagIds, tagOptions]);
 
   const anyLoading = loading || tagsLoading || performersLoading;
