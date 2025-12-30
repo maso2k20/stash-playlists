@@ -111,6 +111,7 @@ export interface UseSceneMarkersReturn {
     handleSaveRow: (id: string) => Promise<void>;
     handleResetRow: (id: string) => void;
     handleDeleteRow: (id: string) => Promise<void>;
+    handleDeleteMultiple: (ids: string[]) => Promise<void>;
     handleSaveAll: () => Promise<void>;
     handleResetAll: () => void;
     addMarkersOrganisedTag: () => Promise<void>;
@@ -441,6 +442,70 @@ export function useSceneMarkers(sceneId: string, tagOptions: Tag[] = []): UseSce
         }
     }, [sceneId, deleteSceneMarker]);
 
+    // Delete multiple rows
+    const handleDeleteMultiple = useCallback(async (ids: string[]) => {
+        if (ids.length === 0) return;
+
+        const tempIds = ids.filter((id) => isTemp(id));
+        const existingIds = ids.filter((id) => !isTemp(id));
+
+        // Remove temp markers immediately
+        if (tempIds.length > 0) {
+            setNewIds((prev) => prev.filter((x) => !tempIds.includes(x)));
+            setDrafts((prev) => {
+                const next = { ...prev };
+                for (const id of tempIds) delete next[id];
+                return next;
+            });
+        }
+
+        // Delete existing markers via GraphQL
+        if (existingIds.length > 0) {
+            setSavingAll(true);
+            try {
+                const deletePromises = existingIds.map((id) =>
+                    deleteSceneMarker({
+                        variables: { id },
+                        update: (cache) => {
+                            const existingData = cache.readQuery({
+                                query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                variables: { id: sceneId }
+                            }) as any;
+
+                            if (existingData?.findScene) {
+                                cache.writeQuery({
+                                    query: GET_SCENE_FOR_TAG_MANAGEMENT,
+                                    variables: { id: sceneId },
+                                    data: {
+                                        ...existingData,
+                                        findScene: {
+                                            ...existingData.findScene,
+                                            scene_markers: existingData.findScene.scene_markers.filter(
+                                                (m: any) => m.id !== id
+                                            )
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    })
+                );
+
+                await Promise.all(deletePromises);
+
+                setDrafts((prev) => {
+                    const next = { ...prev };
+                    for (const id of existingIds) delete next[id];
+                    return next;
+                });
+            } catch (e) {
+                console.error("Bulk delete failed:", e);
+            } finally {
+                setSavingAll(false);
+            }
+        }
+    }, [sceneId, deleteSceneMarker]);
+
     // Save all
     const handleSaveAll = useCallback(async () => {
         if (!dirtyCount) return;
@@ -585,6 +650,7 @@ export function useSceneMarkers(sceneId: string, tagOptions: Tag[] = []): UseSce
         handleSaveRow,
         handleResetRow,
         handleDeleteRow,
+        handleDeleteMultiple,
         handleSaveAll,
         handleResetAll,
         addMarkersOrganisedTag,

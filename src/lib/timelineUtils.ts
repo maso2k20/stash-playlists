@@ -1,4 +1,4 @@
-import type { MarkerForTimeline, MarkerWithLane } from "@/types/markers";
+import type { MarkerForTimeline, MarkerWithLane, SelectionRect } from "@/types/markers";
 
 /**
  * Assign markers to lanes to handle overlapping markers.
@@ -162,4 +162,67 @@ export function getMarkerColor(marker: MarkerForTimeline): {
         border: "rgba(100, 149, 237, 0.8)",
         text: "#fff",
     };
+}
+
+/**
+ * Get the bounding box of a marker in pixels
+ */
+export function getMarkerBounds(
+    marker: MarkerWithLane,
+    pixelsPerSecond: number,
+    laneHeight: number
+): { left: number; right: number; top: number; bottom: number } {
+    return {
+        left: marker.start * pixelsPerSecond,
+        right: marker.end * pixelsPerSecond,
+        top: marker.lane * laneHeight,
+        bottom: (marker.lane + 1) * laneHeight,
+    };
+}
+
+/**
+ * Check if two rectangles intersect
+ */
+export function rectangleIntersects(
+    rect: SelectionRect,
+    bounds: { left: number; right: number; top: number; bottom: number }
+): boolean {
+    // Normalize rectangle (handle dragging in any direction)
+    const selLeft = Math.min(rect.startX, rect.endX);
+    const selRight = Math.max(rect.startX, rect.endX);
+    const selTop = Math.min(rect.startY, rect.endY);
+    const selBottom = Math.max(rect.startY, rect.endY);
+
+    return !(
+        selRight < bounds.left ||
+        selLeft > bounds.right ||
+        selBottom < bounds.top ||
+        selTop > bounds.bottom
+    );
+}
+
+/**
+ * Get IDs of markers that intersect with a selection rectangle
+ */
+export function getMarkersInSelection(
+    markers: MarkerWithLane[],
+    selectionRect: SelectionRect,
+    pixelsPerSecond: number,
+    laneHeight: number,
+    scrollLeft: number
+): string[] {
+    // Adjust selection rect for scroll position
+    const adjustedRect: SelectionRect = {
+        startX: selectionRect.startX + scrollLeft,
+        endX: selectionRect.endX + scrollLeft,
+        startY: selectionRect.startY,
+        endY: selectionRect.endY,
+    };
+
+    return markers
+        .filter((marker) => {
+            const bounds = getMarkerBounds(marker, pixelsPerSecond, laneHeight);
+            return rectangleIntersects(adjustedRect, bounds);
+        })
+        .map((marker) => marker.id);
 }

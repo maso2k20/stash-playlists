@@ -29,7 +29,7 @@ import VideoJS from "@/components/videojs/VideoJS";
 import { TimelineEditor } from "@/components/timeline";
 import { MarkerDetailPanel } from "@/components/timeline/MarkerDetailPanel";
 import { BulkTagsPanel } from "@/components/timeline/BulkTagsPanel";
-import type { Tag, MarkerForTimeline, Draft } from "@/types/markers";
+import type { Tag, MarkerForTimeline, Draft, SelectionRect } from "@/types/markers";
 
 export default function TimelineEditorPage() {
     const params = useParams<{ id: string }>();
@@ -90,14 +90,17 @@ export default function TimelineEditorPage() {
         handleSaveRow,
         handleResetRow,
         handleDeleteRow,
+        handleDeleteMultiple,
         handleSaveAll,
         addMarkersOrganisedTag,
         isDirtyExisting,
         isTemp,
     } = useSceneMarkers(sceneId, tagOptions);
 
-    // Local state
-    const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+    // Local state - multi-select support
+    const [selectedMarkerIds, setSelectedMarkerIds] = useState<Set<string>>(new Set());
+    // Derived single selection for detail panel (last selected, or null if multiple)
+    const selectedMarkerId = selectedMarkerIds.size === 1 ? Array.from(selectedMarkerIds)[0] : null;
     const [currentTime, setCurrentTime] = useState(0);
     const [videoDuration, setVideoDuration] = useState(0);
     const [playerReady, setPlayerReady] = useState(false);
@@ -110,6 +113,10 @@ export default function TimelineEditorPage() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const deleteButtonRef = useRef<HTMLButtonElement>(null);
+
+    // Bulk delete confirmation dialog
+    const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+    const bulkDeleteButtonRef = useRef<HTMLButtonElement>(null);
 
     // Pause video and focus delete button when dialog opens
     useEffect(() => {
@@ -125,6 +132,19 @@ export default function TimelineEditorPage() {
             return () => clearTimeout(timer);
         }
     }, [deleteDialogOpen]);
+
+    // Focus bulk delete button when bulk dialog opens
+    useEffect(() => {
+        if (bulkDeleteDialogOpen) {
+            if (playerRef.current && !playerRef.current.paused()) {
+                playerRef.current.pause();
+            }
+            const timer = setTimeout(() => {
+                bulkDeleteButtonRef.current?.focus();
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [bulkDeleteDialogOpen]);
 
     // Snackbar for notifications
     const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "neutral" }>({
@@ -296,7 +316,7 @@ export default function TimelineEditorPage() {
                         : marker.primary_tag?.name) || undefined,
                 isDirty,
                 isNew: false,
-                isActive: marker.id === selectedMarkerId,
+                isActive: selectedMarkerIds.has(marker.id),
             });
         }
 
@@ -317,12 +337,12 @@ export default function TimelineEditorPage() {
                     : undefined,
                 isDirty: true,
                 isNew: true,
-                isActive: id === selectedMarkerId,
+                isActive: selectedMarkerIds.has(id),
             });
         }
 
         return result;
-    }, [markers, drafts, newIds, tagOptions, selectedMarkerId, isDirtyExisting]);
+    }, [markers, drafts, newIds, tagOptions, selectedMarkerIds, isDirtyExisting]);
 
     // Video stream URL (same format as list view)
     const streamUrl = useMemo(() => {
@@ -376,14 +396,33 @@ export default function TimelineEditorPage() {
     }, []);
 
     // Timeline handlers
-    const handleMarkerSelect = useCallback((id: string) => {
-        // Single click: just select the marker, don't seek
-        setSelectedMarkerId(id || null);
+    const handleMarkerSelect = useCallback((id: string, addToSelection?: boolean) => {
+        if (!id) {
+            // Clicking empty space clears selection
+            setSelectedMarkerIds(new Set());
+            return;
+        }
+
+        if (addToSelection) {
+            // Ctrl/Cmd+click: toggle marker in/out of selection
+            setSelectedMarkerIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) {
+                    next.delete(id);
+                } else {
+                    next.add(id);
+                }
+                return next;
+            });
+        } else {
+            // Regular click: replace selection with single marker
+            setSelectedMarkerIds(new Set([id]));
+        }
     }, []);
 
     const handleMarkerDoubleClick = useCallback((id: string) => {
         // Double click: select AND seek to marker start
-        setSelectedMarkerId(id || null);
+        setSelectedMarkerIds(id ? new Set([id]) : new Set());
 
         if (id) {
             const draft = drafts[id];
@@ -406,8 +445,13 @@ export default function TimelineEditorPage() {
             seconds: Math.round(currentTime * 10) / 10,
             end_seconds: Math.round((currentTime + 10) * 10) / 10, // Default 10 second duration
         });
-        setSelectedMarkerId(newId);
+        setSelectedMarkerIds(new Set([newId]));
     }, [addNewMarker, currentTime]);
+
+    // Handle drag-selection setting multiple markers at once
+    const handleSetSelection = useCallback((ids: string[]) => {
+        setSelectedMarkerIds(new Set(ids));
+    }, []);
 
     // Selected marker data
     const selectedDraft = selectedMarkerId ? drafts[selectedMarkerId] : null;
@@ -451,7 +495,7 @@ export default function TimelineEditorPage() {
     const confirmDelete = useCallback(() => {
         if (pendingDeleteId) {
             handleDeleteRow(pendingDeleteId);
-            setSelectedMarkerId(null);
+            setSelectedMarkerIds(new Set());
         }
         setDeleteDialogOpen(false);
         setPendingDeleteId(null);
@@ -460,6 +504,18 @@ export default function TimelineEditorPage() {
     const cancelDelete = useCallback(() => {
         setDeleteDialogOpen(false);
         setPendingDeleteId(null);
+    }, []);
+
+    // Bulk delete handlers
+    const confirmBulkDelete = useCallback(async () => {
+        const ids = Array.from(selectedMarkerIds);
+        await handleDeleteMultiple(ids);
+        setSelectedMarkerIds(new Set());
+        setBulkDeleteDialogOpen(false);
+    }, [selectedMarkerIds, handleDeleteMultiple]);
+
+    const cancelBulkDelete = useCallback(() => {
+        setBulkDeleteDialogOpen(false);
     }, []);
 
     // Keyboard shortcuts
@@ -498,11 +554,21 @@ export default function TimelineEditorPage() {
                     break;
                 case "Delete":
                 case "Backspace":
-                    if (selectedMarkerId && !deleteDialogOpen) {
+                    if (selectedMarkerIds.size > 0 && !deleteDialogOpen && !bulkDeleteDialogOpen) {
                         e.preventDefault();
-                        setPendingDeleteId(selectedMarkerId);
-                        setDeleteDialogOpen(true);
+                        if (selectedMarkerIds.size === 1) {
+                            // Single selection - use existing single delete dialog
+                            setPendingDeleteId(Array.from(selectedMarkerIds)[0]);
+                            setDeleteDialogOpen(true);
+                        } else {
+                            // Multiple selection - use bulk delete dialog
+                            setBulkDeleteDialogOpen(true);
+                        }
                     }
+                    break;
+                case "Escape":
+                    e.preventDefault();
+                    setSelectedMarkerIds(new Set());
                     break;
                 case " ": // Space bar for play/pause
                     e.preventDefault();
@@ -519,7 +585,7 @@ export default function TimelineEditorPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [playerReady, currentTime, duration, selectedMarkerId, deleteDialogOpen]);
+    }, [playerReady, currentTime, duration, selectedMarkerIds, deleteDialogOpen, bulkDeleteDialogOpen]);
 
     // Loading state
     if (loading && !scene) {
@@ -707,11 +773,14 @@ export default function TimelineEditorPage() {
                     duration={duration}
                     currentTime={currentTime}
                     selectedMarkerId={selectedMarkerId}
+                    selectedCount={selectedMarkerIds.size}
                     onMarkerSelect={handleMarkerSelect}
+                    onSetSelection={handleSetSelection}
                     onMarkerDoubleClick={handleMarkerDoubleClick}
                     onMarkerDragEnd={handleMarkerDragEnd}
                     onSeek={handleSeek}
                     onAddMarker={handleAddMarker}
+                    onDeleteSelected={() => setBulkDeleteDialogOpen(true)}
                 />
             </Box>
 
@@ -739,6 +808,35 @@ export default function TimelineEditorPage() {
                         </Button>
                         <Button ref={deleteButtonRef} variant="solid" color="danger" onClick={confirmDelete} autoFocus>
                             Delete
+                        </Button>
+                    </DialogActions>
+                </ModalDialog>
+            </Modal>
+
+            {/* Bulk Delete Confirmation Dialog */}
+            <Modal open={bulkDeleteDialogOpen} onClose={cancelBulkDelete}>
+                <ModalDialog
+                    sx={{
+                        position: "fixed",
+                        top: "auto",
+                        bottom: "25%",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        minWidth: 300,
+                    }}
+                >
+                    <DialogTitle>Delete {selectedMarkerIds.size} Markers</DialogTitle>
+                    <DialogContent>
+                        <Typography level="body-sm">
+                            Are you sure you want to delete {selectedMarkerIds.size} markers? This action cannot be undone.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button variant="plain" color="neutral" onClick={cancelBulkDelete}>
+                            Cancel
+                        </Button>
+                        <Button ref={bulkDeleteButtonRef} variant="solid" color="danger" onClick={confirmBulkDelete} autoFocus>
+                            Delete All
                         </Button>
                     </DialogActions>
                 </ModalDialog>

@@ -6,6 +6,7 @@ import AddIcon from "@mui/icons-material/Add";
 import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 import FitScreenIcon from "@mui/icons-material/FitScreen";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { TimelineRuler } from "./TimelineRuler";
 import { TimelineTrack, LANE_HEIGHT } from "./TimelineTrack";
 import { TimelinePlayhead } from "./TimelinePlayhead";
@@ -20,12 +21,15 @@ interface TimelineEditorProps {
     markers: MarkerForTimeline[];
     duration: number;
     currentTime: number;
-    selectedMarkerId: string | null;
-    onMarkerSelect: (id: string) => void;
+    selectedMarkerId: string | null; // For backward compat (single selection for detail panel)
+    selectedCount?: number; // Number of selected markers for bulk operations
+    onMarkerSelect: (id: string, addToSelection?: boolean) => void;
+    onSetSelection?: (ids: string[]) => void; // For drag-selection
     onMarkerDoubleClick?: (id: string) => void;
     onMarkerDragEnd: (id: string, newStart: number, newEnd: number) => void;
     onSeek: (time: number) => void;
     onAddMarker: () => void;
+    onDeleteSelected?: () => void; // Handler for bulk delete
 }
 
 const MIN_ZOOM = 0.5;
@@ -50,11 +54,14 @@ export function TimelineEditor({
     duration,
     currentTime,
     selectedMarkerId,
+    selectedCount = 0,
     onMarkerSelect,
+    onSetSelection,
     onMarkerDoubleClick,
     onMarkerDragEnd,
     onSeek,
     onAddMarker,
+    onDeleteSelected,
 }: TimelineEditorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(800);
@@ -156,7 +163,7 @@ export function TimelineEditor({
         (e: React.MouseEvent<HTMLDivElement>) => {
             // Only handle if clicking directly on the track container
             if (e.target === e.currentTarget) {
-                onMarkerSelect(""); // Deselect
+                onMarkerSelect("", false); // Deselect
             }
         },
         [onMarkerSelect]
@@ -237,6 +244,19 @@ export function TimelineEditor({
                     {formatTime(currentTime)} / {formatTime(duration)}
                 </Typography>
 
+                {/* Delete selected button - only visible when multiple markers selected */}
+                {selectedCount > 1 && onDeleteSelected && (
+                    <Button
+                        size="sm"
+                        variant="soft"
+                        color="danger"
+                        startDecorator={<DeleteOutlineIcon />}
+                        onClick={onDeleteSelected}
+                    >
+                        Delete ({selectedCount})
+                    </Button>
+                )}
+
                 {/* Add marker button */}
                 <Button
                     size="sm"
@@ -257,6 +277,9 @@ export function TimelineEditor({
                     position: "relative",
                     overflowX: "auto",
                     overflowY: "hidden",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
                 }}
             >
                 <Box
@@ -264,6 +287,9 @@ export function TimelineEditor({
                         position: "relative",
                         width: totalWidth,
                         minWidth: containerWidth,
+                        flex: 1,
+                        display: "flex",
+                        flexDirection: "column",
                     }}
                 >
                     {/* Ruler */}
@@ -276,17 +302,15 @@ export function TimelineEditor({
                     />
 
                     {/* Track area */}
-                    <Box
-                        onClick={handleTrackClick}
-                        sx={{ position: "relative" }}
-                    >
+                    <Box sx={{ position: "relative", flex: 1 }}>
                         <TimelineTrack
                             markers={markersWithLanes}
                             pixelsPerSecond={pixelsPerSecond}
-                            scrollLeft={0} // Track handles its own positioning
+                            scrollLeft={scrollLeft}
                             selectedMarkerId={selectedMarkerId}
                             duration={duration}
                             onMarkerSelect={onMarkerSelect}
+                            onSetSelection={onSetSelection}
                             onMarkerDoubleClick={onMarkerDoubleClick}
                             onMarkerDragEnd={onMarkerDragEnd}
                         />

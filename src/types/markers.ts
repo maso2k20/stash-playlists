@@ -46,3 +46,11 @@ export type MarkerForTimeline = {
 export type MarkerWithLane = MarkerForTimeline & {
     lane: number;
 };
+
+// Selection rectangle for drag-select
+export type SelectionRect = {
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+};

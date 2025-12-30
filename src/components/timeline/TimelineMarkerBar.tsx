@@ -10,7 +10,7 @@ interface TimelineMarkerBarProps {
     pixelsPerSecond: number;
     laneHeight: number;
     isSelected: boolean;
-    onSelect: (id: string) => void;
+    onSelect: (id: string, addToSelection?: boolean) => void;
     onDoubleClick?: (id: string) => void;
     onDragEnd: (id: string, newStart: number, newEnd: number) => void;
     maxDuration: number;
@@ -138,7 +138,9 @@ export function TimelineMarkerBar({
         if (!isDragging) {
             // Blur any focused element so keyboard shortcuts work
             (document.activeElement as HTMLElement)?.blur?.();
-            onSelect(marker.id);
+            // Ctrl/Cmd+click adds to selection
+            const addToSelection = e.ctrlKey || e.metaKey;
+            onSelect(marker.id, addToSelection);
         }
     };
 
@@ -151,6 +153,7 @@ export function TimelineMarkerBar({
 
     return (
         <Box
+            data-marker-bar
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}
             onMouseDown={(e) => handleMouseDown(e, "move")}
@@ -164,6 +167,7 @@ export function TimelineMarkerBar({
                 border: `2px solid ${isSelected ? "#00E676" : colors.border}`,
                 borderRadius: "4px",
                 cursor: isDragging ? "grabbing" : "grab",
+                pointerEvents: "auto",
                 display: "flex",
                 alignItems: "center",
                 overflow: "hidden",
