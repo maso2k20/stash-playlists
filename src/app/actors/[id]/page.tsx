@@ -23,6 +23,7 @@ import {
   Button,
   Chip,
   Autocomplete,
+  Checkbox,
   Modal,
   ModalDialog,
   DialogTitle,
@@ -37,7 +38,8 @@ import {
   IconButton,
 } from "@mui/joy";
 
-import { Search, ArrowUpDown, Plus } from "lucide-react";
+import { Search, ArrowUpDown, Plus, CheckSquare, Square, Film } from "lucide-react";
+import FFmpegClipGenerator from "@/components/FFmpegClipGenerator";
 
 import StarRating from "@/components/StarRating";
 
@@ -266,8 +268,12 @@ export default function Page() {
   
   // Total count state
   const [totalCount, setTotalCount] = useState(0);
-  
-  
+
+  // FFmpeg selection state
+  const [selectedMarkerIds, setSelectedMarkerIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
+
   // Initialize filters from URL on mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -482,6 +488,32 @@ export default function Page() {
     [playlists]
   );
 
+  // Selection helpers
+  const toggleMarkerSelection = (markerId: string) => {
+    setSelectedMarkerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(markerId)) {
+        next.delete(markerId);
+      } else {
+        next.add(markerId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedMarkerIds(new Set(scenes.map((m: any) => m.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedMarkerIds(new Set());
+  };
+
+  // Get selected markers data for FFmpeg dialog
+  const selectedMarkers = useMemo(() => {
+    return scenes.filter((m: any) => selectedMarkerIds.has(m.id));
+  }, [scenes, selectedMarkerIds]);
+
   // Handle opening single marker playlist dialog
   const handleAddSingleToPlaylist = (marker: any, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent card click navigation
@@ -676,6 +708,83 @@ export default function Page() {
         </Button>
       </Stack>
 
+      {/* Selection Mode Toolbar */}
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        sx={{
+          mb: 2,
+          p: 1,
+          borderRadius: "md",
+          bgcolor: isSelectionMode ? "background.level1" : "transparent",
+          border: isSelectionMode ? "1px solid" : "1px solid transparent",
+          borderColor: isSelectionMode ? "neutral.outlinedBorder" : "transparent",
+          transition: "all 0.2s ease",
+          width: "fit-content",
+        }}
+      >
+        <Button
+          size="sm"
+          variant={isSelectionMode ? "solid" : "soft"}
+          color={isSelectionMode ? "primary" : "neutral"}
+          startDecorator={isSelectionMode ? <CheckSquare size={16} /> : <Square size={16} />}
+          onClick={() => {
+            setIsSelectionMode(!isSelectionMode);
+            if (isSelectionMode) {
+              clearSelection();
+            }
+          }}
+        >
+          {isSelectionMode ? "Exit Selection" : "Select Clips To Export"}
+        </Button>
+
+        {isSelectionMode && (
+          <>
+            <Chip
+              size="sm"
+              variant="soft"
+              color={selectedMarkerIds.size > 0 ? "primary" : "neutral"}
+            >
+              {selectedMarkerIds.size} selected
+            </Chip>
+
+            <Button
+              size="sm"
+              variant="soft"
+              color="primary"
+              onClick={selectAllVisible}
+              disabled={scenes.length === 0}
+            >
+              Select All
+            </Button>
+
+            <Button
+              size="sm"
+              variant="solid"
+              color="danger"
+              onClick={clearSelection}
+              disabled={selectedMarkerIds.size === 0}
+            >
+              Clear
+            </Button>
+
+            <Box sx={{ width: 16 }} />
+
+            <Button
+              size="sm"
+              variant="solid"
+              color="success"
+              startDecorator={<Film size={16} />}
+              disabled={selectedMarkerIds.size === 0}
+              onClick={() => setFfmpegDialogOpen(true)}
+            >
+              Generate FFmpeg
+            </Button>
+          </>
+        )}
+      </Stack>
+
       {/* Top Pagination Controls - only show when not filtering */}
       {!isFiltering && !anyLoading && (
         <PaginationControls 
@@ -711,7 +820,7 @@ export default function Page() {
 
       {!anyLoading && (error || tagsError || playlistsError) && (
         <Typography color="danger" level="body-sm" sx={{ mb: 2 }}>
-          {error?.message || tagsError || playlistsError}
+          {error?.message || (tagsError instanceof Error ? tagsError.message : tagsError) || playlistsError}
         </Typography>
       )}
 
@@ -776,7 +885,11 @@ export default function Page() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        router.push(`/scenes/${marker.scene.id}`);
+                        if (isSelectionMode) {
+                          toggleMarkerSelection(marker.id);
+                        } else {
+                          router.push(`/scenes/${marker.scene.id}`);
+                        }
                       }
                     }}
                     sx={{
@@ -786,11 +899,12 @@ export default function Page() {
                       position: "relative",
                       boxShadow: "sm",
                       transition: "transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease",
-                      border: "2px solid transparent",
-                      "&:hover": { 
-                        transform: "translateY(-2px)", 
+                      border: selectedMarkerIds.has(marker.id) ? "3px solid" : "2px solid transparent",
+                      borderColor: selectedMarkerIds.has(marker.id) ? "success.400" : "transparent",
+                      "&:hover": {
+                        transform: "translateY(-2px)",
                         boxShadow: "md",
-                        borderColor: "primary.200",
+                        borderColor: selectedMarkerIds.has(marker.id) ? "success.500" : "primary.200",
                       },
                       "&:focus": {
                         outline: "2px solid",
@@ -799,7 +913,13 @@ export default function Page() {
                       },
                       cursor: "pointer",
                     }}
-                    onClick={() => router.push(`/scenes/${marker.scene.id}`)}
+                    onClick={() => {
+                      if (isSelectionMode) {
+                        toggleMarkerSelection(marker.id);
+                      } else {
+                        router.push(`/scenes/${marker.scene.id}`);
+                      }
+                    }}
                   >
                     <AspectRatio ratio="16/9">
                       {/* Media (screenshot -> preview on hover) */}
@@ -844,7 +964,7 @@ export default function Page() {
                         </Box>
                       )}
 
-                      {/* Add to playlist button (top-left) */}
+                      {/* Selection checkbox or Add to playlist button (top-left) */}
                       <Box
                         sx={{
                           position: "absolute",
@@ -853,25 +973,45 @@ export default function Page() {
                           zIndex: 2,
                         }}
                       >
-                        <IconButton
-                          size="sm"
-                          variant="solid"
-                          color="primary"
-                          onClick={(e) => handleAddSingleToPlaylist(marker, e)}
-                          sx={{
-                            backgroundColor: "rgba(25, 118, 210, 0.9)",
-                            backdropFilter: "blur(4px)",
-                            border: "1px solid rgba(255, 255, 255, 0.2)",
-                            "&:hover": {
-                              backgroundColor: "rgba(25, 118, 210, 1)",
-                              transform: "scale(1.05)",
-                            },
-                            transition: "all 150ms ease",
-                          }}
-                          title="Add to playlist"
-                        >
-                          <Plus size={16} />
-                        </IconButton>
+                        {isSelectionMode ? (
+                          <Checkbox
+                            checked={selectedMarkerIds.has(marker.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleMarkerSelection(marker.id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            size="lg"
+                            sx={{
+                              bgcolor: "rgba(255, 255, 255, 0.9)",
+                              borderRadius: "sm",
+                              backdropFilter: "blur(4px)",
+                              "&:hover": {
+                                bgcolor: "rgba(255, 255, 255, 1)",
+                              },
+                            }}
+                          />
+                        ) : (
+                          <IconButton
+                            size="sm"
+                            variant="solid"
+                            color="primary"
+                            onClick={(e) => handleAddSingleToPlaylist(marker, e)}
+                            sx={{
+                              backgroundColor: "rgba(25, 118, 210, 0.9)",
+                              backdropFilter: "blur(4px)",
+                              border: "1px solid rgba(255, 255, 255, 0.2)",
+                              "&:hover": {
+                                backgroundColor: "rgba(25, 118, 210, 1)",
+                                transform: "scale(1.05)",
+                              },
+                              transition: "all 150ms ease",
+                            }}
+                            title="Add to playlist"
+                          >
+                            <Plus size={16} />
+                          </IconButton>
+                        )}
                       </Box>
 
                       {/* Bottom gradient + title/time */}
@@ -964,6 +1104,15 @@ export default function Page() {
           </DialogActions>
         </ModalDialog>
       </Modal>
+
+      {/* FFmpeg Clip Generator Dialog */}
+      <FFmpegClipGenerator
+        open={ffmpegDialogOpen}
+        onClose={() => setFfmpegDialogOpen(false)}
+        markers={selectedMarkers}
+        stashServer={String(stashServer || "")}
+        stashApiKey={String(stashAPI || "")}
+      />
     </Sheet>
   );
 }
