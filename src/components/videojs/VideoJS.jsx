@@ -161,6 +161,8 @@ export const VideoJS = (props) => {
   const playerRef = React.useRef(null);
   const vttBlobRef = React.useRef(null);
   const wasFullscreenRef = React.useRef(false);
+  const sourceIdRef = React.useRef(0); // Track source changes to invalidate stale callbacks
+  const metadataHandlerRef = React.useRef(null); // Store handler ref for cleanup
   const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
 
   const [visible, setVisible] = React.useState(true);
@@ -253,55 +255,119 @@ export const VideoJS = (props) => {
           addCustomMarkers(player, markers);
         }
         
-        // Start playback after offset is applied and player is fully ready
+        // Start playback after offset is applied and metadata is loaded
         if (options.autoplay) {
-          // Wait for the next tick to ensure offset is fully applied
-          setTimeout(() => {
-            if (player && !player.isDisposed()) {
-              player.play();
-            }
-          }, 0);
+          const effectiveStart = typeof offset?.start === 'number' ? offset.start : 0;
+
+          player.one('loadedmetadata', () => {
+            if (player.isDisposed()) return;
+
+            console.log('[VideoJS] Initial player metadata loaded, seeking to offset start:', effectiveStart);
+
+            // Seek to position 0 in offset-adjusted time (which is effectiveStart in real time)
+            player.currentTime(0);
+
+            // Verify seek worked after a short delay
+            setTimeout(() => {
+              if (player.isDisposed()) return;
+              const actualTime = player.tech_?.currentTime?.() || 0;
+              console.log('[VideoJS] Initial player after seek, actual time:', actualTime, 'expected:', effectiveStart);
+
+              // If offset plugin didn't work, force the seek directly
+              if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
+                console.log('[VideoJS] Initial offset seek failed, forcing direct seek to:', effectiveStart);
+                try {
+                  player.tech_.setCurrentTime(effectiveStart);
+                } catch (e) {
+                  console.log('[VideoJS] Initial direct seek failed:', e);
+                }
+              }
+            }, 50);
+
+            player.play()?.catch((e) => console.log('[VideoJS] Initial play failed:', e));
+          });
         }
       }));
     } else {
       const player = playerRef.current;
 
+      // Increment source ID to invalidate any pending callbacks from previous sources
+      sourceIdRef.current += 1;
+      const currentSourceId = sourceIdRef.current;
+
       console.log('[VideoJS] Source change detected', {
+        sourceId: currentSourceId,
         offset: { start: offsetStart, end: offsetEnd },
         source: sourceUrl?.slice(-50),
-        hasStarted: props.hasStarted
+        hasStarted: props.hasStarted,
+        wallMode: wallMode
       });
+
+      // Remove any existing loadedmetadata listener from previous source change
+      if (metadataHandlerRef.current) {
+        player.off('loadedmetadata', metadataHandlerRef.current);
+        metadataHandlerRef.current = null;
+      }
 
       // Disable native autoplay to prevent playback before offset is applied
       player.autoplay(false);
 
-      // Apply offset BEFORE loading new source so the plugin is ready
-      if (offsetStart !== undefined && offsetEnd !== undefined) {
-        player.offset({ start: offsetStart, end: offsetEnd });
-        console.log('[VideoJS] Offset applied:', offsetStart, '->', offsetEnd);
-      }
+      // Reset the offset plugin completely before applying new offset
+      // This ensures the plugin's internal state is clean
+      player.offset({ start: 0, end: Infinity, restart_beginning: false });
+
+      // Apply the actual offset BEFORE loading new source
+      const effectiveStart = typeof offsetStart === 'number' ? offsetStart : 0;
+      const effectiveEnd = typeof offsetEnd === 'number' ? offsetEnd : Infinity;
+      player.offset({ start: effectiveStart, end: effectiveEnd, restart_beginning: false });
+      console.log('[VideoJS] Offset applied:', effectiveStart, '->', effectiveEnd, 'sourceId:', currentSourceId);
 
       player.src([{ src: sourceUrl, type: 'video/mp4' }]);
-      console.log('[VideoJS] Source set, waiting for loadedmetadata...');
+      console.log('[VideoJS] Source set, waiting for loadedmetadata... sourceId:', currentSourceId);
 
-      // Wait for metadata to load before seeking and playing
-      player.one('loadedmetadata', () => {
+      // Create the handler and store reference for cleanup
+      const handleMetadataLoaded = () => {
+        // Check if this callback is stale (source changed again before we got here)
+        if (currentSourceId !== sourceIdRef.current) {
+          console.log('[VideoJS] Stale loadedmetadata callback ignored, sourceId:', currentSourceId, 'current:', sourceIdRef.current);
+          return;
+        }
+
         if (player.isDisposed()) {
           console.log('[VideoJS] Player disposed before metadata loaded');
           return;
         }
 
         const realTimeBefore = player.tech_?.currentTime?.() || 'unknown';
-        console.log('[VideoJS] Metadata loaded, real currentTime before seek:', realTimeBefore);
+        console.log('[VideoJS] Metadata loaded, real currentTime before seek:', realTimeBefore, 'sourceId:', currentSourceId);
 
         // Seek to position 0 in offset-adjusted time (which is _offsetStart in real time)
         player.currentTime(0);
 
-        const realTimeAfter = player.tech_?.currentTime?.() || 'unknown';
-        console.log('[VideoJS] After seek to 0, real currentTime:', realTimeAfter, 'expected:', offsetStart);
+        // Double-check the seek worked - if not, force seek to the real start time
+        setTimeout(() => {
+          // Check again for stale callback
+          if (currentSourceId !== sourceIdRef.current || player.isDisposed()) {
+            console.log('[VideoJS] Stale seek check ignored');
+            return;
+          }
+
+          const actualTime = player.tech_?.currentTime?.() || 0;
+          console.log('[VideoJS] After seek, actual time:', actualTime, 'expected:', effectiveStart, 'sourceId:', currentSourceId);
+
+          // If offset plugin didn't work, force the seek directly
+          if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
+            console.log('[VideoJS] Offset seek failed, forcing direct seek to:', effectiveStart);
+            try {
+              player.tech_.setCurrentTime(effectiveStart);
+            } catch (e) {
+              console.log('[VideoJS] Direct seek failed:', e);
+            }
+          }
+        }, 50);
 
         if (props.hasStarted) {
-          console.log('[VideoJS] Starting playback');
+          console.log('[VideoJS] Starting playback, sourceId:', currentSourceId);
           player.play()?.catch((e) => console.log('[VideoJS] Play failed:', e));
         }
 
@@ -309,7 +375,11 @@ export const VideoJS = (props) => {
         if (wasFullscreenRef.current && !player.isFullscreen()) {
           player.requestFullscreen();
         }
-      });
+      };
+
+      // Store handler reference and use player.one() for single-fire
+      metadataHandlerRef.current = handleMetadataLoaded;
+      player.one('loadedmetadata', handleMetadataLoaded);
     }
   }, [sourceUrl, offsetStart, offsetEnd, props.hasStarted]);
 
