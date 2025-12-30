@@ -58,6 +58,7 @@ export default function PlaylistsPage() {
   // Lists & UI state
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Per-playlist stats and conditions
@@ -110,8 +111,12 @@ export default function PlaylistsPage() {
 
   // Stats via /api/playlists/[id]/stats
   useEffect(() => {
-    if (!playlists.length) return;
+    if (!playlists.length) {
+      setStatsLoading(false);
+      return;
+    }
     let cancelled = false;
+    setStatsLoading(true);
     (async () => {
       const results = await Promise.allSettled(
         playlists.map(async (p) => {
@@ -132,6 +137,7 @@ export default function PlaylistsPage() {
         }
         return next;
       });
+      setStatsLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -545,7 +551,7 @@ export default function PlaylistsPage() {
         </Stack>
       </Stack>
 
-      {loading && (
+      {(loading || statsLoading) && (
         <Box sx={{ mb: 2 }}>
           <LinearProgress thickness={2} />
         </Box>
@@ -561,7 +567,7 @@ export default function PlaylistsPage() {
         </Sheet>
       )}
 
-      {!loading && playlists.length === 0 && (
+      {!loading && !statsLoading && playlists.length === 0 && (
         <Sheet
           variant="outlined"
           sx={{
@@ -585,7 +591,7 @@ export default function PlaylistsPage() {
         </Sheet>
       )}
 
-      {!loading && playlists.length > 0 && filteredAndSortedPlaylists.length === 0 && (
+      {!loading && !statsLoading && playlists.length > 0 && filteredAndSortedPlaylists.length === 0 && (
         <Sheet
           variant="outlined"
           sx={{
