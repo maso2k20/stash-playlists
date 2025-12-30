@@ -118,6 +118,10 @@ export default function TimelineEditorPage() {
     const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
     const bulkDeleteButtonRef = useRef<HTMLButtonElement>(null);
 
+    // Bulk merge confirmation dialog
+    const [bulkMergeDialogOpen, setBulkMergeDialogOpen] = useState(false);
+    const [merging, setMerging] = useState(false);
+
     // Pause video and focus delete button when dialog opens
     useEffect(() => {
         if (deleteDialogOpen) {
@@ -518,6 +522,80 @@ export default function TimelineEditorPage() {
         setBulkDeleteDialogOpen(false);
     }, []);
 
+    // Bulk merge handlers
+    const confirmBulkMerge = useCallback(async () => {
+        setMerging(true);
+        try {
+            const ids = Array.from(selectedMarkerIds);
+
+            // Get marker data (combining originals with drafts)
+            const selectedMarkers = ids.map(id => {
+                const original = markers.find(m => m.id === id);
+                const draft = drafts[id];
+                if (!original && !draft) return null;
+                return {
+                    id,
+                    seconds: draft?.seconds ?? original?.seconds ?? 0,
+                    end_seconds: draft?.end_seconds ?? original?.end_seconds ?? null,
+                    title: draft?.title ?? original?.title ?? '',
+                    primary_tag_id: draft?.primary_tag_id ?? original?.primary_tag?.id ?? null,
+                    tag_ids: draft?.tag_ids ?? original?.tags?.map(t => t.id) ?? [],
+                };
+            }).filter(Boolean) as Array<{
+                id: string;
+                seconds: number;
+                end_seconds: number | null;
+                title: string;
+                primary_tag_id: string | null;
+                tag_ids: string[];
+            }>;
+
+            if (selectedMarkers.length < 2) {
+                setBulkMergeDialogOpen(false);
+                return;
+            }
+
+            // Sort by start time
+            selectedMarkers.sort((a, b) => a.seconds - b.seconds);
+
+            const firstMarker = selectedMarkers[0];
+
+            // Calculate max end time
+            const maxEndTime = Math.max(
+                ...selectedMarkers.map(m => m.end_seconds ?? m.seconds)
+            );
+
+            // Combine all unique tags
+            const allTagIds = new Set<string>();
+            selectedMarkers.forEach(m => {
+                m.tag_ids.forEach(id => allTagIds.add(id));
+            });
+
+            // Update first marker's draft with merged values
+            setDraft(firstMarker.id, {
+                title: firstMarker.title,
+                seconds: firstMarker.seconds,
+                end_seconds: maxEndTime,
+                primary_tag_id: firstMarker.primary_tag_id,
+                tag_ids: Array.from(allTagIds),
+            });
+
+            // Save the first marker
+            await handleSaveRow(firstMarker.id);
+
+            // Delete remaining markers
+            const idsToDelete = ids.filter(id => id !== firstMarker.id);
+            if (idsToDelete.length > 0) {
+                await handleDeleteMultiple(idsToDelete);
+            }
+
+            setSelectedMarkerIds(new Set());
+            setBulkMergeDialogOpen(false);
+        } finally {
+            setMerging(false);
+        }
+    }, [selectedMarkerIds, markers, drafts, setDraft, handleSaveRow, handleDeleteMultiple]);
+
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -566,6 +644,13 @@ export default function TimelineEditorPage() {
                         }
                     }
                     break;
+                case "m":
+                case "M":
+                    if (selectedMarkerIds.size > 1 && !bulkMergeDialogOpen && !bulkDeleteDialogOpen) {
+                        e.preventDefault();
+                        setBulkMergeDialogOpen(true);
+                    }
+                    break;
                 case "Escape":
                     e.preventDefault();
                     setSelectedMarkerIds(new Set());
@@ -585,7 +670,7 @@ export default function TimelineEditorPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [playerReady, currentTime, duration, selectedMarkerIds, deleteDialogOpen, bulkDeleteDialogOpen]);
+    }, [playerReady, currentTime, duration, selectedMarkerIds, deleteDialogOpen, bulkDeleteDialogOpen, bulkMergeDialogOpen]);
 
     // Loading state
     if (loading && !scene) {
@@ -781,6 +866,7 @@ export default function TimelineEditorPage() {
                     onSeek={handleSeek}
                     onAddMarker={handleAddMarker}
                     onDeleteSelected={() => setBulkDeleteDialogOpen(true)}
+                    onMergeSelected={() => setBulkMergeDialogOpen(true)}
                 />
             </Box>
 
@@ -839,6 +925,40 @@ export default function TimelineEditorPage() {
                             Delete All
                         </Button>
                     </DialogActions>
+                </ModalDialog>
+            </Modal>
+
+            {/* Bulk Merge Confirmation Dialog */}
+            <Modal open={bulkMergeDialogOpen} onClose={() => !merging && setBulkMergeDialogOpen(false)}>
+                <ModalDialog
+                    sx={{
+                        position: "fixed",
+                        top: "auto",
+                        bottom: "25%",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        minWidth: 300,
+                    }}
+                >
+                    <DialogTitle>{merging ? "Merging Markers..." : `Merge ${selectedMarkerIds.size} Markers`}</DialogTitle>
+                    <DialogContent>
+                        <Typography level="body-sm">
+                            {merging
+                                ? "Please wait while the markers are being merged."
+                                : `Combine ${selectedMarkerIds.size} markers into one? The merged marker will span from the earliest start to the latest end time.`
+                            }
+                        </Typography>
+                    </DialogContent>
+                    {!merging && (
+                        <DialogActions>
+                            <Button variant="plain" color="neutral" onClick={() => setBulkMergeDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button variant="solid" color="primary" onClick={confirmBulkMerge} autoFocus>
+                                Merge All
+                            </Button>
+                        </DialogActions>
+                    )}
                 </ModalDialog>
             </Modal>
 

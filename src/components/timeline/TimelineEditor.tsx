@@ -7,6 +7,7 @@ import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import ZoomOutIcon from "@mui/icons-material/ZoomOut";
 import FitScreenIcon from "@mui/icons-material/FitScreen";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import CallMergeIcon from "@mui/icons-material/CallMerge";
 import { TimelineRuler } from "./TimelineRuler";
 import { TimelineTrack, LANE_HEIGHT } from "./TimelineTrack";
 import { TimelinePlayhead } from "./TimelinePlayhead";
@@ -30,6 +31,7 @@ interface TimelineEditorProps {
     onSeek: (time: number) => void;
     onAddMarker: () => void;
     onDeleteSelected?: () => void; // Handler for bulk delete
+    onMergeSelected?: () => void; // Handler for bulk merge
 }
 
 const MIN_ZOOM = 0.5;
@@ -62,6 +64,7 @@ export function TimelineEditor({
     onSeek,
     onAddMarker,
     onDeleteSelected,
+    onMergeSelected,
 }: TimelineEditorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(800);
@@ -254,6 +257,19 @@ export function TimelineEditor({
                         onClick={onDeleteSelected}
                     >
                         Delete ({selectedCount})
+                    </Button>
+                )}
+
+                {/* Merge selected button - only visible when multiple markers selected */}
+                {selectedCount > 1 && onMergeSelected && (
+                    <Button
+                        size="sm"
+                        variant="soft"
+                        color="primary"
+                        startDecorator={<CallMergeIcon />}
+                        onClick={onMergeSelected}
+                    >
+                        Merge ({selectedCount})
                     </Button>
                 )}
 
