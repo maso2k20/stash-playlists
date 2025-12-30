@@ -134,7 +134,6 @@ function VideoWallQuadrant({
 
   return (
     <Box
-      onClick={onMuteToggle}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setShowControls(false)}
       sx={{
@@ -143,7 +142,6 @@ function VideoWallQuadrant({
         border: isMuted ? "2px solid transparent" : "3px solid",
         borderColor: isMuted ? "transparent" : "primary.500",
         borderRadius: "md",
-        cursor: showControls ? "pointer" : "none",
         overflow: "hidden",
         bgcolor: "neutral.900",
         transition: "border-color 0.2s ease",
@@ -208,10 +206,13 @@ function VideoWallQuadrant({
         >
           <SkipForward size={18} />
         </Box>
-        {/* Mute indicator */}
+        {/* Mute button */}
         <Box
+          onClick={(e) => {
+            e.stopPropagation();
+            onMuteToggle();
+          }}
           sx={{
-            pointerEvents: "none",
             color: isMuted ? "neutral.400" : "primary.300",
             display: "flex",
             alignItems: "center",
@@ -219,6 +220,12 @@ function VideoWallQuadrant({
             bgcolor: "rgba(0,0,0,0.5)",
             borderRadius: "sm",
             p: 0.5,
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            "&:hover": {
+              bgcolor: "rgba(0,0,0,0.7)",
+              color: isMuted ? "neutral.200" : "primary.200",
+            },
           }}
         >
           {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
@@ -233,6 +240,7 @@ function VideoWallQuadrant({
           left: 0,
           right: 0,
           bottom: 0,
+          pointerEvents: "none", // Prevent clicks from reaching video player
           "& .video-player": { height: "100%", width: "100%" },
           "& .video-player > div": { height: "100%", width: "100%" },
           "& .video-js": { height: "100% !important", width: "100% !important" },

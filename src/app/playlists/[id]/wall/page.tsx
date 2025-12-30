@@ -131,6 +131,9 @@ export default function VideoWallPage() {
   // Next index to pull from the shuffled queue
   const nextIndexRef = useRef(4); // Start at 4 since 0-3 are initial items
 
+  // Track played item IDs to avoid replaying until all have been shown
+  const playedItemIdsRef = useRef<Set<string>>(new Set());
+
   // Audio state - which quadrant is unmuted (null = all muted)
   const [unmutedQuadrant, setUnmutedQuadrant] = useState<number | null>(null);
 
@@ -190,9 +193,28 @@ export default function VideoWallPage() {
     const shuffled = shuffleArray(playlist.items);
     setShuffledItems(shuffled);
 
-    // Assign first 4 items to quadrants
-    setQuadrantItems([shuffled[0], shuffled[1], shuffled[2], shuffled[3]]);
-    nextIndexRef.current = 4;
+    // Assign first 4 UNIQUE items to quadrants (in case playlist has duplicate markers)
+    const initial: PlaylistItem[] = [];
+    const usedItemIds = new Set<string>();
+
+    for (const item of shuffled) {
+      if (!usedItemIds.has(item.item.id)) {
+        initial.push(item);
+        usedItemIds.add(item.item.id);
+        if (initial.length === 4) break;
+      }
+    }
+
+    // Fallback if we don't have 4 unique items
+    while (initial.length < 4 && shuffled.length >= 4) {
+      initial.push(shuffled[initial.length]);
+    }
+
+    // Mark initial items as played
+    playedItemIdsRef.current = new Set(initial.map((item) => item.item.id));
+
+    setQuadrantItems(initial);
+    nextIndexRef.current = initial.length;
   }, [playlist]);
 
   // Fetch marker details for a scene
@@ -262,9 +284,59 @@ export default function VideoWallPage() {
 
       setQuadrantItems((prev) => {
         const next = [...prev];
-        const nextItem =
-          shuffledItems[nextIndexRef.current % shuffledItems.length];
-        nextIndexRef.current++;
+
+        // Get IDs of items currently showing in OTHER quadrants
+        const currentlyShowingIds = new Set(
+          prev
+            .filter((_, idx) => idx !== quadrantIndex)
+            .map((item) => item?.item?.id)
+            .filter(Boolean)
+        );
+
+        // Find next item that hasn't been played AND isn't currently showing
+        let nextItem = null;
+        for (let i = 0; i < shuffledItems.length; i++) {
+          const candidate = shuffledItems[nextIndexRef.current % shuffledItems.length];
+          nextIndexRef.current++;
+
+          const notPlayed = !playedItemIdsRef.current.has(candidate.item.id);
+          const notShowing = !currentlyShowingIds.has(candidate.item.id);
+
+          if (notPlayed && notShowing) {
+            nextItem = candidate;
+            break;
+          }
+        }
+
+        // If all items have been played, reshuffle and reset
+        if (!nextItem) {
+          console.log('[VideoWall] All items played, reshuffling...');
+          // Reset played items to just what's currently showing
+          playedItemIdsRef.current = new Set(
+            prev.map((item) => item?.item?.id).filter(Boolean) as string[]
+          );
+          nextIndexRef.current = 0;
+
+          // Find first unplayed item after reset
+          for (let i = 0; i < shuffledItems.length; i++) {
+            const candidate = shuffledItems[i];
+            if (!playedItemIdsRef.current.has(candidate.item.id)) {
+              nextItem = candidate;
+              nextIndexRef.current = i + 1;
+              break;
+            }
+          }
+
+          // Ultimate fallback
+          if (!nextItem) {
+            nextItem = shuffledItems[0];
+            nextIndexRef.current = 1;
+          }
+        }
+
+        // Mark as played
+        playedItemIdsRef.current.add(nextItem.item.id);
+
         next[quadrantIndex] = nextItem;
         return next;
       });
@@ -415,10 +487,10 @@ export default function VideoWallPage() {
         sx={{ mb: 2, flexShrink: 0 }}
       >
         <Stack direction="row" alignItems="center" spacing={2}>
-          <Tooltip title="Back to playlists">
+          <Tooltip title="Go back">
             <IconButton
               variant="soft"
-              onClick={() => router.push("/playlists")}
+              onClick={() => router.back()}
             >
               <ArrowLeft size={20} />
             </IconButton>

@@ -165,6 +165,11 @@ export const VideoJS = (props) => {
 
   const [visible, setVisible] = React.useState(true);
 
+  // Stable reference for source URL to prevent unnecessary reloads
+  const sourceUrl = options?.sources?.[0]?.src;
+  const offsetStart = offset?.start;
+  const offsetEnd = offset?.end;
+
   React.useEffect(() => {
     if (!playerRef.current) {
       const videoElement = document.createElement('video-js');
@@ -260,26 +265,53 @@ export const VideoJS = (props) => {
       }));
     } else {
       const player = playerRef.current;
-      player.autoplay(options.autoplay);
-      player.src(options.sources);
-      if (offset) {
-        player.offset(offset);
+
+      console.log('[VideoJS] Source change detected', {
+        offset: { start: offsetStart, end: offsetEnd },
+        source: sourceUrl?.slice(-50),
+        hasStarted: props.hasStarted
+      });
+
+      // Disable native autoplay to prevent playback before offset is applied
+      player.autoplay(false);
+
+      // Apply offset BEFORE loading new source so the plugin is ready
+      if (offsetStart !== undefined && offsetEnd !== undefined) {
+        player.offset({ start: offsetStart, end: offsetEnd });
+        console.log('[VideoJS] Offset applied:', offsetStart, '->', offsetEnd);
       }
-      if (props.hasStarted) {
-        player.play();
-      }
-      
-      // Restore fullscreen state if it was previously fullscreen
-      if (wasFullscreenRef.current && !player.isFullscreen()) {
-        // Use a small delay to ensure the new video source is loaded
-        setTimeout(() => {
-          if (player && !player.isDisposed()) {
-            player.requestFullscreen();
-          }
-        }, 100);
-      }
+
+      player.src([{ src: sourceUrl, type: 'video/mp4' }]);
+      console.log('[VideoJS] Source set, waiting for loadedmetadata...');
+
+      // Wait for metadata to load before seeking and playing
+      player.one('loadedmetadata', () => {
+        if (player.isDisposed()) {
+          console.log('[VideoJS] Player disposed before metadata loaded');
+          return;
+        }
+
+        const realTimeBefore = player.tech_?.currentTime?.() || 'unknown';
+        console.log('[VideoJS] Metadata loaded, real currentTime before seek:', realTimeBefore);
+
+        // Seek to position 0 in offset-adjusted time (which is _offsetStart in real time)
+        player.currentTime(0);
+
+        const realTimeAfter = player.tech_?.currentTime?.() || 'unknown';
+        console.log('[VideoJS] After seek to 0, real currentTime:', realTimeAfter, 'expected:', offsetStart);
+
+        if (props.hasStarted) {
+          console.log('[VideoJS] Starting playback');
+          player.play()?.catch((e) => console.log('[VideoJS] Play failed:', e));
+        }
+
+        // Restore fullscreen state if it was previously fullscreen
+        if (wasFullscreenRef.current && !player.isFullscreen()) {
+          player.requestFullscreen();
+        }
+      });
     }
-  }, [options, offset, props.hasStarted]);
+  }, [sourceUrl, offsetStart, offsetEnd, props.hasStarted]);
 
   // Update markers when markers prop changes
   React.useEffect(() => {
