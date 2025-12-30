@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   CardActions,
+  Checkbox,
   Chip,
   Divider,
   IconButton,
@@ -60,6 +61,10 @@ interface PlaylistCardProps {
   onDelete?: (playlistId: string) => void;
   hideActorFilter?: boolean; // Hide the actor filter row (useful when viewing from actor page)
   returnTo?: string; // URL to return to after editing
+  // Selection mode props
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (playlistId: string) => void;
 }
 
 const typeColor: Record<PlaylistType, "neutral" | "success"> = {
@@ -89,6 +94,9 @@ export default function PlaylistCard({
   onDelete,
   hideActorFilter = false,
   returnTo,
+  selectionMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: PlaylistCardProps) {
   const router = useRouter();
   const s = stats;
@@ -103,9 +111,41 @@ export default function PlaylistCard({
   const isSmart = playlist.type === "SMART";
   const isBusy = isRefreshing;
 
+  const handleCardClick = () => {
+    if (selectionMode && onToggleSelect) {
+      onToggleSelect(playlist.id);
+    }
+  };
+
   return (
-    <Card variant="outlined" sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <Card
+      variant="outlined"
+      sx={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        cursor: selectionMode ? "pointer" : "default",
+        borderColor: isSelected ? "primary.500" : undefined,
+        bgcolor: isSelected ? "primary.softBg" : undefined,
+        transition: "border-color 0.15s, background-color 0.15s",
+        "&:hover": selectionMode ? {
+          borderColor: isSelected ? "primary.500" : "primary.300",
+        } : undefined,
+      }}
+      onClick={selectionMode ? handleCardClick : undefined}
+    >
       <CardContent sx={{ gap: 1, display: "flex", flexDirection: "row", alignItems: "stretch" }}>
+        {/* Selection checkbox */}
+        {selectionMode && (
+          <Box sx={{ display: "flex", alignItems: "flex-start", pr: 1 }}>
+            <Checkbox
+              checked={isSelected}
+              onChange={() => onToggleSelect?.(playlist.id)}
+              onClick={(e) => e.stopPropagation()}
+              sx={{ mt: 0.5 }}
+            />
+          </Box>
+        )}
         {/* Left side content */}
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           {/* Header with title/description */}
@@ -241,9 +281,10 @@ export default function PlaylistCard({
         )}
       </CardContent>
 
-      <Divider />
+      {!selectionMode && <Divider />}
 
-      <CardActions sx={{ mt: "auto", justifyContent: "space-between" }}>
+      {!selectionMode && (
+          <CardActions sx={{ mt: "auto", justifyContent: "space-between" }}>
         <Stack direction="row" spacing={0.5}>
           <Tooltip title="Play playlist">
             <IconButton
@@ -327,6 +368,7 @@ export default function PlaylistCard({
           )}
         </Stack>
       </CardActions>
+      )}
     </Card>
   );
 }

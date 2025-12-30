@@ -14,6 +14,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Chip,
   Divider,
   FormControl,
   FormLabel,
@@ -30,7 +31,7 @@ import {
   Typography,
 } from "@mui/joy";
 import { PlaylistType } from "@/components/PlaylistCard";
-import { Plus, Search, Layers } from "lucide-react";
+import { Plus, Search, Layers, CheckSquare, X, Trash2 } from "lucide-react";
 import BuildPlaylistsDialog from "@/components/BuildPlaylistsDialog";
 
 export default function ActorPlaylistsPage() {
@@ -74,6 +75,12 @@ export default function ActorPlaylistsPage() {
   // Build from templates dialog
   const [isBuildOpen, setIsBuildOpen] = useState(false);
   const [actorName, setActorName] = useState<string>("");
+
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Initial load - fetch playlists for this actor
   useEffect(() => {
@@ -240,6 +247,64 @@ export default function ActorPlaylistsPage() {
     }
   };
 
+  // Selection mode helpers
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const visibleIds = filteredPlaylists.map((p) => p.id);
+    setSelectedIds(new Set(visibleIds));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+
+    const results = await Promise.allSettled(
+      Array.from(selectedIds).map(async (id) => {
+        const response = await fetch(`/api/playlists?id=${id}`, { method: "DELETE" });
+        if (!response.ok) throw new Error(`Failed to delete ${id}`);
+        return id;
+      })
+    );
+
+    // Remove successfully deleted playlists from state
+    const deletedIds = results
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+      .map((r) => r.value);
+
+    setPlaylists((prev) => prev.filter((p) => !deletedIds.includes(p.id)));
+
+    setBulkDeleting(false);
+    setIsBulkDeleteOpen(false);
+    exitSelectionMode();
+  };
+
+  // Get names of selected playlists for confirmation dialog
+  const selectedPlaylistNames = useMemo(() => {
+    return playlists
+      .filter((p) => selectedIds.has(p.id))
+      .map((p) => p.name);
+  }, [playlists, selectedIds]);
+
   // Refresh a SMART playlist
   const refreshSmart = async (playlistId: string) => {
     setRefreshing((r) => ({ ...r, [playlistId]: true }));
@@ -346,28 +411,86 @@ export default function ActorPlaylistsPage() {
             onChange={(e) => setHideEmpty(e.target.checked)}
             size="sm"
           />
+          {selectionMode && selectedIds.size > 0 && (
+            <Chip size="sm" variant="soft" color="primary">
+              {selectedIds.size} selected
+            </Chip>
+          )}
         </Box>
 
         <Box sx={{ display: "flex", gap: 1 }}>
-          <Button
-            startDecorator={<Layers size={16} />}
-            color="primary"
-            variant="soft"
-            size="sm"
-            onClick={() => setIsBuildOpen(true)}
-            disabled={!actorName}
-          >
-            Build from Templates
-          </Button>
-          <Button
-            startDecorator={<Plus size={16} />}
-            color="primary"
-            variant="solid"
-            size="sm"
-            onClick={() => setIsCreateOpen(true)}
-          >
-            Add Playlist
-          </Button>
+          {selectionMode ? (
+            <>
+              {/* Selection mode controls */}
+              <Button
+                size="sm"
+                variant="plain"
+                onClick={selectAll}
+              >
+                Select All
+              </Button>
+              <Button
+                size="sm"
+                variant="plain"
+                onClick={deselectAll}
+                disabled={selectedIds.size === 0}
+              >
+                Deselect All
+              </Button>
+              {selectedIds.size > 0 && (
+                <Button
+                  startDecorator={<Trash2 size={16} />}
+                  color="danger"
+                  variant="solid"
+                  size="sm"
+                  onClick={() => setIsBulkDeleteOpen(true)}
+                >
+                  Delete ({selectedIds.size})
+                </Button>
+              )}
+              <Button
+                startDecorator={<X size={16} />}
+                color="neutral"
+                variant="outlined"
+                size="sm"
+                onClick={exitSelectionMode}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {/* Normal mode controls */}
+              <Button
+                startDecorator={<CheckSquare size={16} />}
+                color="neutral"
+                variant="outlined"
+                size="sm"
+                onClick={() => setSelectionMode(true)}
+              >
+                Select
+              </Button>
+              <Button
+                startDecorator={<Layers size={16} />}
+                color="primary"
+                variant="soft"
+                size="sm"
+                onClick={() => setIsBuildOpen(true)}
+                disabled={!actorName}
+              >
+                Build from Templates
+              </Button>
+              <Button
+                startDecorator={<Plus size={16} />}
+                color="primary"
+                variant="solid"
+                size="sm"
+                onClick={() => setIsCreateOpen(true)}
+              >
+                Add Playlist
+              </Button>
+            </>
+          )}
         </Box>
       </Stack>
 
@@ -456,6 +579,9 @@ export default function ActorPlaylistsPage() {
               }}
               hideActorFilter={true}
               returnTo={`/actors/${actorId}/playlists`}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(playlist.id)}
+              onToggleSelect={toggleSelection}
             />
           </Grid>
         ))}
@@ -559,6 +685,57 @@ export default function ActorPlaylistsPage() {
           }
         }}
       />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <Modal open={isBulkDeleteOpen} onClose={() => !bulkDeleting && setIsBulkDeleteOpen(false)}>
+        <ModalDialog aria-labelledby="confirm-bulk-delete" variant="outlined" sx={{ minWidth: 400, maxWidth: 500 }}>
+          {!bulkDeleting && <ModalClose />}
+          <Typography id="confirm-bulk-delete" level="title-lg">
+            Delete {selectedIds.size} playlist{selectedIds.size === 1 ? "" : "s"}?
+          </Typography>
+          <Divider />
+          <Typography level="body-sm" sx={{ mt: 1 }}>
+            This action cannot be undone. All items in these playlists will be removed.
+          </Typography>
+          {selectedPlaylistNames.length > 0 && (
+            <Box
+              sx={{
+                mt: 2,
+                p: 1.5,
+                bgcolor: "neutral.softBg",
+                borderRadius: "sm",
+                maxHeight: 200,
+                overflowY: "auto",
+              }}
+            >
+              <Typography level="body-xs" sx={{ mb: 1, fontWeight: "bold" }}>
+                Playlists to delete:
+              </Typography>
+              {selectedPlaylistNames.map((name, idx) => (
+                <Typography key={idx} level="body-sm" sx={{ py: 0.25 }}>
+                  • {name}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          <Stack direction="row" gap={1.5} justifyContent="flex-end" sx={{ pt: 2 }}>
+            <Button
+              variant="plain"
+              onClick={() => setIsBulkDeleteOpen(false)}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="danger"
+              onClick={bulkDelete}
+              loading={bulkDeleting}
+            >
+              {bulkDeleting ? "Deleting..." : "Delete All"}
+            </Button>
+          </Stack>
+        </ModalDialog>
+      </Modal>
     </Sheet>
   );
 }
