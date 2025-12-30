@@ -27,6 +27,7 @@ import {
   Star,
   Play,
   Shuffle,
+  LayoutGrid,
 } from "lucide-react";
 
 export type PlaylistType = "MANUAL" | "SMART";
@@ -264,6 +265,18 @@ export default function PlaylistCard({
               <Shuffle size={16} />
             </IconButton>
           </Tooltip>
+          {(s?.itemCount ?? 0) >= 4 && (
+            <Tooltip title="Play as Wall (4 videos)">
+              <IconButton
+                size="sm"
+                variant="plain"
+                onClick={() => router.push(`/playlists/${playlist.id}/wall`)}
+                aria-label="Play as video wall"
+              >
+                <LayoutGrid size={16} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Stack>
 
         <Stack direction="row" spacing={0.5}>

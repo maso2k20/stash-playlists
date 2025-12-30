@@ -161,7 +161,7 @@ export const VideoJS = (props) => {
   const playerRef = React.useRef(null);
   const vttBlobRef = React.useRef(null);
   const wasFullscreenRef = React.useRef(false);
-  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers } = props;
+  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
 
   const [visible, setVisible] = React.useState(true);
 
@@ -199,16 +199,18 @@ export const VideoJS = (props) => {
           }
         }
 
-        // Add custom skip controls to the control bar
-        const controlBar = player.controlBar;
-        
-        // Add backward 30s button 
-        const backward30Button = new Backward30Button(player);
-        controlBar.addChild(backward30Button);
-        
-        // Add forward 30s button
-        const forward30Button = new Forward30Button(player);
-        controlBar.addChild(forward30Button);
+        // Add custom skip controls to the control bar (not in wall mode)
+        if (!wallMode) {
+          const controlBar = player.controlBar;
+
+          // Add backward 30s button
+          const backward30Button = new Backward30Button(player);
+          controlBar.addChild(backward30Button);
+
+          // Add forward 30s button
+          const forward30Button = new Forward30Button(player);
+          controlBar.addChild(forward30Button);
+        }
         
         // Track fullscreen state changes
         player.on('fullscreenchange', () => {
@@ -368,17 +370,18 @@ const arePropsEqual = (prevProps, nextProps) => {
   // Check if sources have changed (the main thing that should trigger a re-render)
   const prevSources = prevProps.options?.sources;
   const nextSources = nextProps.options?.sources;
-  
+
   const sourcesEqual = JSON.stringify(prevSources) === JSON.stringify(nextSources);
-  
+
   // Check other critical props
   const offsetEqual = JSON.stringify(prevProps.offset) === JSON.stringify(nextProps.offset);
   const hasStartedEqual = prevProps.hasStarted === nextProps.hasStarted;
   const onEndedEqual = prevProps.onEnded === nextProps.onEnded;
-  
+  const wallModeEqual = prevProps.wallMode === nextProps.wallMode;
+
   // For markers, only re-render if sources change - let the useEffect handle marker updates
   // This prevents video reloads when markers are added/updated
-  return sourcesEqual && offsetEqual && hasStartedEqual && onEndedEqual;
+  return sourcesEqual && offsetEqual && hasStartedEqual && onEndedEqual && wallModeEqual;
 };
 
 export default React.memo(VideoJS, arePropsEqual);
