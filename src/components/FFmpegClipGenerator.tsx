@@ -5,6 +5,7 @@ import React, { useState, useMemo } from "react";
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Divider,
   IconButton,
@@ -12,6 +13,7 @@ import {
   ModalClose,
   ModalDialog,
   Sheet,
+  Slider,
   Snackbar,
   Stack,
   Tooltip,
@@ -55,6 +57,8 @@ export default function FFmpegClipGenerator({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [useNvenc, setUseNvenc] = useState(false);
+  const [nvencQuality, setNvencQuality] = useState<number>(23); // CQ 23 is a good default
 
   // Convert markers to clip data with full URLs
   // Use the scene's stream URL (not the marker's pre-cut stream) so we can apply timestamps
@@ -76,8 +80,13 @@ export default function FFmpegClipGenerator({
     return `${mins}m ${secs}s`;
   }, [clipData]);
 
+  const ffmpegOptions = useMemo(
+    () => ({ useNvenc, nvencQuality: useNvenc ? nvencQuality : undefined }),
+    [useNvenc, nvencQuality]
+  );
+
   const handleCopySingle = async (clip: MarkerClipData) => {
-    const command = generateSingleCommand(clip);
+    const command = generateSingleCommand(clip, ffmpegOptions);
     const success = await copyToClipboard(command);
     if (success) {
       setCopiedId(clip.id);
@@ -86,7 +95,7 @@ export default function FFmpegClipGenerator({
   };
 
   const handleCopyAll = async () => {
-    const commands = clipData.map((clip) => generateSingleCommand(clip)).join("\n\n");
+    const commands = clipData.map((clip) => generateSingleCommand(clip, ffmpegOptions)).join("\n\n");
     const success = await copyToClipboard(commands);
     if (success) {
       setSnackbarMessage(`Copied ${clipData.length} command${clipData.length === 1 ? "" : "s"} to clipboard`);
@@ -95,7 +104,7 @@ export default function FFmpegClipGenerator({
   };
 
   const handleDownloadScript = () => {
-    const script = generateBatchScript(clipData);
+    const script = generateBatchScript(clipData, ffmpegOptions);
     const timestamp = new Date().toISOString().substring(0, 10);
     const filename = `ffmpeg_clips_${timestamp}.sh`;
     downloadAsFile(script, filename);
@@ -129,13 +138,41 @@ export default function FFmpegClipGenerator({
           {/* Header */}
           <Box sx={{ mb: 2 }}>
             <Typography level="h4">Generate FFmpeg Commands</Typography>
-            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+            <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: "center", flexWrap: "wrap" }}>
               <Chip size="sm" variant="soft" color="primary">
                 {clipData.length} clip{clipData.length === 1 ? "" : "s"}
               </Chip>
               <Chip size="sm" variant="soft" color="neutral" startDecorator={<Clock size={14} />}>
                 {totalDuration} total
               </Chip>
+              <Divider orientation="vertical" sx={{ mx: 1, height: 20 }} />
+              <Checkbox
+                size="sm"
+                label="Use Nvidia NVENC"
+                checked={useNvenc}
+                onChange={(e) => setUseNvenc(e.target.checked)}
+              />
+              {useNvenc && (
+                <>
+                  <Divider orientation="vertical" sx={{ mx: 1, height: 20 }} />
+                  <Typography level="body-sm" sx={{ whiteSpace: "nowrap" }}>
+                    Quality (CQ {nvencQuality}):
+                  </Typography>
+                  <Slider
+                    size="sm"
+                    value={nvencQuality}
+                    onChange={(_, value) => setNvencQuality(value as number)}
+                    min={18}
+                    max={35}
+                    step={1}
+                    sx={{ width: 120 }}
+                    marks={[
+                      { value: 18, label: "High" },
+                      { value: 35, label: "Low" },
+                    ]}
+                  />
+                </>
+              )}
             </Stack>
           </Box>
 

@@ -8,6 +8,11 @@ export interface MarkerClipData {
   streamUrl: string;
 }
 
+export interface FFmpegOptions {
+  useNvenc?: boolean;
+  nvencQuality?: number; // CQ value: 1-51, lower = better quality, 18-28 typical
+}
+
 /**
  * Sanitize a string for use as a filename
  * Removes/replaces characters that are invalid in filenames
@@ -51,17 +56,28 @@ export function generateOutputFilename(marker: MarkerClipData): string {
 /**
  * Generate a single FFmpeg command for extracting a clip
  */
-export function generateSingleCommand(marker: MarkerClipData): string {
+export function generateSingleCommand(marker: MarkerClipData, options: FFmpegOptions = {}): string {
   const outputFilename = generateOutputFilename(marker);
+  const duration = marker.endTime - marker.startTime;
 
-  // Use -ss before -i for fast seeking, -to for end time, -c copy for no re-encoding
-  return `ffmpeg -y -i "${marker.streamUrl}" -ss ${marker.startTime} -to ${marker.endTime} -c copy "${outputFilename}"`;
+  if (options.useNvenc) {
+    // NVENC: Use CUDA hardware acceleration for decoding, NVENC for encoding
+    // -ss before -i enables fast seeking (seeks in input before decoding)
+    // -t specifies duration (required when -ss is before -i)
+    // -cq sets constant quality (lower = better, 18-28 typical)
+    const qualityArgs = options.nvencQuality ? `-cq ${options.nvencQuality} -preset p4` : "";
+    return `ffmpeg -y -hwaccel cuda -ss ${marker.startTime} -i "${marker.streamUrl}" -t ${duration} -c:v h264_nvenc ${qualityArgs} -c:a copy "${outputFilename}"`.replace(/  +/g, " ");
+  }
+
+  // Default: Use -c copy for no re-encoding (fastest)
+  // -ss before -i for fast seeking, -t for duration
+  return `ffmpeg -y -ss ${marker.startTime} -i "${marker.streamUrl}" -t ${duration} -c copy "${outputFilename}"`;
 }
 
 /**
  * Generate a batch shell script for extracting multiple clips
  */
-export function generateBatchScript(markers: MarkerClipData[]): string {
+export function generateBatchScript(markers: MarkerClipData[], options: FFmpegOptions = {}): string {
   const timestamp = new Date().toISOString().replace("T", " at ").substring(0, 22);
   const totalDuration = markers.reduce((sum, m) => sum + (m.endTime - m.startTime), 0);
   const durationMinutes = Math.floor(totalDuration / 60);
@@ -74,6 +90,9 @@ export function generateBatchScript(markers: MarkerClipData[]): string {
     `# Generated: ${timestamp}`,
     `# Markers: ${markers.length} clip${markers.length === 1 ? "" : "s"}`,
     `# Total Duration: ${durationMinutes}m ${durationSeconds}s`,
+    options.useNvenc
+      ? `# Encoding: NVIDIA NVENC (h264_nvenc)${options.nvencQuality ? ` - CQ ${options.nvencQuality}` : ""}`
+      : "# Encoding: Stream copy (no re-encoding)",
     "",
     "# NOTE: This script contains your Stash API key in the URLs.",
     "# Keep this file secure and do not share it publicly.",
@@ -93,8 +112,16 @@ export function generateBatchScript(markers: MarkerClipData[]): string {
 
     lines.push(`# Clip ${num}: ${marker.title}`);
     lines.push(`echo "[${num}/${total}] Extracting: ${marker.title} (${duration}s)"`);
-    lines.push(`ffmpeg -y -i "${marker.streamUrl}" \\`);
-    lines.push(`  -ss ${marker.startTime} -to ${marker.endTime} -c copy \\`);
+
+    // -ss before -i enables fast seeking, -t for duration
+    if (options.useNvenc) {
+      const qualityArgs = options.nvencQuality ? `-cq ${options.nvencQuality} -preset p4` : "";
+      lines.push(`ffmpeg -y -hwaccel cuda -ss ${marker.startTime} -i "${marker.streamUrl}" \\`);
+      lines.push(`  -t ${duration} -c:v h264_nvenc ${qualityArgs} -c:a copy \\`.replace(/  +/g, " "));
+    } else {
+      lines.push(`ffmpeg -y -ss ${marker.startTime} -i "${marker.streamUrl}" \\`);
+      lines.push(`  -t ${duration} -c copy \\`);
+    }
     lines.push(`  "${outputFilename}"`);
     lines.push(`echo ""`);
     lines.push("");
