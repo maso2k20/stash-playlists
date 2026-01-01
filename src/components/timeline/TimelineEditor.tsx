@@ -32,6 +32,8 @@ interface TimelineEditorProps {
     onAddMarker: () => void;
     onDeleteSelected?: () => void; // Handler for bulk delete
     onMergeSelected?: () => void; // Handler for bulk merge
+    onDeleteAll?: () => void; // Handler for delete all markers
+    markerCount?: number; // Total number of markers for delete all button
 }
 
 const MIN_ZOOM = 0.5;
@@ -65,6 +67,8 @@ export function TimelineEditor({
     onAddMarker,
     onDeleteSelected,
     onMergeSelected,
+    onDeleteAll,
+    markerCount = 0,
 }: TimelineEditorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(800);
@@ -283,6 +287,19 @@ export function TimelineEditor({
                 >
                     New Marker
                 </Button>
+
+                {/* Delete all markers button */}
+                {onDeleteAll && markerCount > 0 && (
+                    <Button
+                        size="sm"
+                        variant="soft"
+                        color="danger"
+                        startDecorator={<DeleteOutlineIcon />}
+                        onClick={onDeleteAll}
+                    >
+                        Delete All
+                    </Button>
+                )}
             </Box>
 
             {/* Timeline content (scrollable) */}

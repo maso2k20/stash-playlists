@@ -122,6 +122,11 @@ export default function TimelineEditorPage() {
     const [bulkMergeDialogOpen, setBulkMergeDialogOpen] = useState(false);
     const [merging, setMerging] = useState(false);
 
+    // Delete all confirmation dialog
+    const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+    const [deleteAllIds, setDeleteAllIds] = useState<string[]>([]);
+    const deleteAllButtonRef = useRef<HTMLButtonElement>(null);
+
     // Pause video and focus delete button when dialog opens
     useEffect(() => {
         if (deleteDialogOpen) {
@@ -149,6 +154,19 @@ export default function TimelineEditorPage() {
             return () => clearTimeout(timer);
         }
     }, [bulkDeleteDialogOpen]);
+
+    // Focus delete all button when delete all dialog opens
+    useEffect(() => {
+        if (deleteAllDialogOpen) {
+            if (playerRef.current && !playerRef.current.paused()) {
+                playerRef.current.pause();
+            }
+            const timer = setTimeout(() => {
+                deleteAllButtonRef.current?.focus();
+            }, 50);
+            return () => clearTimeout(timer);
+        }
+    }, [deleteAllDialogOpen]);
 
     // Snackbar for notifications
     const [snack, setSnack] = useState<{ open: boolean; msg: string; color?: "success" | "neutral" }>({
@@ -522,6 +540,25 @@ export default function TimelineEditorPage() {
         setBulkDeleteDialogOpen(false);
     }, []);
 
+    // Delete all handlers
+    const openDeleteAllDialog = useCallback(() => {
+        // Capture IDs at dialog open time to avoid dependency on markers during deletion
+        setDeleteAllIds(markers.map(m => m.id));
+        setDeleteAllDialogOpen(true);
+    }, [markers]);
+
+    const confirmDeleteAll = useCallback(async () => {
+        await handleDeleteMultiple(deleteAllIds);
+        setSelectedMarkerIds(new Set());
+        setDeleteAllDialogOpen(false);
+        setDeleteAllIds([]);
+    }, [deleteAllIds, handleDeleteMultiple]);
+
+    const cancelDeleteAll = useCallback(() => {
+        setDeleteAllDialogOpen(false);
+        setDeleteAllIds([]);
+    }, []);
+
     // Bulk merge handlers
     const confirmBulkMerge = useCallback(async () => {
         setMerging(true);
@@ -867,6 +904,8 @@ export default function TimelineEditorPage() {
                     onAddMarker={handleAddMarker}
                     onDeleteSelected={() => setBulkDeleteDialogOpen(true)}
                     onMergeSelected={() => setBulkMergeDialogOpen(true)}
+                    onDeleteAll={openDeleteAllDialog}
+                    markerCount={markers.length}
                 />
             </Box>
 
@@ -959,6 +998,35 @@ export default function TimelineEditorPage() {
                             </Button>
                         </DialogActions>
                     )}
+                </ModalDialog>
+            </Modal>
+
+            {/* Delete All Confirmation Dialog */}
+            <Modal open={deleteAllDialogOpen} onClose={cancelDeleteAll}>
+                <ModalDialog
+                    sx={{
+                        position: "fixed",
+                        top: "auto",
+                        bottom: "25%",
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        minWidth: 300,
+                    }}
+                >
+                    <DialogTitle>Delete All Markers</DialogTitle>
+                    <DialogContent>
+                        <Typography level="body-sm">
+                            Are you sure you want to delete all {deleteAllIds.length} marker{deleteAllIds.length !== 1 ? "s" : ""} from this scene? This action cannot be undone.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button variant="plain" color="neutral" onClick={cancelDeleteAll}>
+                            Cancel
+                        </Button>
+                        <Button ref={deleteAllButtonRef} variant="solid" color="danger" onClick={confirmDeleteAll} autoFocus>
+                            Delete All
+                        </Button>
+                    </DialogActions>
                 </ModalDialog>
             </Modal>
 
