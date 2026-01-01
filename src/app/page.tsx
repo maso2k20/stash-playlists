@@ -20,7 +20,10 @@ import {
   Button,
   Chip,
   Skeleton,
+  Input,
 } from "@mui/joy";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 
 // Query for unorganised scenes (scenes with markers but without "Markers Organised" tag)
 const GET_UNORGANISED_SCENES = gql`
@@ -35,6 +38,31 @@ const GET_UNORGANISED_SCENES = gql`
         tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
       }
       filter: { page: $pageNumber, per_page: $perPage }
+    ) {
+      count
+      scenes {
+        id
+        title
+        paths { screenshot }
+        performers { id name }
+      }
+    }
+  }
+`;
+
+// Query with title filter
+const GET_UNORGANISED_SCENES_FILTERED = gql`
+  query getUnorganisedScenesFiltered(
+    $markersOrganisedIds: [ID!]!
+    $titleQuery: String!
+  ) {
+    findScenes(
+      scene_filter: {
+        has_markers: "true"
+        tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
+        title: { value: $titleQuery, modifier: INCLUDES }
+      }
+      filter: { per_page: -1 }
     ) {
       count
       scenes {
@@ -147,6 +175,9 @@ function HomeContent() {
   const perPage = 42;
   const [totalCount, setTotalCount] = useState(0);
 
+  // Search state
+  const [searchTerm, setSearchTerm] = useState("");
+
   const settings = useSettings();
   const stashServer = settings["STASH_SERVER"];
   const stashAPI = settings["STASH_API"];
@@ -159,6 +190,9 @@ function HomeContent() {
     return tag?.id ? String(tag.id) : null;
   }, [stashTags]);
 
+  // Determine if we're filtering
+  const isFiltering = searchTerm.trim().length > 0;
+
   // Scroll to top on page change
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -166,19 +200,42 @@ function HomeContent() {
     }
   }, [pageNumber]);
 
-  // Query variables
-  const variables = useMemo(() => ({
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setPageNumber(1);
+  }, [searchTerm]);
+
+  // Query variables for paginated (non-filtered) query
+  const paginatedVariables = useMemo(() => ({
     markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
     pageNumber,
     perPage,
   }), [markersOrganisedTagId, pageNumber, perPage]);
 
-  // Main query - skip if tag not found
-  const { data, loading, error } = useQuery(GET_UNORGANISED_SCENES, {
-    variables,
-    skip: !markersOrganisedTagId,
+  // Query variables for filtered query
+  const filteredVariables = useMemo(() => ({
+    markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
+    titleQuery: searchTerm.trim(),
+  }), [markersOrganisedTagId, searchTerm]);
+
+  // Paginated query - skip when filtering or tag not found
+  const { data: paginatedData, loading: paginatedLoading, error: paginatedError } = useQuery(GET_UNORGANISED_SCENES, {
+    variables: paginatedVariables,
+    skip: !markersOrganisedTagId || isFiltering,
     fetchPolicy: "cache-and-network",
   });
+
+  // Filtered query - only run when filtering
+  const { data: filteredData, loading: filteredLoading, error: filteredError } = useQuery(GET_UNORGANISED_SCENES_FILTERED, {
+    variables: filteredVariables,
+    skip: !markersOrganisedTagId || !isFiltering,
+    fetchPolicy: "cache-and-network",
+  });
+
+  // Select appropriate data based on mode
+  const data = isFiltering ? filteredData : paginatedData;
+  const loading = isFiltering ? filteredLoading : paginatedLoading;
+  const error = isFiltering ? filteredError : paginatedError;
 
   // Extract scenes and update total count
   const scenes: Scene[] = useMemo(() => {
@@ -223,18 +280,40 @@ function HomeContent() {
     <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
       {/* Header */}
       <Box sx={{ mb: 2 }}>
-        <Typography level="h2" sx={{ mb: 1 }}>
-          Unorganised Scenes
-        </Typography>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, mb: 1 }}>
+          <Typography level="h2">
+            Unorganised Scenes
+          </Typography>
+          <Input
+            size="sm"
+            placeholder="Search by title..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            startDecorator={<SearchIcon sx={{ fontSize: 18 }} />}
+            endDecorator={
+              searchTerm && (
+                <ClearIcon
+                  sx={{ fontSize: 16, cursor: "pointer", opacity: 0.6, "&:hover": { opacity: 1 } }}
+                  onClick={() => setSearchTerm("")}
+                />
+              )
+            }
+            sx={{ width: 250 }}
+          />
+        </Box>
         {!anyLoading && totalCount > 0 && (
           <Typography level="body-sm" color="neutral">
-            Page {pageNumber} of {maxPage} &bull; {totalCount} scene{totalCount === 1 ? '' : 's'} with markers need organising
+            {isFiltering ? (
+              <>{totalCount} scene{totalCount === 1 ? '' : 's'} matching &quot;{searchTerm}&quot;</>
+            ) : (
+              <>Page {pageNumber} of {maxPage} &bull; {totalCount} scene{totalCount === 1 ? '' : 's'} with markers need organising</>
+            )}
           </Typography>
         )}
       </Box>
 
-      {/* Top Pagination Controls */}
-      {!anyLoading && scenes.length > 0 && totalCount > perPage && (
+      {/* Top Pagination Controls - only show when browsing (not filtering) */}
+      {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
         <PaginationControls
           pageNumber={pageNumber}
           perPage={perPage}
@@ -282,10 +361,24 @@ function HomeContent() {
             bgcolor: "background.level1",
           }}
         >
-          <Typography level="title-md">There are no unorganised scenes</Typography>
-          <Typography level="body-sm" sx={{ mt: 1, color: "text.secondary" }}>
-            All scenes with markers have been organised.
-          </Typography>
+          {isFiltering ? (
+            <>
+              <Typography level="title-md">No scenes match &quot;{searchTerm}&quot;</Typography>
+              <Typography level="body-sm" sx={{ mt: 1, color: "text.secondary" }}>
+                Try a different search term or{" "}
+                <Button variant="plain" size="sm" onClick={() => setSearchTerm("")}>
+                  clear the filter
+                </Button>
+              </Typography>
+            </>
+          ) : (
+            <>
+              <Typography level="title-md">There are no unorganised scenes</Typography>
+              <Typography level="body-sm" sx={{ mt: 1, color: "text.secondary" }}>
+                All scenes with markers have been organised.
+              </Typography>
+            </>
+          )}
         </Box>
       )}
 
@@ -404,8 +497,8 @@ function HomeContent() {
         </Grid>
       )}
 
-      {/* Bottom Pagination Controls */}
-      {!anyLoading && scenes.length > 0 && totalCount > perPage && (
+      {/* Bottom Pagination Controls - only show when browsing (not filtering) */}
+      {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
         <PaginationControls
           pageNumber={pageNumber}
           perPage={perPage}
