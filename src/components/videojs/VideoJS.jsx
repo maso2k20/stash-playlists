@@ -163,6 +163,8 @@ export const VideoJS = (props) => {
   const wasFullscreenRef = React.useRef(false);
   const sourceIdRef = React.useRef(0); // Track source changes to invalidate stale callbacks
   const metadataHandlerRef = React.useRef(null); // Store handler ref for cleanup
+  const sourceChangingRef = React.useRef(false); // Suppress abort errors during source transitions
+  const suppressTimeoutRef = React.useRef(null); // Timeout to end the suppression window
   const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
 
   const [visible, setVisible] = React.useState(true);
@@ -222,6 +224,14 @@ export const VideoJS = (props) => {
         // Track fullscreen state changes
         player.on('fullscreenchange', () => {
           wasFullscreenRef.current = player.isFullscreen();
+        });
+
+        // Suppress false "media could not be loaded" errors that arise when the
+        // browser aborts a previous source load mid-request during a track change.
+        player.on('error', () => {
+          if (sourceChangingRef.current) {
+            player.error(null);
+          }
         });
         
         
@@ -325,8 +335,22 @@ export const VideoJS = (props) => {
       player.src([{ src: sourceUrl, type: 'video/mp4' }]);
       console.log('[VideoJS] Source set, waiting for loadedmetadata... sourceId:', currentSourceId);
 
+      // Mark that a source change is in progress so the error handler can
+      // suppress abort errors from the previous source being cancelled.
+      sourceChangingRef.current = true;
+      player.error(null); // clear any synchronous abort error immediately
+      // End the suppression window after 3s so real load failures still surface
+      if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
+      suppressTimeoutRef.current = setTimeout(() => {
+        sourceChangingRef.current = false;
+      }, 3000);
+
       // Create the handler and store reference for cleanup
       const handleMetadataLoaded = () => {
+        // Source loaded successfully — end the abort-error suppression window
+        if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
+        sourceChangingRef.current = false;
+
         // Check if this callback is stale (source changed again before we got here)
         if (currentSourceId !== sourceIdRef.current) {
           console.log('[VideoJS] Stale loadedmetadata callback ignored, sourceId:', currentSourceId, 'current:', sourceIdRef.current);
