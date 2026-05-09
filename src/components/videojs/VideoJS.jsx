@@ -226,12 +226,21 @@ export const VideoJS = (props) => {
           wasFullscreenRef.current = player.isFullscreen();
         });
 
-        // Suppress MEDIA_ERR_ABORTED (code 1) errors that arise when the browser
-        // cancels the previous source's in-flight request during a track change.
-        // Only suppress code-1 aborts; let genuine load failures through.
+        // During a source transition the browser can fire an error (for the
+        // aborted previous-source request or a transient network hiccup on the
+        // new one).  Suppress the display and immediately call player.load() to
+        // restart the new source's load — the error event alone aborts it.
+        // Clear the flag first so a genuine failure on the retry is not hidden.
         player.on('error', () => {
-          if (sourceChangingRef.current && player.error()?.code === 1) {
-            player.error(null);
+          if (!sourceChangingRef.current) return;
+          sourceChangingRef.current = false;
+          if (suppressTimeoutRef.current) {
+            clearTimeout(suppressTimeoutRef.current);
+            suppressTimeoutRef.current = null;
+          }
+          player.error(null);
+          if (!player.isDisposed()) {
+            player.load();
           }
         });
         
