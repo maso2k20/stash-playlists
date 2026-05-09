@@ -822,7 +822,7 @@ export default function SettingsPage() {
         <Box sx={{ flexGrow: 1, display: "flex", alignItems: "baseline", gap: 1.5 }}>
           <Typography level="h2">Settings</Typography>
           <Typography level="body-xs" sx={{ color: "text.tertiary" }}>
-            {process.env.NEXT_PUBLIC_COMMIT}
+            v{process.env.NEXT_PUBLIC_APP_VERSION}
           </Typography>
         </Box>
 
