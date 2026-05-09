@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
-import { createRequire } from "module";
+import { execSync } from "child_process";
 
-const require = createRequire(import.meta.url);
-const { version } = require("./package.json");
+let commitHash = "unknown";
+try {
+  commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+} catch {
+  // not a git repo or git not available (e.g. bare Docker layer)
+}
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -12,7 +16,7 @@ const nextConfig: NextConfig = {
   },
   typescript: { ignoreBuildErrors: true },
   env: {
-    NEXT_PUBLIC_APP_VERSION: version,
+    NEXT_PUBLIC_COMMIT: commitHash,
   },
 };
 
