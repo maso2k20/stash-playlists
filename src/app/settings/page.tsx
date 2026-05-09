@@ -819,9 +819,12 @@ export default function SettingsPage() {
     <Sheet sx={{ p: 2, maxWidth: 1000, mx: "auto" }}>
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 3, flexWrap: "wrap" }}>
-        <Typography level="h2" sx={{ flexGrow: 1 }}>
-          Settings
-        </Typography>
+        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "baseline", gap: 1.5 }}>
+          <Typography level="h2">Settings</Typography>
+          <Typography level="body-xs" sx={{ color: "text.tertiary" }}>
+            v{process.env.NEXT_PUBLIC_APP_VERSION}
+          </Typography>
+        </Box>
 
         <Tooltip title="Reload from server">
           <IconButton variant="plain" onClick={load} disabled={loading || saving}>
