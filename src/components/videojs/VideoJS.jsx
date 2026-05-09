@@ -226,10 +226,11 @@ export const VideoJS = (props) => {
           wasFullscreenRef.current = player.isFullscreen();
         });
 
-        // Suppress false "media could not be loaded" errors that arise when the
-        // browser aborts a previous source load mid-request during a track change.
+        // Suppress MEDIA_ERR_ABORTED (code 1) errors that arise when the browser
+        // cancels the previous source's in-flight request during a track change.
+        // Only suppress code-1 aborts; let genuine load failures through.
         player.on('error', () => {
-          if (sourceChangingRef.current) {
+          if (sourceChangingRef.current && player.error()?.code === 1) {
             player.error(null);
           }
         });
@@ -336,9 +337,8 @@ export const VideoJS = (props) => {
       console.log('[VideoJS] Source set, waiting for loadedmetadata... sourceId:', currentSourceId);
 
       // Mark that a source change is in progress so the error handler can
-      // suppress abort errors from the previous source being cancelled.
+      // suppress MEDIA_ERR_ABORTED from the previous source being cancelled.
       sourceChangingRef.current = true;
-      player.error(null); // clear any synchronous abort error immediately
       // End the suppression window after 3s so real load failures still surface
       if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
       suppressTimeoutRef.current = setTimeout(() => {
