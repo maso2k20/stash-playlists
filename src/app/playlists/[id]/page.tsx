@@ -300,43 +300,6 @@ export default function PlaylistPlayer() {
   const handlePlayerReady = useCallback((player: any) => {
     playerRef.current = player;
     player.muted(true);
-
-    const container = videoContainerRef.current;
-    if (!container) return;
-
-    // Redirect Video.js fullscreen to the outer container so the user's FS
-    // button click makes the CONTAINER fullscreen, not the player element.
-    // The container survives track-change remounts; the player element doesn't,
-    // so this is what keeps the FS session alive across the remount.
-    player.requestFullscreen = () => container.requestFullscreen().catch(() => {});
-    player.exitFullscreen = () => document.exitFullscreen?.();
-
-    const syncFullscreen = () => {
-      if (player.isDisposed()) return;
-      const isFS = document.fullscreenElement === container;
-      player[isFS ? 'addClass' : 'removeClass']('vjs-fullscreen');
-      player.isFullscreen = () => isFS;
-    };
-    document.addEventListener('fullscreenchange', syncFullscreen);
-
-    // If the container is already fullscreen on mount (i.e. the previous
-    // player just disposed and we're remounting inside the FS container),
-    // sync state immediately so the icon and isFullscreen() are correct.
-    if (document.fullscreenElement === container) {
-      player.addClass('vjs-fullscreen');
-      player.isFullscreen = () => true;
-    }
-
-    // Neutralise Video.js's internal FS state on dispose. Without this, its
-    // dispose() sees isFullscreen()===true and calls exitFullscreen(), which
-    // drops the container out of FS while the next player is mounting.
-    player.one('dispose', () => {
-      document.removeEventListener('fullscreenchange', syncFullscreen);
-      player.removeClass('vjs-fullscreen');
-      player.isFullscreen = () => false;
-      player.exitFullscreen = () => Promise.resolve();
-      if ('fullscreen_' in player) player.fullscreen_ = false;
-    });
   }, []);
 
   const handleVideoEnded = useCallback(() => {
@@ -396,7 +359,6 @@ export default function PlaylistPlayer() {
               }}
             >
               <VideoJS
-                key={currentIndex}
                 options={videoJsOptions}
                 offset={offset}
                 onReady={handlePlayerReady}

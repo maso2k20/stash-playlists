@@ -1,3 +1,11 @@
+/* Forcibly hide the Video.js error display during a source transition.
+   The browser sometimes fires error events when aborting the previous
+   source's request — these are harmless and the new source loads fine. */
+.video-js.vjs-suppress-errors .vjs-error-display,
+.video-js.vjs-suppress-errors .vjs-modal-dialog.vjs-error-display {
+  display: none !important;
+}
+
 /* Custom Skip Controls Styles */
 .video-js .vjs-control-bar .vjs-forward-30-control,
 .video-js .vjs-control-bar .vjs-backward-30-control {

@@ -156,12 +156,27 @@ export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
   const vttBlobRef = React.useRef(null);
+  const suppressErrorsRef = React.useRef(false);
+  const suppressTimeoutRef = React.useRef(null);
+  const hasInitializedRef = React.useRef(false);
+  const onEndedRef = React.useRef(props.onEnded);
   const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
+
+  const sourceUrl = options?.sources?.[0]?.src;
+  const offsetStart = offset?.start;
+  const offsetEnd = offset?.end;
 
   const [visible, setVisible] = React.useState(true);
 
-  // Each VideoJS instance handles exactly one source — the parent remounts this
-  // component (via key) when the track changes. No imperative src() switching needed.
+  // Keep latest onEnded in a ref so the player listener (registered once at
+  // mount) always invokes the current handler.
+  React.useEffect(() => {
+    onEndedRef.current = props.onEnded;
+  }, [props.onEnded]);
+
+  // Mount the player once. Source changes are handled by the effect below
+  // via player.src() so the player element is never disposed mid-playlist —
+  // this preserves fullscreen across track changes.
   React.useEffect(() => {
     const videoElement = document.createElement('video-js');
     videoElement.classList.add('vjs-big-play-centered');
@@ -169,7 +184,8 @@ export const VideoJS = (props) => {
 
     const playerOptions = {
       ...options,
-      autoplay: false, // Disabled until offset is applied; we call play() in loadedmetadata
+      sources: [], // Source loading is handled entirely by the source-change effect
+      autoplay: false, // We call play() after offset is applied
       userActions: {
         ...options?.userActions,
         doubleClick: false,
@@ -178,10 +194,6 @@ export const VideoJS = (props) => {
     };
 
     const player = (playerRef.current = videojs(videoElement, playerOptions, () => {
-      if (offset) {
-        player.offset(offset);
-      }
-
       // Prevent the video element from stealing keyboard focus from inputs
       const videoEl = player.el();
       if (videoEl) {
@@ -215,35 +227,23 @@ export const VideoJS = (props) => {
         addCustomMarkers(player, markers);
       }
 
-      if (props.onEnded) {
-        player.on('ended', props.onEnded);
-      }
+      // Use a stable wrapper so source changes pick up the latest onEnded.
+      player.on('ended', () => onEndedRef.current?.());
 
-      // When autoplay is requested, wait for metadata so the offset seek
-      // is applied before play() — avoids starting at the wrong position.
-      if (options.autoplay) {
-        const effectiveStart = typeof offset?.start === 'number' ? offset.start : 0;
-
-        player.one('loadedmetadata', () => {
-          if (player.isDisposed()) return;
-
-          player.currentTime(0);
-
-          // Verify the offset seek landed correctly
-          setTimeout(() => {
-            if (player.isDisposed()) return;
-            const actualTime = player.tech_?.currentTime?.() || 0;
-            if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
-              try { player.tech_.setCurrentTime(effectiveStart); } catch (e) {}
-            }
-          }, 50);
-
-          player.play()?.catch((e) => console.log('[VideoJS] play failed:', e));
-        });
-      }
+      // Suppress transient media errors fired during source transitions.
+      // The browser sometimes fires error events when aborting the previous
+      // source's request or hitting a transient hiccup on the new one — these
+      // are harmless and the new source loads fine. Real failures still
+      // surface via the 3s timeout fallback.
+      player.on('error', () => {
+        if (suppressErrorsRef.current) {
+          player.error(null);
+        }
+      });
     }));
 
     return () => {
+      if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
       if (vttBlobRef.current) {
         cleanupVttBlob(vttBlobRef.current);
         vttBlobRef.current = null;
@@ -254,6 +254,78 @@ export const VideoJS = (props) => {
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle source / offset changes WITHOUT remounting the player.
+  // Keeping the same player instance preserves fullscreen state across tracks
+  // and avoids the dispose/recreate cycle that loses fullscreen.
+  React.useEffect(() => {
+    const player = playerRef.current;
+    if (!player || player.isDisposed()) return;
+    if (!sourceUrl) return;
+
+    const isFirstLoad = !hasInitializedRef.current;
+    hasInitializedRef.current = true;
+
+    // Suppress errors during the source change. Skipped on first load — there
+    // is no previous request to abort, so the error event won't fire from a
+    // transition. Wall mode (autoplay:true) and playlist mode both benefit
+    // from this on subsequent track changes.
+    if (!isFirstLoad) {
+      suppressErrorsRef.current = true;
+      player.addClass('vjs-suppress-errors');
+      player.error(null);
+
+      if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
+      suppressTimeoutRef.current = setTimeout(() => {
+        // 3s window expired; let real errors through if anything's still wrong.
+        suppressErrorsRef.current = false;
+        if (playerRef.current && !playerRef.current.isDisposed()) {
+          playerRef.current.removeClass('vjs-suppress-errors');
+        }
+      }, 3000);
+    }
+
+    // Reset the offset plugin's internal state before changing source so it
+    // doesn't carry over from the previous track.
+    player.offset({ start: 0, end: Infinity, restart_beginning: false });
+
+    setVisible(true);
+    player.src([{ src: sourceUrl, type: 'video/mp4' }]);
+
+    const effectiveStart = typeof offsetStart === 'number' ? offsetStart : 0;
+    const effectiveEnd = typeof offsetEnd === 'number' ? offsetEnd : Infinity;
+
+    // First load follows the parent's autoplay preference (wall mode wants
+    // autoplay; playlist mode does not — user clicks play). Every subsequent
+    // load autoplays so playlist tracks chain seamlessly.
+    const shouldAutoplay = !isFirstLoad || !!options.autoplay;
+
+    player.one('loadedmetadata', () => {
+      if (player.isDisposed()) return;
+
+      if (suppressTimeoutRef.current) {
+        clearTimeout(suppressTimeoutRef.current);
+        suppressTimeoutRef.current = null;
+      }
+      suppressErrorsRef.current = false;
+      player.removeClass('vjs-suppress-errors');
+
+      player.offset({ start: effectiveStart, end: effectiveEnd, restart_beginning: false });
+      player.currentTime(0);
+
+      setTimeout(() => {
+        if (player.isDisposed()) return;
+        const actualTime = player.tech_?.currentTime?.() || 0;
+        if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
+          try { player.tech_.setCurrentTime(effectiveStart); } catch (e) {}
+        }
+      }, 50);
+
+      if (shouldAutoplay) {
+        player.play()?.catch((e) => console.log('[VideoJS] play failed:', e));
+      }
+    });
+  }, [sourceUrl, offsetStart, offsetEnd]);
 
   // Update markers when markers prop changes within the same mount
   React.useEffect(() => {
