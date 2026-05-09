@@ -156,7 +156,7 @@ export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
   const vttBlobRef = React.useRef(null);
-  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode, startFullscreen, onFullscreenChange } = props;
+  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
 
   const [visible, setVisible] = React.useState(true);
 
@@ -196,10 +196,6 @@ export const VideoJS = (props) => {
         controlBar.addChild(new Backward30Button(player));
         controlBar.addChild(new Forward30Button(player));
       }
-
-      player.on('fullscreenchange', () => {
-        onFullscreenChange?.(player.isFullscreen());
-      });
 
       // Initialize VTT thumbnails if path is provided
       if (vttPath && stashServer && stashAPI) {
@@ -241,10 +237,6 @@ export const VideoJS = (props) => {
               try { player.tech_.setCurrentTime(effectiveStart); } catch (e) {}
             }
           }, 50);
-
-          if (startFullscreen) {
-            player.requestFullscreen?.().catch?.(() => {});
-          }
 
           player.play()?.catch((e) => console.log('[VideoJS] play failed:', e));
         });

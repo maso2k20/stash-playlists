@@ -92,7 +92,7 @@ export default function PlaylistPlayer() {
   const [playedItemIndices, setPlayedItemIndices] = useState<Set<number>>(new Set());
 
   const playerRef = useRef<any>(null);
-  const wasFullscreenRef = useRef<boolean>(false);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Tag editing state
   const [currentMarkerDetails, setCurrentMarkerDetails] = useState<MarkerDetails | null>(null);
@@ -279,10 +279,6 @@ export default function PlaylistPlayer() {
   const currentItem = items[currentItemIndex];
   
 
-  const handleFullscreenChange = useCallback((isFullscreen: boolean) => {
-    wasFullscreenRef.current = isFullscreen;
-  }, []);
-
   // Memoize video options to prevent re-renders when only scene data changes
   const videoJsOptions = useMemo(() => {
     const stashServer = String(settings["STASH_SERVER"] || "");
@@ -304,8 +300,35 @@ export default function PlaylistPlayer() {
   const handlePlayerReady = useCallback((player: any) => {
     playerRef.current = player;
     player.muted(true);
-    player.on("waiting", () => console.log("waiting"));
-    player.on("dispose", () => console.log("dispose"));
+
+    const container = videoContainerRef.current;
+    if (!container) return;
+
+    // Redirect Video.js fullscreen to the outer container div so the
+    // fullscreen session survives player remounts when tracks advance.
+    player.requestFullscreen = () => container.requestFullscreen().catch(() => {});
+    player.exitFullscreen = () => document.exitFullscreen?.();
+
+    // Keep the Video.js fullscreen class/icon in sync with the real state.
+    const syncFullscreen = () => {
+      if (player.isDisposed()) return;
+      player[document.fullscreenElement === container ? 'addClass' : 'removeClass']('vjs-fullscreen');
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+
+    // If we're already fullscreen (track advanced while in fullscreen),
+    // update the new player's UI immediately so the icon is correct.
+    if (document.fullscreenElement === container) {
+      player.addClass('vjs-fullscreen');
+    }
+
+    // Before Video.js runs its dispose logic, remove the class so it won't
+    // call exitFullscreen(), and noop the method as a safety net.
+    player.one('dispose', () => {
+      document.removeEventListener('fullscreenchange', syncFullscreen);
+      player.removeClass('vjs-fullscreen');
+      player.exitFullscreen = () => {};
+    });
   }, []);
 
   const handleVideoEnded = useCallback(() => {
@@ -348,6 +371,7 @@ export default function PlaylistPlayer() {
             }}
           >
             <Box
+              ref={videoContainerRef}
               sx={{
                 width: '100%',
                 borderRadius: 'md',
@@ -369,8 +393,6 @@ export default function PlaylistPlayer() {
                 offset={offset}
                 onReady={handlePlayerReady}
                 onEnded={handleVideoEnded}
-                startFullscreen={wasFullscreenRef.current}
-                onFullscreenChange={handleFullscreenChange}
               />
             </Box>
 
