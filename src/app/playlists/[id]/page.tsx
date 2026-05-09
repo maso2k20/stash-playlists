@@ -304,34 +304,45 @@ export default function PlaylistPlayer() {
     const container = videoContainerRef.current;
     if (!container) return;
 
-    // Redirect Video.js fullscreen to the outer container div so the
-    // fullscreen session survives player remounts when tracks advance.
-    player.requestFullscreen = () => container.requestFullscreen().catch(() => {});
-    player.exitFullscreen = () => document.exitFullscreen?.();
-
-    // Keep the Video.js fullscreen class/icon in sync with the real state.
+    // Keep Video.js fullscreen icon in sync when the container is the
+    // fullscreen element (i.e. after a track change while in fullscreen).
     const syncFullscreen = () => {
       if (player.isDisposed()) return;
-      player[document.fullscreenElement === container ? 'addClass' : 'removeClass']('vjs-fullscreen');
+      const isFS = document.fullscreenElement === container;
+      player[isFS ? 'addClass' : 'removeClass']('vjs-fullscreen');
+      // Override toggle behaviour so the button exits/enters the container FS.
+      player.isFullscreen = () => isFS;
     };
     document.addEventListener('fullscreenchange', syncFullscreen);
 
-    // If we're already fullscreen (track advanced while in fullscreen),
-    // update the new player's UI immediately so the icon is correct.
+    // If the container is already fullscreen when this player mounts,
+    // sync the UI immediately and wire up the controls.
     if (document.fullscreenElement === container) {
       player.addClass('vjs-fullscreen');
+      player.isFullscreen = () => true;
+      player.requestFullscreen = () => container.requestFullscreen().catch(() => {});
+      player.exitFullscreen = () => document.exitFullscreen?.();
     }
 
-    // Before Video.js runs its dispose logic, remove the class so it won't
-    // call exitFullscreen(), and noop the method as a safety net.
     player.one('dispose', () => {
       document.removeEventListener('fullscreenchange', syncFullscreen);
-      player.removeClass('vjs-fullscreen');
-      player.exitFullscreen = () => {};
     });
   }, []);
 
-  const handleVideoEnded = useCallback(() => {
+  const handleVideoEnded = useCallback(async () => {
+    // If fullscreen is active on a child of the container, switch the fullscreen
+    // element to the container itself before the player remounts. The browser allows
+    // switching fullscreen elements without a new user gesture when already in a
+    // fullscreen session, so this keeps fullscreen uninterrupted across track changes.
+    if (
+      videoContainerRef.current &&
+      document.fullscreenElement &&
+      videoContainerRef.current.contains(document.fullscreenElement)
+    ) {
+      try {
+        await videoContainerRef.current.requestFullscreen();
+      } catch (_) {}
+    }
     setHasStarted(true);
     // Mark current item as played
     const currentItemIndex = playOrder[currentIndex] ?? 0;
