@@ -248,6 +248,7 @@ function VideoWallQuadrant({
         }}
       >
         <VideoJS
+          key={item.item.id}
           options={{
             sources: [{ src: videoSrc, type: "video/mp4" }],
             controls: false,
@@ -260,7 +261,6 @@ function VideoWallQuadrant({
           onReady={handleReady}
           onEnded={onEnded}
           wallMode={true}
-          hasStarted={true}
         />
       </Box>
     </Box>

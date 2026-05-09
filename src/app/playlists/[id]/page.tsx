@@ -92,6 +92,7 @@ export default function PlaylistPlayer() {
   const [playedItemIndices, setPlayedItemIndices] = useState<Set<number>>(new Set());
 
   const playerRef = useRef<any>(null);
+  const wasFullscreenRef = useRef<boolean>(false);
 
   // Tag editing state
   const [currentMarkerDetails, setCurrentMarkerDetails] = useState<MarkerDetails | null>(null);
@@ -278,14 +279,18 @@ export default function PlaylistPlayer() {
   const currentItem = items[currentItemIndex];
   
 
+  const handleFullscreenChange = useCallback((isFullscreen: boolean) => {
+    wasFullscreenRef.current = isFullscreen;
+  }, []);
+
   // Memoize video options to prevent re-renders when only scene data changes
   const videoJsOptions = useMemo(() => {
     const stashServer = String(settings["STASH_SERVER"] || "");
     const stashApiKey = String(settings["STASH_API"] || "");
-    
-    
+
+
     return {
-      autoplay: true, // Auto-play when new items are selected
+      autoplay: hasStarted, // false for the first video (user clicks play), true for all subsequent
       controls: true,
       responsive: true,
       fluid: true,
@@ -294,7 +299,7 @@ export default function PlaylistPlayer() {
         ? [{ src: makeStashUrl(currentItem.item.stream, stashServer, stashApiKey), type: "video/mp4" }]
         : [],
     };
-  }, [currentItem?.item?.stream, settings]); // Re-render when video source or settings change
+  }, [currentItem?.item?.stream, settings, hasStarted]);
 
   const handlePlayerReady = useCallback((player: any) => {
     playerRef.current = player;
@@ -359,11 +364,13 @@ export default function PlaylistPlayer() {
               }}
             >
               <VideoJS
+                key={currentIndex}
                 options={videoJsOptions}
                 offset={offset}
                 onReady={handlePlayerReady}
-                hasStarted={hasStarted}
                 onEnded={handleVideoEnded}
+                startFullscreen={wasFullscreenRef.current}
+                onFullscreenChange={handleFullscreenChange}
               />
             </Box>
 

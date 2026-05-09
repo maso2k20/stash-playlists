@@ -16,33 +16,33 @@ videojs.registerPlugin('vttThumbnails', vttThumbnails);
 // Simple custom markers implementation
 const addCustomMarkers = (player, markers) => {
   if (!player || !markers || markers.length === 0) return;
-  
+
   // Wait for player to be ready
   player.ready(() => {
     // Remove existing markers and tooltips
     const existingMarkers = player.el().querySelectorAll('.custom-video-marker, .custom-video-marker-range, .custom-video-marker-tooltip');
     existingMarkers.forEach(marker => marker.remove());
-    
+
     // Get progress bar container
     const progressControl = player.controlBar.progressControl;
     if (!progressControl) return;
-    
+
     const seekBar = progressControl.seekBar;
     if (!seekBar) return;
-    
+
     const duration = player.duration();
     if (!duration || !isFinite(duration)) {
       // If duration not available yet, try again later
       player.one('durationchange', () => addCustomMarkers(player, markers));
       return;
     }
-    
+
     markers.forEach((marker, index) => {
       const markerTime = marker.time;
       const markerDuration = marker.duration || 0;
       const percentage = (markerTime / duration) * 100;
       const isActive = marker.isActive || false;
-      
+
       // Create marker element
       const markerEl = document.createElement('div');
       markerEl.className = `custom-video-marker ${isActive ? 'active' : ''}`;
@@ -57,12 +57,12 @@ const addCustomMarkers = (player, markers) => {
       markerEl.style.cursor = 'default';
       markerEl.style.borderRadius = '2px';
       markerEl.style.transition = 'all 0.2s ease';
-      
+
       // Add subtle glow effect for active marker
       if (isActive) {
         markerEl.style.boxShadow = '0 0 8px rgba(66, 165, 245, 0.8)';
       }
-      
+
       // Create custom tooltip
       const tooltipEl = document.createElement('div');
       tooltipEl.className = 'custom-video-marker-tooltip';
@@ -81,23 +81,23 @@ const addCustomMarkers = (player, markers) => {
       tooltipEl.style.opacity = '0';
       tooltipEl.style.transition = 'opacity 0.2s ease';
       tooltipEl.style.pointerEvents = 'none';
-      
+
       markerEl.appendChild(tooltipEl);
-      
+
       // Show/hide tooltip on hover
       markerEl.addEventListener('mouseenter', () => {
         tooltipEl.style.opacity = '1';
       });
-      
+
       markerEl.addEventListener('mouseleave', () => {
         tooltipEl.style.opacity = '0';
       });
-      
+
       // Add duration indicator if present
       if (markerDuration > 0) {
         const endPercentage = ((markerTime + markerDuration) / duration) * 100;
         const widthPercentage = Math.max(0.5, endPercentage - percentage); // Minimum width
-        
+
         const rangeEl = document.createElement('div');
         rangeEl.className = `custom-video-marker-range ${isActive ? 'active' : ''}`;
         rangeEl.setAttribute('data-marker-id', marker.id || '');
@@ -112,7 +112,7 @@ const addCustomMarkers = (player, markers) => {
         rangeEl.style.border = isActive ? '1px solid rgba(66, 165, 245, 0.8)' : '1px solid rgba(33, 150, 243, 0.6)';
         rangeEl.style.cursor = 'default';
         rangeEl.style.transition = 'all 0.2s ease';
-        
+
         // Create tooltip for range
         const rangeTooltipEl = document.createElement('div');
         rangeTooltipEl.className = 'custom-video-marker-tooltip';
@@ -131,25 +131,21 @@ const addCustomMarkers = (player, markers) => {
         rangeTooltipEl.style.opacity = '0';
         rangeTooltipEl.style.transition = 'opacity 0.2s ease';
         rangeTooltipEl.style.pointerEvents = 'none';
-        
+
         rangeEl.appendChild(rangeTooltipEl);
-        
+
         // Show/hide tooltip on hover
         rangeEl.addEventListener('mouseenter', () => {
           rangeTooltipEl.style.opacity = '1';
         });
-        
+
         rangeEl.addEventListener('mouseleave', () => {
           rangeTooltipEl.style.opacity = '0';
         });
-        
-        // Remove click handler - let normal timeline seeking work
-        
+
         seekBar.el().appendChild(rangeEl);
       }
-      
-      // Remove click handler - let normal timeline seeking work
-      
+
       // Add to seekbar
       seekBar.el().appendChild(markerEl);
     });
@@ -160,261 +156,118 @@ export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
   const vttBlobRef = React.useRef(null);
-  const wasFullscreenRef = React.useRef(false);
-  const sourceIdRef = React.useRef(0); // Track source changes to invalidate stale callbacks
-  const metadataHandlerRef = React.useRef(null); // Store handler ref for cleanup
-  const sourceChangingRef = React.useRef(false); // Suppress abort errors during source transitions
-  const suppressTimeoutRef = React.useRef(null); // Timeout to end the suppression window
-  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
+  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode, startFullscreen, onFullscreenChange } = props;
 
   const [visible, setVisible] = React.useState(true);
 
-  // Stable reference for source URL to prevent unnecessary reloads
-  const sourceUrl = options?.sources?.[0]?.src;
-  const offsetStart = offset?.start;
-  const offsetEnd = offset?.end;
-
+  // Each VideoJS instance handles exactly one source — the parent remounts this
+  // component (via key) when the track changes. No imperative src() switching needed.
   React.useEffect(() => {
-    if (!playerRef.current) {
-      const videoElement = document.createElement('video-js');
-      videoElement.classList.add('vjs-big-play-centered');
-      videoRef.current.appendChild(videoElement);
+    const videoElement = document.createElement('video-js');
+    videoElement.classList.add('vjs-big-play-centered');
+    videoRef.current.appendChild(videoElement);
 
-      const playerOptions = {
-        ...options,
-        autoplay: false, // Disable initial autoplay to ensure offset is applied first
-        userActions: {
-          ...options?.userActions,
-          doubleClick: false,
-          // Disable built-in hotkeys to prevent interference with page inputs
-          hotkeys: false
-        }
-      };
+    const playerOptions = {
+      ...options,
+      autoplay: false, // Disabled until offset is applied; we call play() in loadedmetadata
+      userActions: {
+        ...options?.userActions,
+        doubleClick: false,
+        hotkeys: false,
+      },
+    };
 
-      const player = (playerRef.current = videojs(videoElement, playerOptions, () => {
-        videojs.log('player is ready');
-        if (offset) {
-          player.offset(offset);
-        }
-
-        // Prevent the video element from stealing keyboard focus from inputs
-        const videoEl = player.el();
-        if (videoEl) {
-          videoEl.setAttribute('tabindex', '-1');
-          // Also set on the actual video element inside
-          const innerVideo = videoEl.querySelector('video');
-          if (innerVideo) {
-            innerVideo.setAttribute('tabindex', '-1');
-          }
-        }
-
-        // Add custom skip controls to the control bar (not in wall mode)
-        if (!wallMode) {
-          const controlBar = player.controlBar;
-
-          // Add backward 30s button
-          const backward30Button = new Backward30Button(player);
-          controlBar.addChild(backward30Button);
-
-          // Add forward 30s button
-          const forward30Button = new Forward30Button(player);
-          controlBar.addChild(forward30Button);
-        }
-        
-        // Track fullscreen state changes
-        player.on('fullscreenchange', () => {
-          wasFullscreenRef.current = player.isFullscreen();
-        });
-
-        // During a source transition the browser can fire multiple error events
-        // (e.g. aborting the previous source, plus a second one when fullscreen
-        // triggers an additional state change).  Suppress all of them while the
-        // flag is set — handleMetadataLoaded or the 3s timeout will clear it.
-        player.on('error', () => {
-          if (!sourceChangingRef.current) return;
-          player.error(null);
-        });
-        
-        
-        
-        // Initialize VTT thumbnails if VTT path is provided
-        if (vttPath && stashServer && stashAPI) {
-          processVttFile(vttPath, stashServer, stashAPI)
-            .then((vttBlobUrl) => {
-              if (vttBlobUrl) {
-                vttBlobRef.current = vttBlobUrl;
-                player.vttThumbnails({
-                  src: vttBlobUrl,
-                  showTimestamp: true,
-                  responsive: true,
-                  width: 160,
-                  height: 90
-                });
-              }
-            })
-            .catch((error) => {
-              console.error('Failed to initialize VTT thumbnails:', error);
-            });
-        }
-
-        if (onReady) {
-          onReady(player);
-        }
-        
-        // Initialize markers after player is ready
-        if (markers && markers.length > 0) {
-          addCustomMarkers(player, markers);
-        }
-        
-        // Start playback after offset is applied and metadata is loaded
-        if (options.autoplay) {
-          const effectiveStart = typeof offset?.start === 'number' ? offset.start : 0;
-
-          player.one('loadedmetadata', () => {
-            if (player.isDisposed()) return;
-
-            console.log('[VideoJS] Initial player metadata loaded, seeking to offset start:', effectiveStart);
-
-            // Seek to position 0 in offset-adjusted time (which is effectiveStart in real time)
-            player.currentTime(0);
-
-            // Verify seek worked after a short delay
-            setTimeout(() => {
-              if (player.isDisposed()) return;
-              const actualTime = player.tech_?.currentTime?.() || 0;
-              console.log('[VideoJS] Initial player after seek, actual time:', actualTime, 'expected:', effectiveStart);
-
-              // If offset plugin didn't work, force the seek directly
-              if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
-                console.log('[VideoJS] Initial offset seek failed, forcing direct seek to:', effectiveStart);
-                try {
-                  player.tech_.setCurrentTime(effectiveStart);
-                } catch (e) {
-                  console.log('[VideoJS] Initial direct seek failed:', e);
-                }
-              }
-            }, 50);
-
-            player.play()?.catch((e) => console.log('[VideoJS] Initial play failed:', e));
-          });
-        }
-      }));
-    } else {
-      const player = playerRef.current;
-
-      // Increment source ID to invalidate any pending callbacks from previous sources
-      sourceIdRef.current += 1;
-      const currentSourceId = sourceIdRef.current;
-
-      console.log('[VideoJS] Source change detected', {
-        sourceId: currentSourceId,
-        offset: { start: offsetStart, end: offsetEnd },
-        source: sourceUrl?.slice(-50),
-        hasStarted: props.hasStarted,
-        wallMode: wallMode
-      });
-
-      // Remove any existing loadedmetadata listener from previous source change
-      if (metadataHandlerRef.current) {
-        player.off('loadedmetadata', metadataHandlerRef.current);
-        metadataHandlerRef.current = null;
+    const player = (playerRef.current = videojs(videoElement, playerOptions, () => {
+      if (offset) {
+        player.offset(offset);
       }
 
-      // Disable native autoplay to prevent playback before offset is applied
-      player.autoplay(false);
+      // Prevent the video element from stealing keyboard focus from inputs
+      const videoEl = player.el();
+      if (videoEl) {
+        videoEl.setAttribute('tabindex', '-1');
+        const innerVideo = videoEl.querySelector('video');
+        if (innerVideo) innerVideo.setAttribute('tabindex', '-1');
+      }
 
-      // Reset the offset plugin completely before applying new offset
-      // This ensures the plugin's internal state is clean
-      player.offset({ start: 0, end: Infinity, restart_beginning: false });
+      // Add custom skip controls to the control bar (not in wall mode)
+      if (!wallMode) {
+        const controlBar = player.controlBar;
+        controlBar.addChild(new Backward30Button(player));
+        controlBar.addChild(new Forward30Button(player));
+      }
 
-      // Apply the actual offset BEFORE loading new source
-      const effectiveStart = typeof offsetStart === 'number' ? offsetStart : 0;
-      const effectiveEnd = typeof offsetEnd === 'number' ? offsetEnd : Infinity;
-      player.offset({ start: effectiveStart, end: effectiveEnd, restart_beginning: false });
-      console.log('[VideoJS] Offset applied:', effectiveStart, '->', effectiveEnd, 'sourceId:', currentSourceId);
+      player.on('fullscreenchange', () => {
+        onFullscreenChange?.(player.isFullscreen());
+      });
 
-      player.src([{ src: sourceUrl, type: 'video/mp4' }]);
-      console.log('[VideoJS] Source set, waiting for loadedmetadata... sourceId:', currentSourceId);
-
-      // Mark that a source change is in progress so the error handler can
-      // suppress MEDIA_ERR_ABORTED from the previous source being cancelled.
-      sourceChangingRef.current = true;
-      // End the suppression window after 3s so real load failures still surface
-      if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
-      suppressTimeoutRef.current = setTimeout(() => {
-        sourceChangingRef.current = false;
-      }, 3000);
-
-      // Create the handler and store reference for cleanup
-      const handleMetadataLoaded = () => {
-        // Source loaded successfully — end the abort-error suppression window
-        if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
-        sourceChangingRef.current = false;
-
-        // Check if this callback is stale (source changed again before we got here)
-        if (currentSourceId !== sourceIdRef.current) {
-          console.log('[VideoJS] Stale loadedmetadata callback ignored, sourceId:', currentSourceId, 'current:', sourceIdRef.current);
-          return;
-        }
-
-        if (player.isDisposed()) {
-          console.log('[VideoJS] Player disposed before metadata loaded');
-          return;
-        }
-
-        const realTimeBefore = player.tech_?.currentTime?.() || 'unknown';
-        console.log('[VideoJS] Metadata loaded, real currentTime before seek:', realTimeBefore, 'sourceId:', currentSourceId);
-
-        // Seek to position 0 in offset-adjusted time (which is _offsetStart in real time)
-        player.currentTime(0);
-
-        // Double-check the seek worked - if not, force seek to the real start time
-        setTimeout(() => {
-          // Check again for stale callback
-          if (currentSourceId !== sourceIdRef.current || player.isDisposed()) {
-            console.log('[VideoJS] Stale seek check ignored');
-            return;
-          }
-
-          const actualTime = player.tech_?.currentTime?.() || 0;
-          console.log('[VideoJS] After seek, actual time:', actualTime, 'expected:', effectiveStart, 'sourceId:', currentSourceId);
-
-          // If offset plugin didn't work, force the seek directly
-          if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
-            console.log('[VideoJS] Offset seek failed, forcing direct seek to:', effectiveStart);
-            try {
-              player.tech_.setCurrentTime(effectiveStart);
-            } catch (e) {
-              console.log('[VideoJS] Direct seek failed:', e);
+      // Initialize VTT thumbnails if path is provided
+      if (vttPath && stashServer && stashAPI) {
+        processVttFile(vttPath, stashServer, stashAPI)
+          .then((vttBlobUrl) => {
+            if (vttBlobUrl) {
+              vttBlobRef.current = vttBlobUrl;
+              player.vttThumbnails({ src: vttBlobUrl, showTimestamp: true, responsive: true, width: 160, height: 90 });
             }
+          })
+          .catch((error) => console.error('Failed to initialize VTT thumbnails:', error));
+      }
+
+      if (onReady) onReady(player);
+
+      if (markers && markers.length > 0) {
+        addCustomMarkers(player, markers);
+      }
+
+      if (props.onEnded) {
+        player.on('ended', props.onEnded);
+      }
+
+      // When autoplay is requested, wait for metadata so the offset seek
+      // is applied before play() — avoids starting at the wrong position.
+      if (options.autoplay) {
+        const effectiveStart = typeof offset?.start === 'number' ? offset.start : 0;
+
+        player.one('loadedmetadata', () => {
+          if (player.isDisposed()) return;
+
+          player.currentTime(0);
+
+          // Verify the offset seek landed correctly
+          setTimeout(() => {
+            if (player.isDisposed()) return;
+            const actualTime = player.tech_?.currentTime?.() || 0;
+            if (Math.abs(actualTime - effectiveStart) > 1 && effectiveStart > 0) {
+              try { player.tech_.setCurrentTime(effectiveStart); } catch (e) {}
+            }
+          }, 50);
+
+          if (startFullscreen) {
+            player.requestFullscreen?.().catch?.(() => {});
           }
-        }, 50);
 
-        if (props.hasStarted) {
-          console.log('[VideoJS] Starting playback, sourceId:', currentSourceId);
-          player.play()?.catch((e) => console.log('[VideoJS] Play failed:', e));
-        }
+          player.play()?.catch((e) => console.log('[VideoJS] play failed:', e));
+        });
+      }
+    }));
 
-        // Restore fullscreen state if it was previously fullscreen
-        if (wasFullscreenRef.current && !player.isFullscreen()) {
-          player.requestFullscreen();
-        }
-      };
+    return () => {
+      if (vttBlobRef.current) {
+        cleanupVttBlob(vttBlobRef.current);
+        vttBlobRef.current = null;
+      }
+      if (player && !player.isDisposed()) {
+        player.dispose();
+        playerRef.current = null;
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-      // Store handler reference and use player.one() for single-fire
-      metadataHandlerRef.current = handleMetadataLoaded;
-      player.one('loadedmetadata', handleMetadataLoaded);
-    }
-  }, [sourceUrl, offsetStart, offsetEnd, props.hasStarted]);
-
-  // Update markers when markers prop changes
+  // Update markers when markers prop changes within the same mount
   React.useEffect(() => {
     const player = playerRef.current;
-    if (!player) return;
-
-    if (markers && markers.length > 0) {
-      addCustomMarkers(player, markers);
-    }
+    if (!player || !markers?.length) return;
+    addCustomMarkers(player, markers);
   }, [markers]);
 
   // Fade out in last 2 seconds before offset end
@@ -423,91 +276,42 @@ export const VideoJS = (props) => {
     if (!player || !offset) return;
 
     const handleTimeUpdate = () => {
-      if (player.currentTime() >= offset.end - 2) {
-        setVisible(false);
-      }
+      const clipDuration = (offset.end ?? Infinity) - (offset.start ?? 0);
+      if (player.currentTime() >= clipDuration - 2) setVisible(false);
     };
 
     player.on('timeupdate', handleTimeUpdate);
-    return () => {
-      player.off('timeupdate', handleTimeUpdate);
-    };
+    return () => player.off('timeupdate', handleTimeUpdate);
   }, [offset]);
 
-  // Fade in after seeked (start of new video)
+  // Fade in after seek (covers remount and manual seeking)
   React.useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
-
-    const handleSeeked = () => {
-      setVisible(true);
-    };
-
+    const handleSeeked = () => setVisible(true);
     player.on('seeked', handleSeeked);
-    return () => {
-      player.off('seeked', handleSeeked);
-    };
-  }, [options.sources]);
-
-  // Handle ended event from parent
-  React.useEffect(() => {
-    const player = playerRef.current;
-    if (player && props.onEnded) {
-      player.on('ended', props.onEnded);
-      return () => {
-        player.off('ended', props.onEnded);
-      };
-    }
-  }, [props.onEnded]);
-
-  React.useEffect(() => {
-    const player = playerRef.current;
-    const vttBlobUrl = vttBlobRef.current;
-    return () => {
-      // Clean up VTT blob URL to prevent memory leaks
-      if (vttBlobUrl) {
-        cleanupVttBlob(vttBlobUrl);
-        vttBlobRef.current = null;
-      }
-      
-      if (player && !player.isDisposed()) {
-        player.dispose();
-        playerRef.current = null;
-      }
-    };
+    return () => player.off('seeked', handleSeeked);
   }, []);
 
   return (
     <div
       className='video-player'
       data-vjs-player
-      style={{
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 1s'
-      }}
+      style={{ opacity: visible ? 1 : 0, transition: 'opacity 1s' }}
     >
       <div ref={videoRef} />
     </div>
   );
 };
 
-// Custom comparison function for React.memo to prevent unnecessary re-renders
+// Only re-render if props that affect the DOM/player actually change.
+// In playlist mode the parent remounts via key, so this mostly guards wall mode.
 const arePropsEqual = (prevProps, nextProps) => {
-  // Check if sources have changed (the main thing that should trigger a re-render)
-  const prevSources = prevProps.options?.sources;
-  const nextSources = nextProps.options?.sources;
-
-  const sourcesEqual = JSON.stringify(prevSources) === JSON.stringify(nextSources);
-
-  // Check other critical props
+  const sourcesEqual = JSON.stringify(prevProps.options?.sources) === JSON.stringify(nextProps.options?.sources);
   const offsetEqual = JSON.stringify(prevProps.offset) === JSON.stringify(nextProps.offset);
-  const hasStartedEqual = prevProps.hasStarted === nextProps.hasStarted;
   const onEndedEqual = prevProps.onEnded === nextProps.onEnded;
   const wallModeEqual = prevProps.wallMode === nextProps.wallMode;
-
-  // For markers, only re-render if sources change - let the useEffect handle marker updates
-  // This prevents video reloads when markers are added/updated
-  return sourcesEqual && offsetEqual && hasStartedEqual && onEndedEqual && wallModeEqual;
+  return sourcesEqual && offsetEqual && onEndedEqual && wallModeEqual;
 };
 
 export default React.memo(VideoJS, arePropsEqual);
