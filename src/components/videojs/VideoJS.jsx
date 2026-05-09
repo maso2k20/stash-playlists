@@ -226,22 +226,13 @@ export const VideoJS = (props) => {
           wasFullscreenRef.current = player.isFullscreen();
         });
 
-        // During a source transition the browser can fire an error (for the
-        // aborted previous-source request or a transient network hiccup on the
-        // new one).  Suppress the display and immediately call player.load() to
-        // restart the new source's load — the error event alone aborts it.
-        // Clear the flag first so a genuine failure on the retry is not hidden.
+        // During a source transition the browser can fire multiple error events
+        // (e.g. aborting the previous source, plus a second one when fullscreen
+        // triggers an additional state change).  Suppress all of them while the
+        // flag is set — handleMetadataLoaded or the 3s timeout will clear it.
         player.on('error', () => {
           if (!sourceChangingRef.current) return;
-          sourceChangingRef.current = false;
-          if (suppressTimeoutRef.current) {
-            clearTimeout(suppressTimeoutRef.current);
-            suppressTimeoutRef.current = null;
-          }
           player.error(null);
-          if (!player.isDisposed()) {
-            player.load();
-          }
         });
         
         
