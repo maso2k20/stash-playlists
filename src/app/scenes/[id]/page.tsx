@@ -387,6 +387,7 @@ export default function TimelineEditorPage() {
             fluid: true,
             muted: true,
             aspectRatio: "16:9",
+            bigPlayButton: false,
             sources: [{ src: streamUrl, type: "video/mp4" }],
             playbackRates: [0.5, 1, 1.5, 2],
         };

@@ -1127,6 +1127,7 @@ export default function SceneTagManagerPage() {
             responsive: true,
             fluid: true,
             aspectRatio: "16:9",
+            bigPlayButton: false,
             poster: posterUrl,
             sources: streamUrl ? [{ src: streamUrl, type: "video/mp4" }] : [],
         }),
