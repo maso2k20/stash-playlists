@@ -71,6 +71,13 @@ export function generateRulerTicks(
 ): { time: number; position: number; label: string; isMajor: boolean }[] {
     const ticks: { time: number; position: number; label: string; isMajor: boolean }[] = [];
 
+    // Guard against non-finite duration. With duration=Infinity the loop below
+    // never terminates (every position is 0, the break never fires) and the
+    // tab OOMs.
+    if (!Number.isFinite(duration) || duration <= 0) {
+        return ticks;
+    }
+
     // Determine tick interval based on zoom level
     let interval: number;
     if (pixelsPerSecond >= 100) {

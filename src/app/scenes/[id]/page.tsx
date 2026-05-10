@@ -269,13 +269,18 @@ export default function TimelineEditorPage() {
         for (const marker of markers) {
             const draft = drafts[marker.id];
             const endTime = draft?.end_seconds ?? marker.end_seconds ?? marker.seconds + 30;
-            if (endTime > maxTime) maxTime = endTime;
+            if (Number.isFinite(endTime) && endTime > maxTime) maxTime = endTime;
         }
         // Add some padding
         return maxTime > 0 ? maxTime + 30 : 300; // Default to 5 minutes if no markers
     }, [markers, drafts]);
 
-    const duration = videoDuration > 0 ? videoDuration : markerMaxTime;
+    // Some video streams report Infinity for duration (live streams, certain
+    // fragmented MP4s). Falling through to a finite fallback avoids an
+    // unbounded loop in generateRulerTicks that locks the tab and OOMs.
+    const duration = videoDuration > 0 && Number.isFinite(videoDuration)
+        ? videoDuration
+        : markerMaxTime;
 
     // Performer tags - collect and deduplicate all tags from scene performers
     const performerTags: Tag[] = useMemo(() => {
