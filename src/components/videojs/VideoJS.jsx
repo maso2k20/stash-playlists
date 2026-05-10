@@ -285,9 +285,16 @@ export const VideoJS = (props) => {
       }, 3000);
     }
 
-    // Reset the offset plugin's internal state before changing source so it
-    // doesn't carry over from the previous track.
-    player.offset({ start: 0, end: Infinity, restart_beginning: false });
+    // Only touch the offset plugin if the caller actually wants an offset.
+    // Calling player.offset() with end:Infinity activates the plugin and
+    // makes player.duration() return Infinity (it reports end-start), which
+    // breaks any consumer that relies on real duration (e.g. the scene
+    // editor's timeline ruler).
+    const hasOffset = typeof offsetStart === 'number' || typeof offsetEnd === 'number';
+    if (hasOffset) {
+      // Reset plugin state before changing source so it doesn't carry over.
+      player.offset({ start: 0, end: Infinity, restart_beginning: false });
+    }
 
     setVisible(true);
     player.src([{ src: sourceUrl, type: 'video/mp4' }]);
@@ -310,8 +317,10 @@ export const VideoJS = (props) => {
       suppressErrorsRef.current = false;
       player.removeClass('vjs-suppress-errors');
 
-      player.offset({ start: effectiveStart, end: effectiveEnd, restart_beginning: false });
-      player.currentTime(0);
+      if (hasOffset) {
+        player.offset({ start: effectiveStart, end: effectiveEnd, restart_beginning: false });
+        player.currentTime(0);
+      }
 
       setTimeout(() => {
         if (player.isDisposed()) return;
