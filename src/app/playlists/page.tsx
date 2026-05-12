@@ -75,6 +75,7 @@ export default function PlaylistsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<SortOption>("name-asc");
   const [hideEmpty, setHideEmpty] = useState(true);
+  const [hidePerformerPlaylists, setHidePerformerPlaylists] = useState(true);
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -390,6 +391,12 @@ export default function PlaylistsPage() {
       });
     }
 
+    // Apply hide performer playlists filter — drop any playlist whose
+    // resolved conditions include one or more actors.
+    if (hidePerformerPlaylists) {
+      filtered = filtered.filter(playlist => !(conds[playlist.id]?.actors?.length));
+    }
+
     // Apply sorting
     const sorted = [...filtered].sort((a, b) => {
       const statsA = stats[a.id] || { itemCount: 0, durationMs: 0 };
@@ -414,7 +421,7 @@ export default function PlaylistsPage() {
     });
 
     return sorted;
-  }, [playlists, stats, searchQuery, sortOption, hideEmpty]);
+  }, [playlists, stats, conds, searchQuery, sortOption, hideEmpty, hidePerformerPlaylists]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1600, mx: "auto" }}>
@@ -530,6 +537,13 @@ export default function PlaylistsPage() {
             label="Hide empty"
             checked={hideEmpty}
             onChange={(e) => setHideEmpty(e.target.checked)}
+            size="sm"
+          />
+
+          <Checkbox
+            label="Hide performer playlists"
+            checked={hidePerformerPlaylists}
+            onChange={(e) => setHidePerformerPlaylists(e.target.checked)}
             size="sm"
           />
 
