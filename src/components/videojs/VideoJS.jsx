@@ -160,6 +160,9 @@ export const VideoJS = (props) => {
   const suppressTimeoutRef = React.useRef(null);
   const hasInitializedRef = React.useRef(false);
   const onEndedRef = React.useRef(props.onEnded);
+  const currentSrcRef = React.useRef(null);
+  const retryCountRef = React.useRef(0);
+  const MAX_RETRIES = 2;
   const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
 
   const sourceUrl = options?.sources?.[0]?.src;
@@ -229,18 +232,35 @@ export const VideoJS = (props) => {
 
       // Use a stable wrapper so source changes pick up the latest onEnded.
       player.on('ended', () => onEndedRef.current?.());
-
-      // Suppress transient media errors fired during source transitions.
-      // The browser sometimes fires error events when aborting the previous
-      // source's request or hitting a transient hiccup on the new one — these
-      // are harmless and the new source loads fine. Real failures still
-      // surface via the 3s timeout fallback.
-      player.on('error', () => {
-        if (suppressErrorsRef.current) {
-          player.error(null);
-        }
-      });
     }));
+
+    // Register the error handler SYNCHRONOUSLY (outside the ready callback).
+    // The source-change effect runs immediately after videojs() returns and
+    // calls player.src(); if the browser fails the load before the async
+    // ready callback fires, an error registered in `ready` would miss it.
+    //
+    // During a source transition we suppress the error UI AND retry the load
+    // up to MAX_RETRIES times. In practice the same URL works on the second
+    // attempt (the user's "next, then back" workaround was effectively a
+    // manual retry). Errors outside the suppression window surface normally.
+    player.on('error', () => {
+      if (player.isDisposed()) return;
+      if (!suppressErrorsRef.current) return;
+
+      player.error(null);
+
+      if (retryCountRef.current < MAX_RETRIES && currentSrcRef.current) {
+        retryCountRef.current += 1;
+        const urlAtRetryTime = currentSrcRef.current;
+        setTimeout(() => {
+          if (player.isDisposed()) return;
+          // If the source changed during the wait, the new src() call will
+          // handle its own load — don't retry the stale URL.
+          if (currentSrcRef.current !== urlAtRetryTime) return;
+          player.src([{ src: urlAtRetryTime, type: 'video/mp4' }]);
+        }, 150);
+      }
+    });
 
     return () => {
       if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
@@ -266,24 +286,27 @@ export const VideoJS = (props) => {
     const isFirstLoad = !hasInitializedRef.current;
     hasInitializedRef.current = true;
 
-    // Suppress errors during the source change. Skipped on first load — there
-    // is no previous request to abort, so the error event won't fire from a
-    // transition. Wall mode (autoplay:true) and playlist mode both benefit
-    // from this on subsequent track changes.
-    if (!isFirstLoad) {
-      suppressErrorsRef.current = true;
-      player.addClass('vjs-suppress-errors');
-      player.error(null);
+    // Track the current source for the error-handler's retry path, and
+    // reset retry count for this new load.
+    currentSrcRef.current = sourceUrl;
+    retryCountRef.current = 0;
 
-      if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
-      suppressTimeoutRef.current = setTimeout(() => {
-        // 3s window expired; let real errors through if anything's still wrong.
-        suppressErrorsRef.current = false;
-        if (playerRef.current && !playerRef.current.isDisposed()) {
-          playerRef.current.removeClass('vjs-suppress-errors');
-        }
-      }, 3000);
-    }
+    // Suppress errors AND enable the retry path for every load (including the
+    // first). The first load can still hit transient MEDIA_ERR_SRC_NOT_SUPPORTED
+    // (code 4) errors that resolve on a second attempt — we used to skip
+    // suppression on first load thinking only aborts mattered.
+    suppressErrorsRef.current = true;
+    player.addClass('vjs-suppress-errors');
+    player.error(null);
+
+    if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
+    suppressTimeoutRef.current = setTimeout(() => {
+      // 3s window expired; let real errors through if anything's still wrong.
+      suppressErrorsRef.current = false;
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        playerRef.current.removeClass('vjs-suppress-errors');
+      }
+    }, 3000);
 
     // Only touch the offset plugin if the caller actually wants an offset.
     // Calling player.offset() with end:Infinity activates the plugin and
