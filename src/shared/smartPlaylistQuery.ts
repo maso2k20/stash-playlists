@@ -85,6 +85,7 @@ export type SmartRules = {
   requiredTagIds?: string[];   // ALL must match
   optionalTagIds?: string[];   // ANY must match
   minRating?: number | null;
+  exactRating?: number | null;
 };
 
 // Determine which query to use based on tag configuration
@@ -174,26 +175,27 @@ export function mapMarkersToItems(markers: any[], opts: {
 export async function filterItemsByRating(
   items: any[],
   minRating: number | null,
+  exactRating: number | null,
   prisma: any
 ): Promise<any[]> {
-  if (!minRating || minRating < 1) {
+  const hasExact = exactRating && exactRating >= 1;
+  const hasMin = minRating && minRating >= 1;
+  if (!hasExact && !hasMin) {
     return items;
   }
 
-  // Get all item IDs
   const itemIds = items.map(item => item.id);
+  const ratingWhere = hasExact ? { equals: exactRating! } : { gte: minRating! };
 
-  // Fetch ratings from database
   const itemsWithRatings = await prisma.item.findMany({
     where: {
       id: { in: itemIds },
-      rating: { gte: minRating }
+      rating: ratingWhere,
     },
     select: { id: true }
   });
 
   const ratedItemIds = new Set(itemsWithRatings.map((item: { id: string }) => item.id));
 
-  // Filter items to only include those with sufficient rating
   return items.filter(item => ratedItemIds.has(item.id));
 }

@@ -169,7 +169,8 @@ export default function PlaylistsPage() {
             .map((id: string) => tagNameById(id))
             .filter(Boolean);
           const minRating = data.conditionsResolved?.minRating ?? null;
-          return [p.id, { actors: actorNames, tags: tagNames, minRating } as ParsedConds] as const;
+          const exactRating = data.conditionsResolved?.exactRating ?? null;
+          return [p.id, { actors: actorNames, tags: tagNames, minRating, exactRating } as ParsedConds] as const;
         })
       );
 

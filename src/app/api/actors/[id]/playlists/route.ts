@@ -8,6 +8,7 @@ interface SmartPlaylistConditions {
   actorIds?: string[];
   tagIds?: string[];
   minRating?: number | null;
+  exactRating?: number | null;
 }
 
 // GET /api/actors/[id]/playlists - Get all playlists for a specific actor

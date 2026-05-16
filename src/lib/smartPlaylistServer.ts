@@ -118,6 +118,7 @@ type SmartPlaylistConditions = {
   requiredTagIds?: string[];   // ALL must match (INCLUDES_ALL)
   optionalTagIds?: string[];   // ANY must match (INCLUDES)
   minRating?: number | null;
+  exactRating?: number | null;
   perPage?: number;
   clip?: { before?: number; after?: number };
 };
@@ -158,6 +159,7 @@ export async function buildItemsForPlaylist(
     : [];
 
   const minRating = conditions.minRating;
+  const exactRating = conditions.exactRating;
   const perPage = Math.max(1, Number(conditions.perPage ?? 10000));
 
   // Get default clip settings from database if not specified in playlist conditions
@@ -328,15 +330,16 @@ export async function buildItemsForPlaylist(
   }
 
   // Apply rating filter if specified
-  if (minRating && minRating >= 1) {
+  const hasExactRating = exactRating && exactRating >= 1;
+  const hasMinRating = minRating && minRating >= 1;
+  if (hasExactRating || hasMinRating) {
     const itemIds = filteredItems.map(item => item.id);
+    const ratingWhere = hasExactRating ? { equals: exactRating! } : { gte: minRating! };
 
-    // Only include items that already exist in database with rating >= minRating
-    // This ensures consistency with the editor preview behavior
     const itemsWithSufficientRating = await prisma.item.findMany({
       where: {
         id: { in: itemIds },
-        rating: { gte: minRating }
+        rating: ratingWhere,
       },
       select: { id: true }
     });

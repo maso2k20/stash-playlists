@@ -23,6 +23,7 @@ interface SmartRulesOutput {
   requiredTagIds?: string[];   // ALL must match
   optionalTagIds?: string[];   // ANY must match
   minRating?: number | null;
+  exactRating?: number | null;
 }
 
 interface SmartPlaylistRuleBuilderProps {
@@ -34,6 +35,7 @@ interface SmartPlaylistRuleBuilderProps {
     requiredTagIds?: string[];
     optionalTagIds?: string[];
     minRating?: number | null;
+    exactRating?: number | null;
   };
 }
 
@@ -55,7 +57,8 @@ function initializeSelections(
   setSelectedActors: React.Dispatch<React.SetStateAction<Actor[]>>,
   setRequiredTags: React.Dispatch<React.SetStateAction<Tag[]>>,
   setOptionalTags: React.Dispatch<React.SetStateAction<Tag[]>>,
-  setMinRating: React.Dispatch<React.SetStateAction<number | null>>,
+  setRatingMode: React.Dispatch<React.SetStateAction<'any' | 'min' | 'exact'>>,
+  setRatingValue: React.Dispatch<React.SetStateAction<number | null>>,
 ) {
   if (!initialRules) return;
 
@@ -80,8 +83,15 @@ function initializeSelections(
     setRequiredTags(presetRequiredTags);
     setOptionalTags(presetOptionalTags);
   }
-  if (initialRules.minRating !== undefined) {
-    setMinRating(initialRules.minRating);
+  if (typeof initialRules.exactRating === 'number' && initialRules.exactRating >= 1) {
+    setRatingMode('exact');
+    setRatingValue(initialRules.exactRating);
+  } else if (typeof initialRules.minRating === 'number' && initialRules.minRating >= 1) {
+    setRatingMode('min');
+    setRatingValue(initialRules.minRating);
+  } else {
+    setRatingMode('any');
+    setRatingValue(null);
   }
 }
 
@@ -94,7 +104,8 @@ export default function SmartPlaylistRuleBuilder({
   const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
   const [requiredTags, setRequiredTags] = useState<Tag[]>([]);
   const [optionalTags, setOptionalTags] = useState<Tag[]>([]);
-  const [minRating, setMinRating] = useState<number | null>(null);
+  const [ratingMode, setRatingMode] = useState<'any' | 'min' | 'exact'>('any');
+  const [ratingValue, setRatingValue] = useState<number | null>(null);
 
   // Track whether we've applied the initial selections
   const hasInitializedRef = useRef(false);
@@ -105,7 +116,8 @@ export default function SmartPlaylistRuleBuilder({
     const rt = (initialRules?.requiredTagIds ?? initialRules?.tagIds ?? []).map(String).join(',');
     const ot = (initialRules?.optionalTagIds ?? []).map(String).join(',');
     const r = String(initialRules?.minRating ?? '');
-    return `${a}|${rt}|${ot}|${r}`;
+    const er = String(initialRules?.exactRating ?? '');
+    return `${a}|${rt}|${ot}|${r}|${er}`;
   }, [initialRules]);
   const lastInitKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -147,7 +159,7 @@ export default function SmartPlaylistRuleBuilder({
     if (!actors.length) return;           // wait for actors
     if (!tags.length) return;             // wait for tags
 
-    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setMinRating);
+    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setRatingMode, setRatingValue);
     hasInitializedRef.current = true;
   }, [initialRules, actors, tags]);
 
@@ -173,10 +185,11 @@ export default function SmartPlaylistRuleBuilder({
       optionalTagIds,
       // Keep legacy tagIds for backward compatibility (combine both for display purposes)
       tagIds: [...requiredTagIds, ...optionalTagIds],
-      minRating,
+      minRating: ratingMode === 'min' ? ratingValue : null,
+      exactRating: ratingMode === 'exact' ? ratingValue : null,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedActors, requiredTags, optionalTags, minRating]);
+  }, [selectedActors, requiredTags, optionalTags, ratingMode, ratingValue]);
 
   const sortedActors = useMemo(
     () => [...actors].sort((a, b) => a.name.localeCompare(b.name)),
@@ -310,22 +323,37 @@ export default function SmartPlaylistRuleBuilder({
         {/* Rating in bottom row, full width */}
         <Grid xs={12}>
           <Box sx={{ mt: 1 }}>
-            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Minimum Rating</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Rating</Typography>
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
               <Select
-                value={minRating}
-                onChange={(_, value) => setMinRating(value)}
-                placeholder="Any rating"
+                value={ratingMode}
+                onChange={(_, value) => {
+                  if (!value) return;
+                  setRatingMode(value);
+                  if (value === 'any') setRatingValue(null);
+                  else if (ratingValue === null) setRatingValue(1);
+                }}
                 size="sm"
-                sx={{ maxWidth: 200 }}
+                sx={{ width: 120 }}
               >
-                <Option value={null}>Any rating</Option>
-                <Option value={1}>1+ stars</Option>
-                <Option value={2}>2+ stars</Option>
-                <Option value={3}>3+ stars</Option>
-                <Option value={4}>4+ stars</Option>
-                <Option value={5}>5 stars only</Option>
+                <Option value="any">Any rating</Option>
+                <Option value="min">At least</Option>
+                <Option value="exact">Exactly</Option>
               </Select>
+              {ratingMode !== 'any' && (
+                <Select
+                  value={ratingValue}
+                  onChange={(_, value) => setRatingValue(value)}
+                  size="sm"
+                  sx={{ width: 110 }}
+                >
+                  <Option value={1}>1 star</Option>
+                  <Option value={2}>2 stars</Option>
+                  <Option value={3}>3 stars</Option>
+                  <Option value={4}>4 stars</Option>
+                  <Option value={5}>5 stars</Option>
+                </Select>
+              )}
             </Box>
           </Box>
         </Grid>

@@ -50,6 +50,7 @@ export type ParsedConds = {
   actors: string[]; // names
   tags: string[];   // names
   minRating: number | null;
+  exactRating: number | null;
 };
 
 interface PlaylistCardProps {
@@ -242,7 +243,11 @@ export default function PlaylistCard({
               {/* Rating */}
               <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
                 <Star size={14} />
-                {c?.minRating ? (
+                {c?.exactRating ? (
+                  <Chip size="sm" variant="soft" title={`Exactly ${c.exactRating} stars`}>
+                    Exactly {c.exactRating} {c.exactRating === 1 ? 'star' : 'stars'}
+                  </Chip>
+                ) : c?.minRating ? (
                   <Chip size="sm" variant="soft" title={`Minimum rating: ${c.minRating} stars`}>
                     {c.minRating}+ stars
                   </Chip>

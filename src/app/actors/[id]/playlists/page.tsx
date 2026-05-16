@@ -170,7 +170,8 @@ export default function ActorPlaylistsPage() {
             .map((id: string) => tagNameById(id))
             .filter(Boolean);
           const minRating = data.conditionsResolved?.minRating ?? null;
-          return [p.id, { actors: actorNames, tags: tagNames, minRating } as ParsedConds] as const;
+          const exactRating = data.conditionsResolved?.exactRating ?? null;
+          return [p.id, { actors: actorNames, tags: tagNames, minRating, exactRating } as ParsedConds] as const;
         })
       );
 
@@ -226,7 +227,7 @@ export default function ActorPlaylistsPage() {
       // optimistic seeds
       setStats((prev) => ({ ...prev, [created.id]: { itemCount: 0, durationMs: 0 } }));
       if (created.type === "SMART") {
-        setConds((prev) => ({ ...prev, [created.id]: { actors: [], tags: [], minRating: null } }));
+        setConds((prev) => ({ ...prev, [created.id]: { actors: [], tags: [], minRating: null, exactRating: null } }));
       }
       resetCreateForm();
       setIsCreateOpen(false);

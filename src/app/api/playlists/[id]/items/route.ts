@@ -268,7 +268,8 @@ export async function POST(request: NextRequest) {
 
         if (playlist?.type === "SMART") {
           const conditions = (playlist.conditions as any) || {};
-          const hasRatingFilter = conditions.minRating && conditions.minRating >= 1;
+          const hasRatingFilter = (conditions.minRating && conditions.minRating >= 1)
+            || (conditions.exactRating && conditions.exactRating >= 1);
 
           if (hasRatingFilter) {
             // Don't clear playlist when rating filter returns no results

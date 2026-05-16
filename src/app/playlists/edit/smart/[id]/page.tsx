@@ -55,6 +55,7 @@ export default function EditAutomaticPlaylistPage() {
     requiredTagIds: [],
     optionalTagIds: [],
     minRating: null,
+    exactRating: null,
   });
 
   const settings = useSettings();
@@ -112,6 +113,7 @@ export default function EditAutomaticPlaylistPage() {
           requiredTagIds,
           optionalTagIds,
           minRating: typeof cond.minRating === 'number' ? cond.minRating : null,
+          exactRating: typeof cond.exactRating === 'number' ? cond.exactRating : null,
         });
       } catch (e) {
         console.error(e);
@@ -161,14 +163,17 @@ export default function EditAutomaticPlaylistPage() {
 
         // Apply rating filter if specified
         let filteredItems = items;
-        if (rules.minRating && rules.minRating >= 1) {
+        const hasExactRating = rules.exactRating && rules.exactRating >= 1;
+        const hasMinRating = rules.minRating && rules.minRating >= 1;
+        if (hasExactRating || hasMinRating) {
+          const filterBody: Record<string, unknown> = { itemIds: items.map(item => item.id) };
+          if (hasExactRating) filterBody.exactRating = rules.exactRating;
+          else filterBody.minRating = rules.minRating;
+
           const response = await fetch('/api/items/filter', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              itemIds: items.map(item => item.id),
-              minRating: rules.minRating
-            }),
+            body: JSON.stringify(filterBody),
           });
 
           if (response.ok) {
@@ -188,7 +193,7 @@ export default function EditAutomaticPlaylistPage() {
         setFilteringLoading(false);
       }
     })();
-  }, [rawMarkers, rules.requiredTagIds, rules.optionalTagIds, rules.minRating, stashServer, stashAPI]);
+  }, [rawMarkers, rules.requiredTagIds, rules.optionalTagIds, rules.minRating, rules.exactRating, stashServer, stashAPI]);
 
   // Fetch ratings for preview markers
   useEffect(() => {

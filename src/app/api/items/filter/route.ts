@@ -5,11 +5,12 @@ function jsonError(status: number, message: string, extra?: Record<string, unkno
   return NextResponse.json({ error: message, ...extra }, { status });
 }
 
-// POST /api/items/filter - Filter item IDs by minimum rating
+// POST /api/items/filter - Filter item IDs by minimum or exact rating
 export async function POST(request: NextRequest) {
   let body: {
     itemIds: string[];
-    minRating: number;
+    minRating?: number;
+    exactRating?: number;
   };
 
   try {
@@ -18,22 +19,26 @@ export async function POST(request: NextRequest) {
     return jsonError(400, 'Invalid JSON');
   }
 
-  const { itemIds, minRating } = body;
+  const { itemIds, minRating, exactRating } = body;
 
   if (!Array.isArray(itemIds)) {
     return jsonError(400, 'itemIds must be an array');
   }
 
-  if (typeof minRating !== 'number' || minRating < 1 || minRating > 5) {
-    return jsonError(400, 'minRating must be a number between 1 and 5');
+  const hasExact = typeof exactRating === 'number' && exactRating >= 1 && exactRating <= 5;
+  const hasMin = typeof minRating === 'number' && minRating >= 1 && minRating <= 5;
+
+  if (!hasExact && !hasMin) {
+    return jsonError(400, 'minRating or exactRating must be a number between 1 and 5');
   }
 
   try {
-    // Find items with rating >= minRating
+    const ratingWhere = hasExact ? { equals: exactRating! } : { gte: minRating! };
+
     const itemsWithRatings = await prisma.item.findMany({
       where: {
         id: { in: itemIds },
-        rating: { gte: minRating }
+        rating: ratingWhere,
       },
       select: { id: true }
     });
