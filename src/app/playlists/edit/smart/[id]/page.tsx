@@ -96,13 +96,16 @@ export default function EditAutomaticPlaylistPage() {
             console.warn('Failed to parse conditions string:', e);
           }
         }
-        // Handle both legacy and new tag formats
-        // Check if new format exists (requiredTagIds or optionalTagIds as arrays, even if empty)
+        // Handle both legacy and new tag formats.
+        // Only treat as new format when at least one array is non-empty — the API always
+        // returns empty arrays for both fields even on legacy playlists, so Array.isArray
+        // alone would always be true and silently discard legacy tags.
         const legacyTagIds = Array.isArray(cond.tagIds) ? cond.tagIds.map(String) : [];
-        const hasNewFormat = Array.isArray(cond.requiredTagIds) || Array.isArray(cond.optionalTagIds);
+        const hasNewFormat = (cond.requiredTagIds?.length ?? 0) > 0
+                          || (cond.optionalTagIds?.length ?? 0) > 0;
         const requiredTagIds = hasNewFormat
           ? (Array.isArray(cond.requiredTagIds) ? cond.requiredTagIds.map(String) : [])
-          : legacyTagIds; // Fallback to legacy only if new format doesn't exist
+          : legacyTagIds; // Fallback to legacy when new format arrays are both empty
         const optionalTagIds = Array.isArray(cond.optionalTagIds)
           ? cond.optionalTagIds.map(String)
           : [];

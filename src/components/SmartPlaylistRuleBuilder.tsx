@@ -64,13 +64,16 @@ function initializeSelections(
 
   const actorIds = (initialRules.actorIds ?? []).map(String);
 
-  // Handle both legacy and new tag formats
-  // Only fall back to legacy tagIds if requiredTagIds is not defined at all
+  // Handle both legacy and new tag formats.
+  // Only treat as new format when at least one of the arrays is non-empty —
+  // the API always returns empty arrays for both fields even on legacy playlists,
+  // so checking Array.isArray alone would always return true and lose legacy tags.
   const legacyTagIds = (initialRules.tagIds ?? []).map(String);
-  const hasNewFormat = Array.isArray(initialRules.requiredTagIds) || Array.isArray(initialRules.optionalTagIds);
+  const hasNewFormat = (initialRules.requiredTagIds?.length ?? 0) > 0
+                    || (initialRules.optionalTagIds?.length ?? 0) > 0;
   const requiredTagIds = hasNewFormat
     ? (initialRules.requiredTagIds ?? []).map(String)
-    : legacyTagIds; // Fallback to legacy only if new format not present
+    : legacyTagIds; // Fallback to legacy when new format arrays are both empty
   const optionalTagIds = (initialRules.optionalTagIds ?? []).map(String);
 
   if (actors.length) {
@@ -113,7 +116,10 @@ export default function SmartPlaylistRuleBuilder({
   // If initialRules actually changes (different IDs), allow re-initialization
   const initKey = useMemo(() => {
     const a = (initialRules?.actorIds ?? []).map(String).join(',');
-    const rt = (initialRules?.requiredTagIds ?? initialRules?.tagIds ?? []).map(String).join(',');
+    // Fall back to legacy tagIds when requiredTagIds is absent or empty,
+    // so the key correctly reflects which tags will actually be initialised.
+    const rtRaw = initialRules?.requiredTagIds;
+    const rt = (rtRaw && rtRaw.length > 0 ? rtRaw : (initialRules?.tagIds ?? [])).map(String).join(',');
     const ot = (initialRules?.optionalTagIds ?? []).map(String).join(',');
     const r = String(initialRules?.minRating ?? '');
     const er = String(initialRules?.exactRating ?? '');
