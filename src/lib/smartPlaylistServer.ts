@@ -158,8 +158,17 @@ export async function buildItemsForPlaylist(
     ? conditions.optionalTagIds
     : [];
 
-  const minRating = conditions.minRating;
-  const exactRating = conditions.exactRating;
+  // Remap any pre-migration star values (1-5) to the new 3-level scale
+  // so playlists saved before the migration still filter correctly.
+  function remapLegacyRating(v: number | null | undefined): number | null {
+    if (v == null || v < 1) return null;
+    if (v <= 3) return v;          // already on new scale
+    if (v >= 5) return 3;          // 5 stars → Love
+    if (v >= 4) return 2;          // 4 stars → Like
+    return 1;
+  }
+  const minRating = remapLegacyRating(conditions.minRating as any);
+  const exactRating = remapLegacyRating(conditions.exactRating as any);
   const perPage = Math.max(1, Number(conditions.perPage ?? 10000));
 
   // Get default clip settings from database if not specified in playlist conditions

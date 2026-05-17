@@ -1,6 +1,32 @@
 import { gql } from "@apollo/client";
 import { extractRelativePath } from "@/lib/urlUtils";
 
+const MARKER_FIELDS = `
+  id
+  title
+  end_seconds
+  seconds
+  screenshot
+  stream
+  preview
+  scene { id title performers { id name } }
+  tags { id name }
+`;
+
+// No tag filter — used when no tags are selected (avoids INCLUDES_ALL: [] returning only untagged markers)
+export const SMART_PLAYLIST_BUILDER_NO_TAGS = gql`
+  query smartPlaylistBuilderNoTags($actorId: [ID!]) {
+    findSceneMarkers(
+      filter: { per_page: 5000 }
+      scene_marker_filter: {
+        performers: { modifier: INCLUDES_ALL, value: $actorId }
+      }
+    ) {
+      scene_markers { ${MARKER_FIELDS} }
+    }
+  }
+`;
+
 // Query for INCLUDES_ALL (required tags only)
 export const SMART_PLAYLIST_BUILDER_REQUIRED = gql`
   query smartPlaylistBuilderRequired($actorId: [ID!], $tagID: [ID!]!) {
@@ -11,17 +37,7 @@ export const SMART_PLAYLIST_BUILDER_REQUIRED = gql`
         tags: { modifier: INCLUDES_ALL, value: $tagID }
       }
     ) {
-      scene_markers {
-        id
-        title
-        end_seconds
-        seconds
-        screenshot
-        stream
-        preview
-        scene { id title performers { id name } }
-        tags { id name }
-      }
+      scene_markers { ${MARKER_FIELDS} }
     }
   }
 `;
@@ -36,17 +52,7 @@ export const SMART_PLAYLIST_BUILDER_OPTIONAL = gql`
         tags: { modifier: INCLUDES, value: $tagID }
       }
     ) {
-      scene_markers {
-        id
-        title
-        end_seconds
-        seconds
-        screenshot
-        stream
-        preview
-        scene { id title performers { id name } }
-        tags { id name }
-      }
+      scene_markers { ${MARKER_FIELDS} }
     }
   }
 `;
@@ -61,17 +67,7 @@ export const SMART_PLAYLIST_BUILDER_COMBINED = gql`
         tags: { modifier: INCLUDES_ALL, value: $tagID }
       }
     ) {
-      scene_markers {
-        id
-        title
-        end_seconds
-        seconds
-        screenshot
-        stream
-        preview
-        scene { id title performers { id name } }
-        tags { id name }
-      }
+      scene_markers { ${MARKER_FIELDS} }
     }
   }
 `;
@@ -90,52 +86,50 @@ export type SmartRules = {
 
 // Determine which query to use based on tag configuration
 export function getSmartPlaylistQuery(rules: SmartRules) {
-  // Don't fall back to tagIds here - that contains ALL tags for legacy compat
   const requiredTagIds = rules.requiredTagIds ?? [];
   const optionalTagIds = rules.optionalTagIds ?? [];
+  const legacyTagIds = rules.tagIds ?? [];
 
   if (requiredTagIds.length && optionalTagIds.length) {
-    // Both required and optional - query with required, filter optional client-side
     return SMART_PLAYLIST_BUILDER_COMBINED;
   } else if (optionalTagIds.length) {
-    // Only optional tags - use INCLUDES (OR logic)
     return SMART_PLAYLIST_BUILDER_OPTIONAL;
-  } else if (requiredTagIds.length) {
-    // Only required tags - use INCLUDES_ALL (AND logic)
-    return SMART_PLAYLIST_BUILDER_REQUIRED;
-  } else if (rules.tagIds?.length) {
-    // Legacy format - treat as required
+  } else if (requiredTagIds.length || legacyTagIds.length) {
     return SMART_PLAYLIST_BUILDER_REQUIRED;
   } else {
-    // No tags at all
-    return SMART_PLAYLIST_BUILDER_REQUIRED;
+    // No tags — omit the tags filter entirely so we don't accidentally
+    // send INCLUDES_ALL: [] which Stash interprets as "markers with no tags".
+    return SMART_PLAYLIST_BUILDER_NO_TAGS;
   }
 }
 
 // Build vars for the query
 export function buildSmartVars(rules: SmartRules) {
-  // Don't fall back to tagIds here - that contains ALL tags for legacy compat
   const requiredTagIds = rules.requiredTagIds ?? [];
   const optionalTagIds = rules.optionalTagIds ?? [];
+  const legacyTagIds = rules.tagIds ?? [];
 
-  // Determine which tags to use in the query
+  const actorId = (rules.actorIds ?? []).map(String);
+
+  // When no tags at all, use the no-tags query which has no $tagID variable.
+  const noTags = !requiredTagIds.length && !optionalTagIds.length && !legacyTagIds.length;
+  if (noTags) {
+    return { actorId, minRating: rules.minRating ?? null };
+  }
+
   let tagIDsForQuery: string[];
   if (requiredTagIds.length && optionalTagIds.length) {
-    // Combined mode - query uses required tags, optional filtered client-side
     tagIDsForQuery = requiredTagIds;
   } else if (optionalTagIds.length) {
-    // Only optional - query uses optional tags with INCLUDES
     tagIDsForQuery = optionalTagIds;
   } else if (requiredTagIds.length) {
-    // Only required - use required tags
     tagIDsForQuery = requiredTagIds;
   } else {
-    // Legacy format fallback
-    tagIDsForQuery = rules.tagIds ?? [];
+    tagIDsForQuery = legacyTagIds;
   }
 
   return {
-    actorId: (rules.actorIds ?? []).map(String),
+    actorId,
     tagID: tagIDsForQuery.map(String),
     minRating: rules.minRating ?? null,
   };
