@@ -1,9 +1,7 @@
-// filepath: src/app/test/playlist/[id]/EditAutomaticPlaylistPage.tsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useLazyQuery } from '@apollo/client';
 
 import Sheet from '@mui/joy/Sheet';
 import Grid from '@mui/joy/Grid';
@@ -30,14 +28,34 @@ import PlaylistImageUpload from '@/components/PlaylistImageUpload';
 import { useSettings } from '@/app/context/SettingsContext';
 import { useStashTags } from '@/context/StashTagsContext';
 
-// 🔁 Shared query + helpers used by both editor and refresh API
-import {
-  getSmartPlaylistQuery,
-  buildSmartVars,
-  mapMarkersToItems,
-  filterByOptionalTags,
-  type SmartRules as Rules,
-} from '@/shared/smartPlaylistQuery';
+// Local shape mirroring the server's SmartPlaylistConditions — kept here
+// so the editor doesn't need to import a server-only type.
+type Rules = {
+  actorIds: string[];
+  tagIds?: string[];
+  requiredTagIds?: string[];
+  optionalTagIds?: string[];
+  minRating?: number | null;
+  exactRating?: number | null;
+};
+
+// Marker shape returned by /api/smart-playlists/preview. Matches the
+// fields the preview UI actually renders.
+type PreviewMarker = {
+  id: string;
+  title?: string | null;
+  seconds: number;
+  end_seconds?: number | null;
+  screenshot?: string | null;
+  stream?: string | null;
+  preview?: string | null;
+  scene: {
+    id: string;
+    title?: string | null;
+    performers?: Array<{ id: string; name: string }>;
+  } | null;
+  tags?: Array<{ id: string; name: string }>;
+};
 
 export default function EditAutomaticPlaylistPage() {
   const { id } = useParams<{ id: string }>();
@@ -62,14 +80,9 @@ export default function EditAutomaticPlaylistPage() {
   const stashServer = settings['STASH_SERVER'];
   const stashAPI = settings['STASH_API'];
 
-  // Get the appropriate query based on current rules
-  const smartQuery = useMemo(() => getSmartPlaylistQuery(rules), [rules]);
-
-  const [fetchMarkers, { data: previewData, loading: previewLoading, error: previewError }] =
-    useLazyQuery(smartQuery, { fetchPolicy: "no-cache" });
-
-  const [filteredMarkers, setFilteredMarkers] = useState<any[]>([]);
-  const [filteringLoading, setFilteringLoading] = useState(false);
+  const [filteredMarkers, setFilteredMarkers] = useState<PreviewMarker[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [markerRatings, setMarkerRatings] = useState<Record<string, number>>({});
 
   // Load playlist meta + rules
@@ -130,73 +143,37 @@ export default function EditAutomaticPlaylistPage() {
   // Stash tags for the builder UI
   const { stashTags: tags, loading: tagsLoading, error: tagsError } = useStashTags();
 
-  // Preview query (reuses shared var builder)
+  // Server-side preview: single source of truth. Calls the same code path
+  // the refresh button uses, so editor preview and refresh always agree.
   useEffect(() => {
-    fetchMarkers({ variables: buildSmartVars(rules) });
-  }, [rules, fetchMarkers]);
-
-  const rawMarkers = useMemo(
-    () => previewData?.findSceneMarkers?.scene_markers ?? [],
-    [previewData]
-  );
-
-  // Apply optional tag and rating filters to preview results
-  useEffect(() => {
-    if (!rawMarkers.length) {
-      setFilteredMarkers([]);
-      return;
-    }
-
-    (async () => {
-      setFilteringLoading(true);
-      try {
-        // First apply optional tag filter if both required and optional tags are set
-        let markersAfterTagFilter = rawMarkers;
-        const requiredTagIds = rules.requiredTagIds ?? [];
-        const optionalTagIds = rules.optionalTagIds ?? [];
-
-        if (requiredTagIds.length && optionalTagIds.length) {
-          // When both are set, we queried with INCLUDES_ALL for required,
-          // now filter client-side for optional tags
-          markersAfterTagFilter = filterByOptionalTags(rawMarkers, optionalTagIds);
+    const ctrl = new AbortController();
+    setPreviewLoading(true);
+    setPreviewError(null);
+    fetch('/api/smart-playlists/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conditions: rules }),
+      signal: ctrl.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error || `Preview failed (HTTP ${res.status})`);
         }
-
-        // Convert markers to items format for rating filtering
-        const items = mapMarkersToItems(markersAfterTagFilter, { stashServer, stashAPI });
-
-        // Apply rating filter if specified
-        let filteredItems = items;
-        const hasExactRating = rules.exactRating && rules.exactRating >= 1;
-        const hasMinRating = rules.minRating && rules.minRating >= 1;
-        if (hasExactRating || hasMinRating) {
-          const filterBody: Record<string, unknown> = { itemIds: items.map(item => item.id) };
-          if (hasExactRating) filterBody.exactRating = rules.exactRating;
-          else filterBody.minRating = rules.minRating;
-
-          const response = await fetch('/api/items/filter', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(filterBody),
-          });
-
-          if (response.ok) {
-            const { filteredIds } = await response.json();
-            const filteredIdSet = new Set(filteredIds);
-            filteredItems = items.filter(item => filteredIdSet.has(item.id));
-          }
-        }
-
-        // Convert back to marker format for display
-        const filteredMarkerIds = new Set(filteredItems.map(item => item.id));
-        setFilteredMarkers(markersAfterTagFilter.filter((marker: any) => filteredMarkerIds.has(marker.id)));
-      } catch (error) {
-        console.error('Error filtering markers:', error);
-        setFilteredMarkers(rawMarkers); // Fallback to unfiltered
-      } finally {
-        setFilteringLoading(false);
-      }
-    })();
-  }, [rawMarkers, rules.requiredTagIds, rules.optionalTagIds, rules.minRating, rules.exactRating, stashServer, stashAPI]);
+        return res.json();
+      })
+      .then((data: { markers: PreviewMarker[]; count: number }) => {
+        setFilteredMarkers(data.markers ?? []);
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        console.error('[preview]', err);
+        setPreviewError(err?.message ?? 'Failed to load preview');
+        setFilteredMarkers([]);
+      })
+      .finally(() => setPreviewLoading(false));
+    return () => ctrl.abort();
+  }, [rules]);
 
   // Fetch ratings for preview markers
   useEffect(() => {
@@ -215,34 +192,24 @@ export default function EditAutomaticPlaylistPage() {
   async function handleSave() {
     setLoading(true);
     try {
-      // 1) Save metadata + conditions
+      // 1) Save name/description/image/conditions
       {
         const res = await fetch(`/api/playlists/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, description, conditions: rules }),
+          body: JSON.stringify({ name, description, image, conditions: rules }),
         });
         if (!res.ok) throw new Error('Failed to save playlist metadata.');
       }
 
-      // 2) If no markers, do NOT sync items — avoid accidental clears
-      if (!filteredMarkers || filteredMarkers.length === 0) {
-        setLoading(false);
-        alert('No matches found. Saved name/description/rules, but did not update playlist items.');
-        return;
-      }
-
-      // 3) Prepare payload using shared mapper (keeps parity with refresh)
-      const itemsPayload = mapMarkersToItems(filteredMarkers, {
-        stashServer,
-        stashAPI,
-      });
-
-      // 4) Sync
+      // 2) Trigger a server-side refresh against the just-saved conditions.
+      //    allowEmpty: true tells the route this is an explicit Save — if
+      //    the conditions match nothing, sync to empty rather than preserving
+      //    stale items (the preserve-existing branch is for auto-refresh only).
       const res = await fetch(`/api/playlists/${id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsPayload }),
+        body: JSON.stringify({ refresh: true, allowEmpty: true }),
       });
 
       if (!res.ok) {
@@ -280,7 +247,7 @@ export default function EditAutomaticPlaylistPage() {
         </Typography>
       </Box>
 
-      {(loading || previewLoading || filteringLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
+      {(loading || previewLoading) && <LinearProgress thickness={2} sx={{ mb: 2 }} />}
 
       <Grid container spacing={3}>
         {/* Left Column: Details + Rules */}
@@ -395,7 +362,7 @@ export default function EditAutomaticPlaylistPage() {
                     variant="soft" 
                     color={filteredMarkers.length > 0 ? "primary" : "neutral"}
                   >
-                    {(previewLoading || filteringLoading) ? 'Loading…' : `${filteredMarkers.length} match${filteredMarkers.length === 1 ? '' : 'es'}`}
+                    {previewLoading ? 'Loading…' : `${filteredMarkers.length} match${filteredMarkers.length === 1 ? '' : 'es'}`}
                   </Chip>
                 </Stack>
                 <Typography level="body-sm" color="neutral" sx={{ mt: 0.5 }}>

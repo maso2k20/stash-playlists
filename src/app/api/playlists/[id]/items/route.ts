@@ -258,9 +258,12 @@ export async function POST(request: NextRequest) {
 
       console.log(`[PlaylistItems] Refreshing playlist ${playlistId}: ${incoming.length} items from Stash`);
 
-      // Check if this is a smart playlist with rating filter that returned no results
-      // In this case, don't clear the playlist, just return current state
-      if (incoming.length === 0) {
+      // Check if this is a smart playlist with rating filter that returned no results.
+      // For auto/scheduled refresh, preserve existing items so a transient empty match
+      // doesn't wipe the playlist. For explicit editor Save (allowEmpty: true), respect
+      // the user's intent and sync to empty.
+      const allowEmpty = payload?.allowEmpty === true;
+      if (incoming.length === 0 && !allowEmpty) {
         const playlist = await prisma.playlist.findUnique({
           where: { id: playlistId },
           select: { type: true, conditions: true }
