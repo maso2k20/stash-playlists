@@ -84,55 +84,83 @@ export type SmartRules = {
   exactRating?: number | null;
 };
 
-// Determine which query to use based on tag configuration
+// Build a GraphQL query document dynamically so filter clauses are only
+// included when the corresponding arrays are non-empty. Sending
+// INCLUDES_ALL: [] to Stash returns only untagged/no-performer markers,
+// not all markers — so we must omit the clause entirely when not needed.
 export function getSmartPlaylistQuery(rules: SmartRules) {
-  const requiredTagIds = rules.requiredTagIds ?? [];
-  const optionalTagIds = rules.optionalTagIds ?? [];
-  const legacyTagIds = rules.tagIds ?? [];
+  const actorIds   = (rules.actorIds   ?? []).map(String);
+  const requiredTagIds = (rules.requiredTagIds ?? []).map(String);
+  const optionalTagIds = (rules.optionalTagIds ?? []).map(String);
+  const legacyTagIds   = (rules.tagIds ?? []).map(String);
 
-  if (requiredTagIds.length && optionalTagIds.length) {
-    return SMART_PLAYLIST_BUILDER_COMBINED;
-  } else if (optionalTagIds.length) {
-    return SMART_PLAYLIST_BUILDER_OPTIONAL;
-  } else if (requiredTagIds.length || legacyTagIds.length) {
-    return SMART_PLAYLIST_BUILDER_REQUIRED;
-  } else {
-    // No tags — omit the tags filter entirely so we don't accidentally
-    // send INCLUDES_ALL: [] which Stash interprets as "markers with no tags".
-    return SMART_PLAYLIST_BUILDER_NO_TAGS;
+  const hasBoth        = requiredTagIds.length > 0 && optionalTagIds.length > 0;
+  const hasRequiredOnly = requiredTagIds.length > 0 && optionalTagIds.length === 0;
+  const hasOptionalOnly = requiredTagIds.length === 0 && optionalTagIds.length > 0;
+  const hasLegacyOnly   = requiredTagIds.length === 0 && optionalTagIds.length === 0 && legacyTagIds.length > 0;
+
+  const filterParts: string[] = [];
+  const varDecls: string[] = [];
+
+  if (actorIds.length) {
+    filterParts.push('performers: { modifier: INCLUDES_ALL, value: $actorId }');
+    varDecls.push('$actorId: [ID!]');
   }
+
+  if (hasBoth || hasRequiredOnly || hasLegacyOnly) {
+    filterParts.push('tags: { modifier: INCLUDES_ALL, value: $tagID }');
+    varDecls.push('$tagID: [ID!]');
+  } else if (hasOptionalOnly) {
+    filterParts.push('tags: { modifier: INCLUDES, value: $tagID }');
+    varDecls.push('$tagID: [ID!]');
+  }
+
+  const varString    = varDecls.length ? `(${varDecls.join(', ')})` : '';
+  const filterClause = filterParts.length
+    ? `scene_marker_filter: { ${filterParts.join(' ')} }`
+    : '';
+
+  return gql(`
+    query smartPlaylistPreview${varString} {
+      findSceneMarkers(
+        filter: { per_page: 5000 }
+        ${filterClause}
+      ) {
+        scene_markers {
+          id title end_seconds seconds screenshot stream preview
+          scene { id title performers { id name } }
+          tags { id name }
+        }
+      }
+    }
+  `);
 }
 
-// Build vars for the query
+// Build variables to match the dynamically-generated query.
+// Only include a variable when its filter clause is actually in the query.
 export function buildSmartVars(rules: SmartRules) {
-  const requiredTagIds = rules.requiredTagIds ?? [];
-  const optionalTagIds = rules.optionalTagIds ?? [];
-  const legacyTagIds = rules.tagIds ?? [];
+  const actorIds       = (rules.actorIds   ?? []).map(String);
+  const requiredTagIds = (rules.requiredTagIds ?? []).map(String);
+  const optionalTagIds = (rules.optionalTagIds ?? []).map(String);
+  const legacyTagIds   = (rules.tagIds ?? []).map(String);
 
-  const actorId = (rules.actorIds ?? []).map(String);
+  const vars: Record<string, any> = {};
 
-  // When no tags at all, use the no-tags query which has no $tagID variable.
-  const noTags = !requiredTagIds.length && !optionalTagIds.length && !legacyTagIds.length;
-  if (noTags) {
-    return { actorId, minRating: rules.minRating ?? null };
-  }
+  if (actorIds.length) vars.actorId = actorIds;
 
-  let tagIDsForQuery: string[];
-  if (requiredTagIds.length && optionalTagIds.length) {
-    tagIDsForQuery = requiredTagIds;
+  const hasBoth = requiredTagIds.length > 0 && optionalTagIds.length > 0;
+  if (hasBoth) {
+    vars.tagID = requiredTagIds;           // optional tags filtered client-side
   } else if (optionalTagIds.length) {
-    tagIDsForQuery = optionalTagIds;
+    vars.tagID = optionalTagIds;
   } else if (requiredTagIds.length) {
-    tagIDsForQuery = requiredTagIds;
-  } else {
-    tagIDsForQuery = legacyTagIds;
+    vars.tagID = requiredTagIds;
+  } else if (legacyTagIds.length) {
+    vars.tagID = legacyTagIds;
   }
+  // (no vars when both arrays are empty — query has no filter clauses)
 
-  return {
-    actorId,
-    tagID: tagIDsForQuery.map(String),
-    minRating: rules.minRating ?? null,
-  };
+  return vars;
 }
 
 // Filter markers by optional tags (client-side filtering)
