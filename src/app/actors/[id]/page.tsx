@@ -10,6 +10,7 @@ import { formatLength } from "@/lib/formatLength";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { makeStashUrl } from "@/lib/urlUtils";
+import { invalidatePlaylists } from "@/lib/playlistsCache";
 
 import {
   Sheet,
@@ -549,6 +550,7 @@ export default function Page() {
         setSingleMarker(null);
         setSinglePlaylistId("");
         setIsSingleDialogOpen(false);
+        await invalidatePlaylists();
       }
     } catch (err) {
       console.error("Network or code error:", err);

@@ -23,6 +23,7 @@ import {
 import { ArrowUp, ArrowDown, Trash2, Clock } from "lucide-react";
 import { formatLength } from "@/lib/formatLength";
 import PlaylistImageUpload from "@/components/PlaylistImageUpload";
+import { invalidatePlaylists } from "@/lib/playlistsCache";
 import Image from "next/image";
 import { useSettings } from "@/app/context/SettingsContext";
 import { makeStashUrl } from "@/lib/urlUtils";
@@ -87,6 +88,7 @@ export default function EditManualPlaylistPage() {
       });
 
       if (res.ok && orderRes.ok) {
+        await invalidatePlaylists();
         router.push(returnTo);
       } else {
         throw new Error("Failed to save changes");

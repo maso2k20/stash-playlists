@@ -27,6 +27,7 @@ import StarRating from '@/components/StarRating';
 import PlaylistImageUpload from '@/components/PlaylistImageUpload';
 import { useSettings } from '@/app/context/SettingsContext';
 import { useStashTags } from '@/context/StashTagsContext';
+import { invalidatePlaylists } from '@/lib/playlistsCache';
 
 // Local shape mirroring the server's SmartPlaylistConditions — kept here
 // so the editor doesn't need to import a server-only type.
@@ -221,6 +222,7 @@ export default function EditAutomaticPlaylistPage() {
         throw new Error(msg);
       }
 
+      await invalidatePlaylists();
       router.push(returnTo);
     } catch (e: any) {
       console.error(e);

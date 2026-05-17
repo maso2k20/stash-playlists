@@ -11,6 +11,7 @@ import {
   Alert,
 } from '@mui/joy';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { invalidatePlaylists } from '@/lib/playlistsCache';
 
 interface PlaylistImageUploadProps {
   currentImage?: string | null;
@@ -70,6 +71,7 @@ export default function PlaylistImageUpload({
 
       const result = await response.json();
       onImageUploaded?.(result.imageUrl, result.filename);
+      await invalidatePlaylists();
     } catch (err: any) {
       setError(err.message || 'Failed to upload image');
     } finally {
@@ -94,6 +96,7 @@ export default function PlaylistImageUpload({
       }
 
       onImageDeleted?.();
+      await invalidatePlaylists();
     } catch (err: any) {
       setError(err.message || 'Failed to delete image');
     } finally {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import { normalizeConditions } from '@/lib/normalizeConditions';
 
 const prisma = new PrismaClient();
 
@@ -27,22 +28,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
     }
 
-    const rawConds: any =
-      typeof playlist.conditions === "string"
-        ? safeParse(playlist.conditions)
-        : playlist.conditions ?? {};
-
-    const actorIds: string[] = Array.isArray(rawConds?.actorIds) ? rawConds.actorIds.map(String) : [];
-    const tagIds: string[] = Array.isArray(rawConds?.tagIds) ? rawConds.tagIds.map(String) : [];
-    const requiredTagIds: string[] = Array.isArray(rawConds?.requiredTagIds) ? rawConds.requiredTagIds.map(String) : [];
-    const optionalTagIds: string[] = Array.isArray(rawConds?.optionalTagIds) ? rawConds.optionalTagIds.map(String) : [];
-    const minRating: number | null = typeof rawConds?.minRating === 'number' ? rawConds.minRating : null;
-    const exactRating: number | null = typeof rawConds?.exactRating === 'number' ? rawConds.exactRating : null;
+    const conditions = normalizeConditions(playlist.conditions);
 
     // Resolve actors from Prisma; tags will be resolved client-side via StashTagsContext
-    const actors = actorIds.length
+    const actors = conditions.actorIds.length
       ? await prisma.actor.findMany({
-          where: { id: { in: actorIds } },
+          where: { id: { in: conditions.actorIds } },
           select: { id: true, name: true },
         })
       : [];
@@ -50,12 +41,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ...playlist,
-        conditions: { actorIds, tagIds, requiredTagIds, optionalTagIds, minRating, exactRating }, // keep normalized
+        conditions,
         conditionsResolved: {
-          actors,     // [{ id, name }]
-          tagIds,     // pass through for client-side name lookup
-          minRating,
-          exactRating,
+          actors,
+          tagIds: conditions.tagIds,
+          requiredTagIds: conditions.requiredTagIds,
+          optionalTagIds: conditions.optionalTagIds,
+          minRating: conditions.minRating,
+          exactRating: conditions.exactRating,
         },
       },
       { status: 200 }
@@ -63,14 +56,6 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("[GET /api/playlists/:id] error:", err);
     return NextResponse.json({ error: "Failed to fetch playlist" }, { status: 500 });
-  }
-}
-
-function safeParse(s: string) {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return {};
   }
 }
 

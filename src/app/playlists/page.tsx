@@ -1,8 +1,10 @@
 // file: src/app/playlists/page.tsx
 "use client";
 
-import { useState, useEffect, ChangeEvent, useMemo } from "react";
+import { useState, ChangeEvent, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { PLAYLISTS_LIST_KEY, playlistsFetcher, invalidatePlaylists } from "@/lib/playlistsCache";
 import {
   Box,
   Button,
@@ -43,6 +45,25 @@ import PlaylistCard, {
   PlaylistType,
 } from "@/components/PlaylistCard";
 
+// Shape returned by the consolidated GET /api/playlists endpoint.
+type ConsolidatedPlaylist = {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: string;
+  image?: string | null;
+  itemCount: number;
+  durationMs: number;
+  conditionsResolved?: {
+    actors: Array<{ id: string; name: string }>;
+    tagIds: string[];
+    requiredTagIds: string[];
+    optionalTagIds: string[];
+    minRating: number | null;
+    exactRating: number | null;
+  };
+};
+
 type SortOption =
   | "name-asc"
   | "name-desc"
@@ -55,15 +76,16 @@ export default function PlaylistsPage() {
   const router = useRouter();
   const { stashTags } = useStashTags(); // [{id, name, ...}] from Stash GraphQL
 
-  // Lists & UI state
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Single SWR fetch returns the full consolidated list (playlists + stats + conditionsResolved).
+  // Stale-while-revalidate gives instant rendering on repeat visits; invalidatePlaylists()
+  // is called from mutation sites to force a fresh fetch.
+  const { data: rawPlaylists, error: swrError, isLoading } = useSWR<ConsolidatedPlaylist[]>(
+    PLAYLISTS_LIST_KEY,
+    playlistsFetcher,
+  );
 
-  // Per-playlist stats and conditions
-  const [stats, setStats] = useState<Record<string, PlaylistStats>>({});
-  const [conds, setConds] = useState<Record<string, ParsedConds>>({});
+  const loading = isLoading;
+  const error = swrError ? (swrError.message ?? "Failed to load playlists") : null;
 
   // Per-playlist "refreshing" state
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
@@ -93,105 +115,47 @@ export default function PlaylistsPage() {
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  // Initial load
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const res = await fetch("/api/playlists");
-        if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-        const data = await res.json();
-        setPlaylists(data);
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to load playlists");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  // Derive the page's existing data shapes from the single SWR response.
+  // The rest of the component (filter/sort/render) still reads `playlists`,
+  // `stats`, and `conds` exactly as before — only the data source changes.
+  const playlists: Playlist[] = useMemo(
+    () => (rawPlaylists ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description ?? undefined,
+      type: p.type as PlaylistType,
+      image: p.image ?? undefined,
+    })),
+    [rawPlaylists],
+  );
 
-  // Stats via /api/playlists/[id]/stats
-  useEffect(() => {
-    if (!playlists.length) {
-      setStatsLoading(false);
-      return;
+  const stats: Record<string, PlaylistStats> = useMemo(() => {
+    const out: Record<string, PlaylistStats> = {};
+    for (const p of rawPlaylists ?? []) {
+      out[p.id] = { itemCount: p.itemCount ?? 0, durationMs: p.durationMs ?? 0 };
     }
-    let cancelled = false;
-    setStatsLoading(true);
-    (async () => {
-      const results = await Promise.allSettled(
-        playlists.map(async (p) => {
-          const res = await fetch(`/api/playlists/${p.id}/stats`);
-          if (!res.ok) throw new Error("stats fetch failed");
-          const data = await res.json();
-          return [p.id, { itemCount: data.itemCount ?? 0, durationMs: data.durationMs ?? 0 }] as const;
-        })
-      );
-      if (cancelled) return;
-      setStats((prev) => {
-        const next = { ...prev };
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            const [id, s] = r.value;
-            next[id] = s;
-          }
-        }
-        return next;
-      });
-      setStatsLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [playlists]);
+    return out;
+  }, [rawPlaylists]);
 
-  // SMART playlist conditions via /api/playlists/[id]
-  // Resolve actor names from API, tag names via StashTagsContext
-  useEffect(() => {
-    const smarts = playlists.filter((p) => p.type === "SMART");
-    if (!smarts.length) return;
-    let cancelled = false;
+  const statsLoading = isLoading;
 
+  const conds: Record<string, ParsedConds> = useMemo(() => {
     const tagNameById = (id: string) =>
       stashTags?.find((t: any) => String(t.id) === String(id))?.name ?? id;
 
-    (async () => {
-      const results = await Promise.allSettled(
-        smarts.map(async (p) => {
-          const res = await fetch(`/api/playlists/${p.id}`);
-          if (!res.ok) throw new Error("playlist fetch failed");
-          const data = await res.json();
-          // API returns: conditionsResolved.actors [{id,name}], and tagIds (string[])
-          const actorNames = (data.conditionsResolved?.actors ?? [])
-            .map((a: any) => a?.name ?? a?.id)
-            .filter(Boolean);
-          const tagNames = (data.conditionsResolved?.tagIds ?? [])
-            .map((id: string) => tagNameById(id))
-            .filter(Boolean);
-          const minRating = data.conditionsResolved?.minRating ?? null;
-          const exactRating = data.conditionsResolved?.exactRating ?? null;
-          return [p.id, { actors: actorNames, tags: tagNames, minRating, exactRating } as ParsedConds] as const;
-        })
-      );
-
-      if (cancelled) return;
-
-      setConds((prev) => {
-        const next = { ...prev };
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            const [id, parsed] = r.value;
-            next[id] = parsed;
-          }
-        }
-        return next;
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [playlists, stashTags]); // re-run if tags load later
+    const out: Record<string, ParsedConds> = {};
+    for (const p of rawPlaylists ?? []) {
+      if (p.type !== "SMART" || !p.conditionsResolved) continue;
+      const r = p.conditionsResolved;
+      out[p.id] = {
+        actors: (r.actors ?? []).map((a) => a?.name ?? a?.id).filter(Boolean),
+        tags: (r.tagIds ?? []).map((id: string) => tagNameById(id)).filter(Boolean),
+        minRating: r.minRating ?? null,
+        exactRating: r.exactRating ?? null,
+      };
+    }
+    return out;
+  }, [rawPlaylists, stashTags]);
 
   // Helpers
   const resetCreateForm = () => {
@@ -215,6 +179,7 @@ export default function PlaylistsPage() {
       const created = await response.json();
       resetCreateForm();
       setIsCreateOpen(false);
+      await invalidatePlaylists();
 
       // Navigate to the appropriate playlist editor
       const returnTo = encodeURIComponent('/playlists');
@@ -227,9 +192,9 @@ export default function PlaylistsPage() {
     if (!toDeleteId) return;
     const response = await fetch(`/api/playlists?id=${toDeleteId}`, { method: "DELETE" });
     if (response.ok) {
-      setPlaylists((prev) => prev.filter((p) => p.id !== toDeleteId));
       setToDeleteId(null);
       setIsDeleteOpen(false);
+      await invalidatePlaylists();
     }
   };
 
@@ -272,12 +237,7 @@ export default function PlaylistsPage() {
       })
     );
 
-    // Remove successfully deleted playlists from state
-    const deletedIds = results
-      .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
-      .map((r) => r.value);
-
-    setPlaylists((prev) => prev.filter((p) => !deletedIds.includes(p.id)));
+    await invalidatePlaylists();
 
     setBulkDeleting(false);
     setIsBulkDeleteOpen(false);
@@ -301,20 +261,8 @@ export default function PlaylistsPage() {
         body: JSON.stringify({ refresh: true }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      // Re-fetch stats so counts/duration update immediately
-      const sRes = await fetch(`/api/playlists/${playlistId}/stats`);
-      if (sRes.ok) {
-        const sData = await sRes.json();
-        setStats((prev) => ({
-          ...prev,
-          [playlistId]: {
-            itemCount: sData.itemCount ?? 0,
-            durationMs: sData.durationMs ?? 0,
-          },
-        }));
-      }
-      // (no need to re-fetch conditions—they don't change on refresh)
+      // Invalidate the consolidated list so stats/conditions reflect the new items.
+      await invalidatePlaylists();
     } catch (e) {
       console.error("Refresh failed", e);
     } finally {
@@ -333,33 +281,7 @@ export default function PlaylistsPage() {
       
       if (res.ok) {
         const result = await res.json();
-        
-        // Re-fetch stats for all playlists to update counts
-        const results = await Promise.allSettled(
-          playlists.map(async (p) => {
-            if (p.type === "SMART") {
-              const sRes = await fetch(`/api/playlists/${p.id}/stats`);
-              if (sRes.ok) {
-                const sData = await sRes.json();
-                return [p.id, { itemCount: sData.itemCount ?? 0, durationMs: sData.durationMs ?? 0 }] as const;
-              }
-            }
-            return null;
-          })
-        );
-
-        setStats((prev) => {
-          const next = { ...prev };
-          for (const r of results) {
-            if (r.status === "fulfilled" && r.value) {
-              const [id, s] = r.value;
-              next[id] = s;
-            }
-          }
-          return next;
-        });
-
-        // Show success message
+        await invalidatePlaylists();
         console.log("Bulk refresh completed:", result.message);
       } else {
         console.error("Bulk refresh failed");
