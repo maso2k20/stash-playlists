@@ -244,12 +244,12 @@ export default function PlaylistCard({
               <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
                 <Star size={14} />
                 {c?.exactRating ? (
-                  <Chip size="sm" variant="soft" title={`Exactly ${c.exactRating} stars`}>
-                    Exactly {c.exactRating} {c.exactRating === 1 ? 'star' : 'stars'}
+                  <Chip size="sm" variant="soft">
+                    {{ 1: '👎 Disliked', 2: '👍 Liked', 3: '👍👍 Loved' }[c.exactRating] ?? `Level ${c.exactRating}`}
                   </Chip>
                 ) : c?.minRating ? (
-                  <Chip size="sm" variant="soft" title={`Minimum rating: ${c.minRating} stars`}>
-                    {c.minRating}+ stars
+                  <Chip size="sm" variant="soft">
+                    {{ 1: '👎 Disliked', 2: '👍 Liked', 3: '👍👍 Loved' }[c.minRating] ?? `Level ${c.minRating}`} or better
                   </Chip>
                 ) : (
                   <Typography level="body-xs" color="neutral">No rating filter</Typography>

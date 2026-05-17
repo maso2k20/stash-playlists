@@ -331,7 +331,7 @@ export default function SmartPlaylistRuleBuilder({
                   if (!value) return;
                   setRatingMode(value);
                   if (value === 'any') setRatingValue(null);
-                  else if (ratingValue === null) setRatingValue(1);
+                  else if (ratingValue === null) setRatingValue(2);
                 }}
                 size="sm"
                 sx={{ width: 120 }}
@@ -345,13 +345,11 @@ export default function SmartPlaylistRuleBuilder({
                   value={ratingValue}
                   onChange={(_, value) => setRatingValue(value)}
                   size="sm"
-                  sx={{ width: 110 }}
+                  sx={{ width: 140 }}
                 >
-                  <Option value={1}>1 star</Option>
-                  <Option value={2}>2 stars</Option>
-                  <Option value={3}>3 stars</Option>
-                  <Option value={4}>4 stars</Option>
-                  <Option value={5}>5 stars</Option>
+                  <Option value={1}>👎 Disliked</Option>
+                  <Option value={2}>👍 Liked</Option>
+                  <Option value={3}>👍👍 Loved</Option>
                 </Select>
               )}
             </Box>

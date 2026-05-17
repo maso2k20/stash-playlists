@@ -25,11 +25,11 @@ export async function POST(request: NextRequest) {
     return jsonError(400, 'itemIds must be an array');
   }
 
-  const hasExact = typeof exactRating === 'number' && exactRating >= 1 && exactRating <= 5;
-  const hasMin = typeof minRating === 'number' && minRating >= 1 && minRating <= 5;
+  const hasExact = typeof exactRating === 'number' && [1, 2, 3].includes(exactRating);
+  const hasMin = typeof minRating === 'number' && [1, 2, 3].includes(minRating);
 
   if (!hasExact && !hasMin) {
-    return jsonError(400, 'minRating or exactRating must be a number between 1 and 5');
+    return jsonError(400, 'minRating or exactRating must be 1, 2, or 3');
   }
 
   try {

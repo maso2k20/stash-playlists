@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, IconButton, Tooltip } from '@mui/joy';
-import StarIcon from '@mui/icons-material/Star';
-import StarBorderIcon from '@mui/icons-material/StarBorder';
+
+// 1 = Dislike 👎, 2 = Like 👍, 3 = Love 👍👍, null = unrated
+const LEVELS: { value: 1 | 2 | 3; emoji: string; label: string; color: 'danger' | 'success' }[] = [
+  { value: 1, emoji: '👎', label: 'Dislike', color: 'danger' },
+  { value: 2, emoji: '👍', label: 'Like',    color: 'success' },
+  { value: 3, emoji: '👍👍', label: 'Love',  color: 'success' },
+];
+
+const SIZE_MAP = { sm: 'sm', md: 'md', lg: 'lg' } as const;
 
 interface StarRatingProps {
   value?: number | null;
   onChange?: (rating: number | null) => void;
   readonly?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  showClearButton?: boolean;
+  showClearButton?: boolean; // kept for API compat; clearing happens by clicking the active button
 }
 
 export default function StarRating({
@@ -16,126 +23,63 @@ export default function StarRating({
   onChange,
   readonly = false,
   size = 'md',
-  showClearButton = true,
 }: StarRatingProps) {
-  const [hoveredRating, setHoveredRating] = useState<number | null>(null);
-  
-  const maxStars = 5;
-  const currentRating = hoveredRating !== null ? hoveredRating : (value || 0);
+  const btnSize = SIZE_MAP[size];
+  const fontSize = size === 'sm' ? '0.9rem' : size === 'lg' ? '1.4rem' : '1.1rem';
 
-  const handleStarClick = (rating: number) => {
+  const handleClick = (level: number) => {
     if (readonly || !onChange) return;
-    // If clicking the same rating, clear it
-    if (value === rating && showClearButton) {
-      onChange(null);
-    } else {
-      onChange(rating);
-    }
+    // clicking the active level clears it
+    onChange(value === level ? null : level);
   };
 
-  const handleStarHover = (rating: number | null) => {
-    if (readonly) return;
-    setHoveredRating(rating);
-  };
+  // Readonly: show only the selected emoji, or nothing if unrated
+  if (readonly) {
+    const active = LEVELS.find(l => l.value === value);
+    if (!active) return null;
+    return (
+      <Tooltip title={active.label} variant="soft">
+        <Box component="span" sx={{ fontSize, userSelect: 'none' }}>
+          {active.emoji}
+        </Box>
+      </Tooltip>
+    );
+  }
 
-  const getIconSize = () => {
-    switch (size) {
-      case 'sm': return 'small';
-      case 'lg': return 'large';
-      default: return 'medium';
-    }
-  };
+  // Rated: show only the selected button — click it to clear
+  if (value !== null) {
+    const active = LEVELS.find(l => l.value === value)!;
+    return (
+      <Tooltip title="Clear rating" variant="soft">
+        <IconButton
+          size={btnSize}
+          variant="solid"
+          color={active.color}
+          onClick={() => onChange?.(null)}
+          sx={{ fontSize, minWidth: 'auto', minHeight: 'auto', px: 0.75 }}
+        >
+          {active.emoji}
+        </IconButton>
+      </Tooltip>
+    );
+  }
 
-  const getButtonSize = () => {
-    switch (size) {
-      case 'sm': return 'sm';
-      case 'lg': return 'lg';
-      default: return 'md';
-    }
-  };
-
+  // Unrated: show all three buttons to pick
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 0.25,
-      }}
-      onMouseLeave={() => handleStarHover(null)}
-    >
-      {Array.from({ length: maxStars }, (_, index) => {
-        const starValue = index + 1;
-        const isFilled = starValue <= currentRating;
-        
-        const StarComponent = isFilled ? StarIcon : StarBorderIcon;
-        
-        return (
-          <Tooltip
-            key={starValue}
-            title={readonly ? `${value || 0} stars` : `${starValue} star${starValue === 1 ? '' : 's'}`}
-            variant="soft"
-          >
-            <IconButton
-              size={getButtonSize()}
-              variant="plain"
-              color={isFilled ? 'warning' : 'neutral'}
-              disabled={readonly}
-              onClick={() => handleStarClick(starValue)}
-              onMouseEnter={() => handleStarHover(starValue)}
-              sx={{
-                minHeight: 'auto',
-                minWidth: 'auto',
-                p: 0.25,
-                '--IconButton-radius': '2px',
-                ...(readonly && {
-                  cursor: 'default',
-                  '&:hover': {
-                    backgroundColor: 'transparent',
-                  },
-                }),
-                ...(!readonly && {
-                  '&:hover': {
-                    backgroundColor: 'var(--joy-palette-warning-softHoverBg)',
-                  },
-                }),
-              }}
-            >
-              <StarComponent 
-                fontSize={getIconSize() as any}
-                sx={{
-                  color: isFilled 
-                    ? 'var(--joy-palette-warning-500)' 
-                    : 'var(--joy-palette-neutral-400)',
-                  ...(hoveredRating !== null && !readonly && {
-                    transition: 'color 0.1s ease',
-                  }),
-                }}
-              />
-            </IconButton>
-          </Tooltip>
-        );
-      })}
-      
-      {!readonly && value !== null && showClearButton && (
-        <Tooltip title="Clear rating" variant="soft">
+    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+      {LEVELS.map(l => (
+        <Tooltip key={l.value} title={l.label} variant="soft">
           <IconButton
-            size="sm"
+            size={btnSize}
             variant="soft"
-            color="neutral"
-            onClick={() => onChange?.(null)}
-            sx={{
-              ml: 0.5,
-              fontSize: '0.75rem',
-              minHeight: 'auto',
-              minWidth: 'auto',
-              px: 0.5,
-              py: 0.25,
-            }}
+            color={l.color}
+            onClick={() => handleClick(l.value)}
+            sx={{ fontSize, minWidth: 'auto', minHeight: 'auto', px: 0.75 }}
           >
-            ×
+            {l.emoji}
           </IconButton>
         </Tooltip>
-      )}
+      ))}
     </Box>
   );
 }

@@ -25,10 +25,10 @@ export async function PATCH(
 
   const { rating } = body;
 
-  // Validate rating value
+  // Validate rating value: 1 = Dislike, 2 = Like, 3 = Love, null = unrated
   if (rating !== null && rating !== undefined) {
-    if (typeof rating !== 'number' || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
-      return jsonError(400, 'Rating must be an integer between 1 and 5, or null to clear');
+    if (!Number.isInteger(rating) || ![1, 2, 3].includes(rating)) {
+      return jsonError(400, 'Rating must be 1 (Dislike), 2 (Like), 3 (Love), or null to clear');
     }
   }
 

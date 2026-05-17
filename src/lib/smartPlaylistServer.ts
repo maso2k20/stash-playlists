@@ -330,8 +330,8 @@ export async function buildItemsForPlaylist(
   }
 
   // Apply rating filter if specified
-  const hasExactRating = exactRating && exactRating >= 1;
-  const hasMinRating = minRating && minRating >= 1;
+  const hasExactRating = exactRating && [1, 2, 3].includes(exactRating);
+  const hasMinRating = minRating && [1, 2, 3].includes(minRating);
   if (hasExactRating || hasMinRating) {
     const itemIds = filteredItems.map(item => item.id);
     const ratingWhere = hasExactRating ? { equals: exactRating! } : { gte: minRating! };

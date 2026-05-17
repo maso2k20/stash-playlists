@@ -178,8 +178,8 @@ export async function filterItemsByRating(
   exactRating: number | null,
   prisma: any
 ): Promise<any[]> {
-  const hasExact = exactRating && exactRating >= 1;
-  const hasMin = minRating && minRating >= 1;
+  const hasExact = exactRating && [1, 2, 3].includes(exactRating);
+  const hasMin = minRating && [1, 2, 3].includes(minRating);
   if (!hasExact && !hasMin) {
     return items;
   }
