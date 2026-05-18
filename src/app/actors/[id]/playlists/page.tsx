@@ -89,9 +89,34 @@ export default function ActorPlaylistsPage() {
   // Per-playlist "refreshing" state
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
 
-  // Search state
+  // Search state — persisted via URL params so back-navigation from a playlist
+  // restores the user's filters (same pattern as the markers tab).
   const [searchQuery, setSearchQuery] = useState("");
   const [hideEmpty, setHideEmpty] = useState(true);
+
+  // Initialize filters from URL on mount.
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get("search");
+    if (searchParam) setSearchQuery(searchParam);
+    const hideEmptyParam = urlParams.get("hideEmpty");
+    if (hideEmptyParam === "false") setHideEmpty(false);
+  }, []);
+
+  // Push current filter state to the URL. Only non-default values are written
+  // so the URL stays clean in the common case.
+  const updateURLWithFilters = (
+    nextSearch?: string,
+    nextHideEmpty?: boolean,
+  ) => {
+    const params = new URLSearchParams();
+    const s = nextSearch !== undefined ? nextSearch : searchQuery;
+    const h = nextHideEmpty !== undefined ? nextHideEmpty : hideEmpty;
+    if (s.trim()) params.set("search", s);
+    if (h === false) params.set("hideEmpty", "false");
+    const qs = params.toString();
+    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+  };
 
   // Create dialog
   const [newName, setNewName] = useState("");
@@ -355,7 +380,11 @@ export default function ActorPlaylistsPage() {
             <Input
               placeholder="Search playlists..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSearchQuery(v);
+                updateURLWithFilters(v, undefined);
+              }}
               startDecorator={<Search size={16} />}
               size="sm"
             />
@@ -363,7 +392,11 @@ export default function ActorPlaylistsPage() {
           <Checkbox
             label="Hide empty"
             checked={hideEmpty}
-            onChange={(e) => setHideEmpty(e.target.checked)}
+            onChange={(e) => {
+              const v = e.target.checked;
+              setHideEmpty(v);
+              updateURLWithFilters(undefined, v);
+            }}
             size="sm"
           />
           {selectionMode && selectedIds.size > 0 && (
@@ -510,7 +543,10 @@ export default function ActorPlaylistsPage() {
           {searchQuery && (
             <Button
               variant="plain"
-              onClick={() => setSearchQuery("")}
+              onClick={() => {
+                setSearchQuery("");
+                updateURLWithFilters("", undefined);
+              }}
               sx={{ mr: 2 }}
             >
               Clear Search

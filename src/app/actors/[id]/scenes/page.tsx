@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, gql } from "@apollo/client";
 import Link from "next/link";
 import { useSettings } from "@/app/context/SettingsContext";
@@ -153,6 +153,7 @@ export default function ActorScenesPage() {
     const actorId = params.id;
 
     const pathname = usePathname();
+    const router = useRouter();
     const isScenesPage = pathname?.includes("/scenes");
     const isPlaylistsPage = pathname?.includes("/playlists");
     const isMarkersPage = !isScenesPage && !isPlaylistsPage;
@@ -160,26 +161,55 @@ export default function ActorScenesPage() {
     // Filters
     const [hasMarkers, setHasMarkers] = useState<"true" | "false">("true");
     const [markersOrganised, setMarkersOrganised] = useState<boolean>(false);
-    
+
     // Get tag options from context
     const { stashTags, refetch: refetchTags } = useStashTags();
-    
+
     // Find tag ID by name (same pattern as scenes detail page)
     const findTagIdByName = (tagName: string): string | null => {
         const tag = stashTags?.find((t: any) => t.name === tagName);
         return tag?.id ? String(tag.id) : null;
     };
-    
+
     const markersTagId = findTagIdByName("Markers Organised");
 
     // Pagination
     const [pageNumber, setPageNumber] = useState(1);
     const perPage = 60;
 
-    // Reset page when filters change
+    // Initialize filters from URL on mount so navigating into a scene and back
+    // restores the user's filters and page. Mirrors the pattern in the markers
+    // tab (src/app/actors/[id]/page.tsx).
     useEffect(() => {
-        setPageNumber(1);
-    }, [hasMarkers, markersOrganised]);
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasMarkersParam = urlParams.get("hasMarkers");
+        if (hasMarkersParam === "false") setHasMarkers("false");
+        const organisedParam = urlParams.get("organised");
+        if (organisedParam === "true") setMarkersOrganised(true);
+        const pageParam = urlParams.get("page");
+        if (pageParam) {
+            const page = parseInt(pageParam, 10);
+            if (page > 0) setPageNumber(page);
+        }
+    }, []);
+
+    // Push current filter state to the URL via router.replace so back-navigation
+    // restores it. Only non-default values are written to keep the URL clean.
+    const updateURLWithFilters = (
+        nextHasMarkers?: "true" | "false",
+        nextOrganised?: boolean,
+        nextPage?: number,
+    ) => {
+        const params = new URLSearchParams();
+        const hm = nextHasMarkers ?? hasMarkers;
+        const org = nextOrganised ?? markersOrganised;
+        const pg = nextPage ?? pageNumber;
+        if (hm === "false") params.set("hasMarkers", "false");
+        if (org) params.set("organised", "true");
+        if (pg > 1) params.set("page", pg.toString());
+        const qs = params.toString();
+        router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    };
 
     // Smooth scroll on page change
     useEffect(() => {
@@ -280,14 +310,24 @@ export default function ActorScenesPage() {
                     size="sm"
                     label="Has Markers"
                     checked={hasMarkers === "true"}
-                    onChange={(e) => setHasMarkers(e.target.checked ? "true" : "false")}
+                    onChange={(e) => {
+                        const v = e.target.checked ? "true" : "false";
+                        setHasMarkers(v);
+                        setPageNumber(1);
+                        updateURLWithFilters(v, undefined, 1);
+                    }}
                 />
                 <Checkbox
                     size="sm"
                     label="Markers Organised"
                     checked={markersOrganised}
                     disabled={!markersTagId}
-                    onChange={(e) => setMarkersOrganised(e.target.checked)}
+                    onChange={(e) => {
+                        const v = e.target.checked;
+                        setMarkersOrganised(v);
+                        setPageNumber(1);
+                        updateURLWithFilters(undefined, v, 1);
+                    }}
                 />
                 <Button
                     size="sm"
@@ -415,7 +455,11 @@ export default function ActorScenesPage() {
                             size="sm"
                             variant="outlined"
                             disabled={!hasPrevPage || loading}
-                            onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
+                            onClick={() => {
+                                const next = Math.max(1, pageNumber - 1);
+                                setPageNumber(next);
+                                updateURLWithFilters(undefined, undefined, next);
+                            }}
                         >
                             Previous
                         </Button>
@@ -428,7 +472,11 @@ export default function ActorScenesPage() {
                             size="sm"
                             variant="outlined"
                             disabled={!hasNextPage || loading}
-                            onClick={() => setPageNumber((p) => p + 1)}
+                            onClick={() => {
+                                const next = pageNumber + 1;
+                                setPageNumber(next);
+                                updateURLWithFilters(undefined, undefined, next);
+                            }}
                         >
                             Next
                         </Button>
