@@ -4,6 +4,141 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   Console redesign — design tokens (Phase 1)
+   Dark-only palette. Referenced via var(--token) in migrated
+   screens so they don't collide with the shadcn semantic tokens
+   (--accent/--muted/--border) the deferred MUI screens may use.
+   ============================================================ */
+:root {
+  /* surfaces */
+  --app-bg: #0f1012;
+  --rail-bg: #0a0b0d;
+  --divider: #1d2024;
+  --surface: #16181b;
+  --surface-hover: #191c20;
+  --well: #131517;
+  --well-deep: #0c0d0f;
+  /* borders */
+  --con-border: #232730;
+  --con-border-strong: #2a2e34;
+  --con-border-faint: #3a4049;
+  /* text */
+  --con-text: #e8eaed;
+  --con-text-2: #c4cad2;
+  --con-text-3: #d4d8dd;
+  --con-muted: #79818c;
+  --con-faint: #5a626c;
+  /* accent (cyan) */
+  --accent-cyan: #4cb3e0;
+  --accent-ink: #06222e;
+  --accent-tint-bg: rgba(76, 179, 224, 0.1);
+  --accent-tint-bd: rgba(76, 179, 224, 0.35);
+  /* rating / warning (amber) */
+  --rating: #e0a951;
+  --rating-tint-bg: rgba(224, 169, 81, 0.12);
+  --rating-tint-bd: rgba(224, 169, 81, 0.35);
+  /* status */
+  --success: #5fcf8e;
+  --success-bd: #2a4a38;
+  --danger: #e08080;
+  --danger-bd: #5a2e2e;
+  --playhead: #e0664c;
+}
+
+/* Map Tailwind font utilities to Geist (loaded in layout.tsx). */
+@theme {
+  --font-sans: var(--font-geist-sans), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+}
+
+/* Uppercase mono micro-label used on every Console field/section label. */
+.con-micro {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--con-faint);
+}
+
+@layer components {
+  /* Mono count/subline under a page title. */
+  .con-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--con-muted);
+  }
+
+  /* Search / text well. */
+  .con-input {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--con-text);
+    background: var(--well);
+    border: 1px solid var(--con-border);
+    border-radius: 6px;
+    padding: 8px 11px;
+    outline: none;
+  }
+  .con-input::placeholder {
+    color: var(--con-faint);
+  }
+  .con-input:focus {
+    border-color: var(--accent-tint-bd);
+  }
+
+  /* Primary (accent) action. */
+  .con-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-ink);
+    background: var(--accent-cyan);
+    border: 1px solid var(--accent-cyan);
+    border-radius: 6px;
+    padding: 7px 13px;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .con-btn-primary:hover {
+    background: #5cbce6;
+  }
+
+  /* Ghost / outlined action. */
+  .con-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--con-text-2);
+    background: transparent;
+    border: 1px solid var(--con-border-strong);
+    border-radius: 6px;
+    padding: 7px 12px;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .con-btn-ghost:hover {
+    border-color: var(--accent-tint-bd);
+    color: var(--con-text);
+  }
+
+  /* Surface card with accent hover border. */
+  .con-card {
+    background: var(--surface);
+    border: 1px solid var(--con-border);
+    border-radius: 7px;
+    transition: border-color 0.15s, background-color 0.15s;
+  }
+  .con-card:hover {
+    border-color: var(--accent-cyan);
+  }
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

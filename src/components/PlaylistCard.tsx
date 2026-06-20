@@ -1,35 +1,25 @@
 // src/components/PlaylistCard.tsx
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Box,
-  Card,
-  CardContent,
-  CardActions,
-  Checkbox,
-  Chip,
-  Divider,
-  IconButton,
-  Stack,
-  Tooltip,
-  Typography,
-} from "@mui/joy";
-import {
   Trash2,
   Pencil,
-  Film,
-  Clock,
-  User,
-  Tag as TagIcon,
   RefreshCcw,
-  Star,
   Play,
   Shuffle,
   LayoutGrid,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type PlaylistType = "MANUAL" | "SMART";
 
@@ -48,7 +38,7 @@ export type PlaylistStats = {
 
 export type ParsedConds = {
   actors: string[]; // names
-  tags: string[];   // names
+  tags: string[]; // names
   minRating: number | null;
   exactRating: number | null;
 };
@@ -68,11 +58,6 @@ interface PlaylistCardProps {
   onToggleSelect?: (playlistId: string) => void;
 }
 
-const typeColor: Record<PlaylistType, "neutral" | "success"> = {
-  MANUAL: "neutral",
-  SMART: "success",
-};
-
 const formatDuration = (ms?: number) => {
   if (!ms || ms <= 0) return null;
   const totalSec = Math.round(ms / 1000);
@@ -84,7 +69,7 @@ const formatDuration = (ms?: number) => {
   return parts.join(" ");
 };
 
-const maxShow = 3;
+const RATING_EMOJI: Record<number, string> = { 1: "👎", 2: "👍", 3: "👍👍" };
 
 export default function PlaylistCard({
   playlist,
@@ -93,287 +78,192 @@ export default function PlaylistCard({
   isRefreshing = false,
   onRefresh,
   onDelete,
-  hideActorFilter = false,
   returnTo,
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
 }: PlaylistCardProps) {
   const router = useRouter();
+  const [imgError, setImgError] = useState(false);
   const s = stats;
   const durationLabel = formatDuration(s?.durationMs);
 
   const c = conditions;
-  const actorNames = c?.actors ?? [];
   const tagNames = c?.tags ?? [];
-  const moreActors = Math.max(0, actorNames.length - maxShow);
-  const moreTags = Math.max(0, tagNames.length - maxShow);
+  const ratingLevel = c?.exactRating ?? c?.minRating ?? null;
 
   const isSmart = playlist.type === "SMART";
-  const isBusy = isRefreshing;
+  const itemCount = s?.itemCount ?? 0;
 
-  const handleCardClick = () => {
-    if (selectionMode && onToggleSelect) {
-      onToggleSelect(playlist.id);
-    }
+  const editPath = () => {
+    const editType = playlist.type.toLowerCase();
+    const returnParam = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+    return `/playlists/edit/${editType}/${playlist.id}${returnParam}`;
   };
 
   return (
-    <Card
-      variant="outlined"
-      sx={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
+    <div
+      onClick={selectionMode ? () => onToggleSelect?.(playlist.id) : undefined}
+      className="con-card flex items-center gap-[13px] p-3"
+      style={{
         cursor: selectionMode ? "pointer" : "default",
-        borderColor: isSelected ? "primary.500" : undefined,
-        bgcolor: isSelected ? "primary.softBg" : undefined,
-        transition: "border-color 0.15s, background-color 0.15s",
-        "&:hover": selectionMode ? {
-          borderColor: isSelected ? "primary.500" : "primary.300",
-        } : undefined,
+        borderColor: isSelected ? "var(--accent-cyan)" : undefined,
+        background: isSelected ? "var(--accent-tint-bg)" : undefined,
       }}
-      onClick={selectionMode ? handleCardClick : undefined}
     >
-      <CardContent sx={{ gap: 1, display: "flex", flexDirection: "row", alignItems: "stretch" }}>
-        {/* Selection checkbox */}
-        {selectionMode && (
-          <Box sx={{ display: "flex", alignItems: "flex-start", pr: 1 }}>
-            <Checkbox
-              checked={isSelected}
-              onChange={() => onToggleSelect?.(playlist.id)}
-              onClick={(e) => e.stopPropagation()}
-              sx={{ mt: 0.5 }}
-            />
-          </Box>
-        )}
-        {/* Left side content */}
-        <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          {/* Header with title/description */}
-          <Box sx={{ mb: 1 }}>
-            <Link href={`/playlists/${playlist.id}`} style={{ textDecoration: "none" }}>
-              <Typography
-                level="title-lg"
-                sx={{
-                  "&:hover": { textDecoration: "underline" },
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={playlist.name}
-              >
-                {playlist.name}
-              </Typography>
-            </Link>
-            {playlist.description?.trim() && (
-              <Typography
-                level="body-sm"
-                color="neutral"
-                sx={{
-                  mt: 0.5,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {playlist.description.trim()}
-              </Typography>
-            )}
-          </Box>
+      {/* Selection checkbox */}
+      {selectionMode && (
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect?.(playlist.id)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 shrink-0 accent-[var(--accent-cyan)]"
+          aria-label={`Select ${playlist.name}`}
+        />
+      )}
 
-          {/* Stats row with type chip first */}
-          <Stack direction="row" spacing={1} sx={{ mb: isSmart ? 1 : 0, flexWrap: "wrap" }}>
-            <Chip size="sm" variant="soft" color={typeColor[playlist.type]} sx={{ textTransform: "capitalize" }}>
-              {playlist.type.toLowerCase()}
-            </Chip>
-            <Chip size="sm" variant="outlined" startDecorator={<Film size={14} />}>
-              {s ? `${s.itemCount} item${s.itemCount === 1 ? "" : "s"}` : "..."}
-            </Chip>
-            {durationLabel && (
-              <Chip size="sm" variant="outlined" startDecorator={<Clock size={14} />}>
-                {durationLabel}
-              </Chip>
-            )}
-            {isBusy && (
-              <Chip
-                size="sm"
-                variant="soft"
-                color="warning"
-                startDecorator={<RefreshCcw className="animate-spin" size={14} />}
-              >
-                Refreshing...
-              </Chip>
-            )}
-          </Stack>
-
-          {/* SMART conditions row */}
-          {isSmart && (
-            <Stack spacing={0.75}>
-              {/* Actors - only show if not hidden */}
-              {!hideActorFilter && (
-                <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
-                  <User size={14} />
-                  {actorNames.slice(0, maxShow).map((name) => (
-                    <Chip key={name} size="sm" variant="soft" title={name}>
-                      {name}
-                    </Chip>
-                  ))}
-                  {moreActors > 0 && (
-                    <Chip size="sm" variant="plain">{`+${moreActors} more`}</Chip>
-                  )}
-                  {actorNames.length === 0 && <Typography level="body-xs" color="neutral">No actors filter</Typography>}
-                </Stack>
-              )}
-
-              {/* Tags */}
-              <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
-                <TagIcon size={14} />
-                {tagNames.slice(0, maxShow).map((name) => (
-                  <Chip key={name} size="sm" variant="soft" title={name}>
-                    {name}
-                  </Chip>
-                ))}
-                {moreTags > 0 && (
-                  <Chip size="sm" variant="plain">{`+${moreTags} more`}</Chip>
-                )}
-                {tagNames.length === 0 && <Typography level="body-xs" color="neutral">No tags filter</Typography>}
-              </Stack>
-
-              {/* Rating */}
-              <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
-                <Star size={14} />
-                {c?.exactRating ? (
-                  <Chip size="sm" variant="soft">
-                    {{ 1: '👎 Disliked', 2: '👍 Liked', 3: '👍👍 Loved' }[c.exactRating] ?? `Level ${c.exactRating}`}
-                  </Chip>
-                ) : c?.minRating ? (
-                  <Chip size="sm" variant="soft">
-                    {{ 1: '👎 Disliked', 2: '👍 Liked', 3: '👍👍 Loved' }[c.minRating] ?? `Level ${c.minRating}`} or better
-                  </Chip>
-                ) : (
-                  <Typography level="body-xs" color="neutral">No rating filter</Typography>
-                )}
-              </Stack>
-            </Stack>
-          )}
-        </Box>
-
-        {/* Right side image */}
-        {playlist.image && (
-          <Box
-            sx={{
-              position: 'relative',
-              width: 96,
-              height: 170, // 9:16 aspect ratio (96*16/9 ≈ 170)
-              borderRadius: 'md',
-              overflow: 'hidden',
-              border: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'neutral.softBg',
-              flexShrink: 0,
-              boxShadow: 'sm',
-              ml: 2,
+      {/* Cover thumb */}
+      <div className="relative h-20 w-[62px] shrink-0 overflow-hidden rounded-[5px]">
+        {playlist.image && !imgError ? (
+          <Image
+            src={`/api/playlist-images/${playlist.image}`}
+            alt=""
+            fill
+            sizes="62px"
+            style={{ objectFit: "cover" }}
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div
+            className="flex h-full w-full items-center justify-center font-mono text-[18px]"
+            style={{
+              background: "linear-gradient(150deg,#1e2226,#15181b)",
+              color: "var(--accent-cyan)",
             }}
           >
-            <Image
-              src={`/api/playlist-images/${playlist.image}`}
-              alt={`${playlist.name} cover`}
-              fill
-              style={{ objectFit: 'cover' }}
-            />
-          </Box>
+            {playlist.name.charAt(0).toUpperCase()}
+          </div>
         )}
-      </CardContent>
+      </div>
 
-      {!selectionMode && <Divider />}
+      {/* Middle content */}
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/playlists/${playlist.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-semibold no-underline hover:underline"
+            style={{ color: "var(--con-text)" }}
+            title={playlist.name}
+          >
+            {playlist.name}
+          </Link>
+          <span
+            className="shrink-0 rounded-[4px] px-[5px] py-[2px] font-mono text-[8px] uppercase tracking-[0.1em]"
+            style={{ color: "var(--con-muted)", border: "1px solid var(--con-border-strong)" }}
+          >
+            {playlist.type.toLowerCase()}
+          </span>
+        </div>
 
-      {!selectionMode && (
-          <CardActions sx={{ mt: "auto", justifyContent: "space-between" }}>
-        <Stack direction="row" spacing={0.5}>
-          <Tooltip title="Play playlist">
-            <IconButton
-              size="sm"
-              variant="plain"
-              onClick={() => router.push(`/playlists/${playlist.id}`)}
-              aria-label="Play playlist"
-            >
-              <Play size={16} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Shuffle and play">
-            <IconButton
-              size="sm"
-              variant="plain"
-              onClick={() => router.push(`/playlists/${playlist.id}?shuffle=true`)}
-              aria-label="Shuffle and play playlist"
-            >
-              <Shuffle size={16} />
-            </IconButton>
-          </Tooltip>
-          {(s?.itemCount ?? 0) >= 4 && (
-            <Tooltip title="Play as Wall (4 videos)">
-              <IconButton
-                size="sm"
-                variant="plain"
-                onClick={() => router.push(`/playlists/${playlist.id}/wall`)}
-                aria-label="Play as video wall"
-              >
-                <LayoutGrid size={16} />
-              </IconButton>
-            </Tooltip>
+        <div className="mt-1.5 font-mono text-[11px]" style={{ color: "var(--con-muted)" }}>
+          {s ? `${itemCount} item${itemCount === 1 ? "" : "s"}` : "…"}
+          {durationLabel ? ` · ${durationLabel}` : ""}
+          {isRefreshing && (
+            <span style={{ color: "var(--rating)" }}> · refreshing…</span>
           )}
-        </Stack>
+        </div>
 
-        <Stack direction="row" spacing={0.5}>
-          {/* Refresh (SMART only) */}
-          {isSmart && onRefresh && (
-            <Tooltip title="Refresh items (rebuild from rules)">
-              <span>
-                <IconButton
-                  size="sm"
-                  variant="soft"
-                  onClick={() => onRefresh(playlist.id)}
-                  disabled={isBusy}
-                  aria-label="Refresh playlist"
-                >
-                  <RefreshCcw className={isBusy ? "animate-spin" : ""} size={16} />
-                </IconButton>
+        {isSmart && (tagNames.length > 0 || ratingLevel) && (
+          <div className="mt-2 flex min-h-[18px] flex-wrap items-center gap-1.5">
+            {tagNames.slice(0, 2).map((name) => (
+              <span
+                key={name}
+                className="rounded-[4px] px-2 py-[2px] text-[10px]"
+                style={{
+                  color: "var(--con-text-3)",
+                  background: "#202428",
+                  border: "1px solid var(--con-border-strong)",
+                }}
+                title={name}
+              >
+                {name}
               </span>
-            </Tooltip>
-          )}
+            ))}
+            {ratingLevel && (
+              <span className="text-[11px]" style={{ color: "var(--rating)" }}>
+                {RATING_EMOJI[ratingLevel] ?? `L${ratingLevel}`}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
-          <Tooltip title="Edit playlist">
-            <IconButton
-              size="sm"
-              variant="soft"
-              onClick={() => {
-                const editType = playlist.type.toLowerCase();
-                const returnParam = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
-                router.push(`/playlists/edit/${editType}/${playlist.id}${returnParam}`);
-              }}
-              aria-label="Edit Playlist"
-            >
-              <Pencil size={16} />
-            </IconButton>
-          </Tooltip>
-
-          {onDelete && (
-            <Tooltip title="Delete playlist">
-              <IconButton
-                size="sm"
-                variant="soft"
-                color="danger"
-                onClick={() => onDelete(playlist.id)}
-                aria-label="Delete Playlist"
+      {/* Right actions */}
+      {!selectionMode && (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => router.push(`/playlists/${playlist.id}`)}
+            aria-label="Play playlist"
+            title="Play playlist"
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-[6px]"
+            style={{ background: "var(--accent-cyan)", color: "var(--accent-ink)" }}
+          >
+            <Play size={12} fill="currentColor" stroke="none" />
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/playlists/${playlist.id}?shuffle=true`)}
+            aria-label="Shuffle and play playlist"
+            title="Shuffle and play"
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-[6px]"
+            style={{ border: "1px solid var(--con-border-strong)", color: "var(--con-muted)" }}
+          >
+            <Shuffle size={13} />
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="More actions"
+                title="More actions"
+                className="flex h-[30px] w-[30px] items-center justify-center rounded-[6px]"
+                style={{ border: "1px solid var(--con-border-strong)", color: "var(--con-muted)" }}
               >
-                <Trash2 size={16} />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Stack>
-      </CardActions>
+                <MoreHorizontal size={14} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => router.push(editPath())}>
+                <Pencil size={14} /> Edit
+              </DropdownMenuItem>
+              {itemCount >= 4 && (
+                <DropdownMenuItem onClick={() => router.push(`/playlists/${playlist.id}/wall`)}>
+                  <LayoutGrid size={14} /> Play as Wall
+                </DropdownMenuItem>
+              )}
+              {isSmart && onRefresh && (
+                <DropdownMenuItem
+                  onClick={() => onRefresh(playlist.id)}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCcw size={14} className={isRefreshing ? "animate-spin" : ""} /> Refresh
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <DropdownMenuItem
+                  onClick={() => onDelete(playlist.id)}
+                  variant="destructive"
+                >
+                  <Trash2 size={14} /> Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

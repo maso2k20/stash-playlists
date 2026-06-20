@@ -7,39 +7,34 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
 import Link from "next/link";
-
+import { Search, Check, ChevronDown } from "lucide-react";
 import {
-  Sheet,
-  Box,
-  Typography,
-  Grid,
-  Card,
-  CardContent as JoyCardContent,
-  AspectRatio,
-  CardCover,
-  Button,
-  Chip,
-  Autocomplete,
-  Skeleton,
-  Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Select,
-  Option,
-  FormControl,
-  Stack,
-  IconButton,
-} from "@mui/joy";
-
-import { Search, ArrowUpDown } from "lucide-react";
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Paginated query for browsing (fast initial load)
 const GET_SCENES_PAGINATED = gql`
   query getScenesPaginated($pageNumber: Int!, $perPage: Int!) {
     findScenes(
       scene_filter: {}
-      filter: { 
-        page: $pageNumber, 
-        per_page: $perPage
-      }
+      filter: { page: $pageNumber, per_page: $perPage }
     ) {
       count
       scenes {
@@ -70,17 +65,9 @@ const GET_SCENES_FILTERED = gql`
       scenes {
         id
         title
-        paths {
-          screenshot
-        }
-        performers {
-          id
-          name
-        }
-        tags {
-          id
-          name
-        }
+        paths { screenshot }
+        performers { id name }
+        tags { id name }
         rating100
       }
     }
@@ -91,10 +78,7 @@ const GET_SCENES_FILTERED = gql`
 const GET_PERFORMERS = gql`
   query getPerformers {
     findPerformers(filter: { per_page: -1, sort: "name", direction: ASC }) {
-      performers {
-        id
-        name
-      }
+      performers { id name }
     }
   }
 `;
@@ -108,15 +92,33 @@ type Scene = {
   rating100?: number;
 };
 
-type SortOption = 
-  | "title-asc" 
-  | "title-desc" 
+type SortOption =
+  | "title-asc"
+  | "title-desc"
   | "date-desc"
   | "date-asc"
   | "rating-desc"
   | "rating-asc";
 
 type RatingFilter = "all" | "1+" | "2+" | "3+" | "4+" | "5";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  "title-asc": "Title (A–Z)",
+  "title-desc": "Title (Z–A)",
+  "date-desc": "Newest First",
+  "date-asc": "Oldest First",
+  "rating-desc": "Highest Rated",
+  "rating-asc": "Lowest Rated",
+};
+
+const RATING_LABELS: Record<RatingFilter, string> = {
+  all: "All ratings",
+  "1+": "1+ Stars",
+  "2+": "2+ Stars",
+  "3+": "3+ Stars",
+  "4+": "4+ Stars",
+  "5": "5 Stars",
+};
 
 function joinUrl(base?: string, path?: string) {
   if (!path) return "";
@@ -132,120 +134,224 @@ function withApiKey(url: string, apiKey?: string) {
 }
 
 function getRatingFilterValue(ratingFilter: RatingFilter): number {
-  if (ratingFilter === 'all') return 0; // No filtering - include all (all ratings > 0)
-  const starValue = parseInt(ratingFilter.replace('+', ''), 10);
-  // Convert to GREATER_THAN values: 1→19, 2→39, 3→59, 4→79, 5→99
-  // This works because Stash uses 20,40,60,80,100 for 1-5 stars
-  return (starValue * 20) - 1;
+  if (ratingFilter === "all") return 0;
+  const starValue = parseInt(ratingFilter.replace("+", ""), 10);
+  return starValue * 20 - 1;
 }
 
-// Reusable pagination controls component (copied from actors page)
-function PaginationControls({ 
-  pageNumber, 
-  perPage, 
+type FilterOption = { id: string; label: string };
+
+/** Multi-select combobox (cmdk) replacing the MUI Autocomplete. Works on option ids. */
+function MultiSelect({
+  placeholder,
+  options,
+  selectedIds,
+  onChange,
+}: {
+  placeholder: string;
+  options: FilterOption[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedCount = selectedIds.length;
+
+  const toggle = (id: string) => {
+    if (selectedIds.includes(id)) onChange(selectedIds.filter((x) => x !== id));
+    else onChange([...selectedIds, id]);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-2 rounded-[6px] px-3 py-2 text-left text-[12px]"
+          style={{
+            background: "var(--well)",
+            border: "1px solid var(--con-border)",
+            color: selectedCount ? "var(--con-text-2)" : "var(--con-faint)",
+          }}
+        >
+          <span className="truncate">
+            {selectedCount ? `${selectedCount} selected` : placeholder}
+          </span>
+          <ChevronDown size={11} style={{ color: "var(--con-faint)" }} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search…" className="text-[12px]" />
+          <CommandList>
+            <CommandEmpty>No matches.</CommandEmpty>
+            <CommandGroup>
+              {options.map((o) => {
+                const checked = selectedIds.includes(o.id);
+                return (
+                  <CommandItem key={o.id} value={o.label} onSelect={() => toggle(o.id)}>
+                    <span
+                      className="flex h-[14px] w-[14px] items-center justify-center rounded-[3px]"
+                      style={
+                        checked
+                          ? { background: "var(--accent-cyan)", color: "var(--accent-ink)" }
+                          : { border: "1px solid var(--con-border-faint)" }
+                      }
+                    >
+                      {checked && <Check size={9} strokeWidth={4} />}
+                    </span>
+                    {o.label}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Mono pagination: PREV · [1] 2 3 · NEXT (active = accent square). */
+function PaginationControls({
+  pageNumber,
+  perPage,
   totalCount,
-  onPageChange, 
-  sx = {} 
+  onPageChange,
+  className = "",
 }: {
   pageNumber: number;
   perPage: number;
   totalCount: number;
   onPageChange: (page: number) => void;
-  sx?: Record<string, unknown>;
+  className?: string;
 }) {
-  // Calculate the maximum page number based on total count
   const maxPage = Math.ceil(totalCount / perPage);
-  
+  const pages = [pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2].filter(
+    (n) => n >= 1 && n <= maxPage
+  );
+
   return (
-    <Box sx={{ display: "flex", justifyContent: "center", gap: 1, alignItems: "center", ...sx }}>
-      <Button
-        size="sm"
-        variant="plain"
+    <div className={`flex items-center gap-2 font-mono text-[11px] ${className}`} style={{ color: "var(--con-muted)" }}>
+      <button
         disabled={pageNumber <= 1}
         onClick={() => onPageChange(pageNumber - 1)}
+        style={{ color: pageNumber <= 1 ? "var(--con-faint)" : "var(--accent-cyan)" }}
+        className="disabled:cursor-default"
       >
-        Previous
-      </Button>
-      
-      {/* Page numbers */}
-      {[pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2]
-        .filter((n) => n >= 1 && n <= maxPage) // Filter to only show valid pages
-        .map((n) => (
-          <Chip
+        PREV
+      </button>
+      {pages.map((n) => {
+        const active = n === pageNumber;
+        return (
+          <button
             key={n}
-            variant={n === pageNumber ? "solid" : "soft"}
-            color={n === pageNumber ? "primary" : "neutral"}
-            size="sm"
             onClick={() => onPageChange(n)}
-            sx={{ cursor: "pointer" }}
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px]"
+            style={
+              active
+                ? { background: "var(--accent-cyan)", color: "var(--accent-ink)", fontWeight: 500 }
+                : { border: "1px solid var(--con-border)" }
+            }
           >
             {n}
-          </Chip>
-        ))}
-      
-      <Button
-        size="sm"
-        variant="plain"
-        disabled={pageNumber >= maxPage} // Disable if on last page or beyond
+          </button>
+        );
+      })}
+      <button
+        disabled={pageNumber >= maxPage}
         onClick={() => onPageChange(pageNumber + 1)}
+        style={{ color: pageNumber >= maxPage ? "var(--con-faint)" : "var(--accent-cyan)" }}
+        className="disabled:cursor-default"
       >
-        Next
-      </Button>
-    </Box>
+        NEXT
+      </button>
+    </div>
   );
 }
 
-function HoverPreview({
-  screenshot,
-  alt,
+function SceneCard({
+  scene,
   stashBase,
   apiKey,
 }: {
-  screenshot?: string;
-  alt: string;
+  scene: Scene;
   stashBase?: string;
   apiKey?: string;
 }) {
-  const resolvedShot = withApiKey(joinUrl(stashBase, screenshot ?? ""), apiKey);
-
+  const shot = withApiKey(joinUrl(stashBase, scene.paths?.screenshot ?? ""), apiKey);
   return (
-    <Box
-      sx={{ position: "relative", width: "100%", height: "100%", outline: "none" }}
-    >
+    <Link href={`/scenes/${scene.id}`} className="group relative block aspect-video overflow-hidden rounded-[6px] no-underline"
+      style={{ border: "1px solid var(--con-border)" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={resolvedShot}
-        alt={alt}
+        src={shot}
+        alt=""
         loading="lazy"
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          pointerEvents: "none",
-        }}
+        className="absolute inset-0 h-full w-full object-cover"
+        style={{ background: "var(--well)" }}
       />
-    </Box>
+
+      {/* Rating badge (always when rated) */}
+      {scene.rating100 ? (
+        <span
+          className="absolute right-[7px] top-[7px] z-10 rounded-[5px] px-[6px] py-[2px] font-mono text-[9px]"
+          style={{ background: "rgba(8,10,12,0.7)", color: "var(--rating)" }}
+        >
+          ★ {Math.round(scene.rating100 / 20)}
+        </span>
+      ) : null}
+
+      {/* Hover overlay: performers (top) + title (bottom) */}
+      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100"
+        style={{ background: "linear-gradient(to top,rgba(8,10,12,0.92) 0%,rgba(8,10,12,0.1) 45%,rgba(8,10,12,0.55) 100%)" }} />
+      {scene.performers && scene.performers.length > 0 && (
+        <div className="absolute left-[7px] top-[7px] z-10 flex max-w-[calc(100%-14px)] flex-wrap gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {scene.performers.slice(0, 2).map((p) => (
+            <span key={p.id} className="rounded-[4px] px-[6px] py-[2px] text-[9px] text-white"
+              style={{ background: "rgba(76,179,224,0.25)", border: "1px solid rgba(76,179,224,0.4)" }}>
+              {p.name}
+            </span>
+          ))}
+          {scene.performers.length > 2 && (
+            <span className="rounded-[4px] px-[6px] py-[2px] text-[9px] text-white"
+              style={{ background: "rgba(76,179,224,0.25)", border: "1px solid rgba(76,179,224,0.4)" }}>
+              +{scene.performers.length - 2}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="absolute bottom-0 left-0 right-0 z-10 px-2 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold text-white" title={scene.title}>
+          {scene.title}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+      {Array.from({ length: 15 }).map((_, i) => (
+        <div key={i} className="aspect-video animate-pulse rounded-[6px]"
+          style={{ background: "var(--well)", border: "1px solid var(--con-border)" }} />
+      ))}
+    </div>
   );
 }
 
 function ScenesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  // Pagination state
+
   const [pageNumber, setPageNumber] = useState(1);
   const perPage = 42;
-  
-  // Filter state
+
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPerformerIds, setSelectedPerformerIds] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("title-asc");
-  
-  // Total count state
   const [totalCount, setTotalCount] = useState(0);
 
   const settings = useSettings();
@@ -254,128 +360,97 @@ function ScenesContent() {
 
   const { stashTags, loading: tagsLoading, error: tagsError } = useStashTags();
 
-  // Initialize filters from URL on mount
   useEffect(() => {
-    const title = searchParams.get('title') || '';
-    const performers = searchParams.get('performers');
-    const tags = searchParams.get('tags');
-    const rating = searchParams.get('rating') as RatingFilter || 'all';
-    const sort = searchParams.get('sort') as SortOption || 'title-asc';
-    const page = parseInt(searchParams.get('page') || '1', 10);
+    const title = searchParams.get("title") || "";
+    const performers = searchParams.get("performers");
+    const tags = searchParams.get("tags");
+    const rating = (searchParams.get("rating") as RatingFilter) || "all";
+    const sort = (searchParams.get("sort") as SortOption) || "title-asc";
+    const page = parseInt(searchParams.get("page") || "1", 10);
 
     setSearchQuery(title);
-    setSelectedPerformerIds(performers ? performers.split(',').filter(Boolean) : []);
-    setSelectedTagIds(tags ? tags.split(',').filter(Boolean) : []);
+    setSelectedPerformerIds(performers ? performers.split(",").filter(Boolean) : []);
+    setSelectedTagIds(tags ? tags.split(",").filter(Boolean) : []);
     setRatingFilter(rating);
     setSortOption(sort);
     setPageNumber(page > 0 ? page : 1);
   }, [searchParams]);
 
-  // Function to update URL with current filter state
   const updateURLWithFilters = (
-    title?: string, 
-    performers?: string[], 
-    tags?: string[], 
-    rating?: RatingFilter, 
-    sort?: SortOption, 
+    title?: string,
+    performers?: string[],
+    tags?: string[],
+    rating?: RatingFilter,
+    sort?: SortOption,
     page?: number
   ) => {
     const params = new URLSearchParams();
-    
     const currentTitle = title !== undefined ? title : searchQuery;
     const currentPerformers = performers || selectedPerformerIds;
     const currentTags = tags || selectedTagIds;
     const currentRating = rating || ratingFilter;
     const currentSort = sort || sortOption;
     const currentPage = page !== undefined ? page : pageNumber;
-    
-    if (currentTitle.trim()) {
-      params.set('title', currentTitle);
-    }
-    if (currentPerformers.length > 0) {
-      params.set('performers', currentPerformers.join(','));
-    }
-    if (currentTags.length > 0) {
-      params.set('tags', currentTags.join(','));
-    }
-    if (currentRating !== 'all') {
-      params.set('rating', currentRating);
-    }
-    if (currentSort !== 'title-asc') {
-      params.set('sort', currentSort);
-    }
-    if (currentPage > 1) {
-      params.set('page', currentPage.toString());
-    }
-    
-    const newUrl = `/scenes${params.toString() ? `?${params.toString()}` : ''}`;
-    router.replace(newUrl, { scroll: false });
+
+    if (currentTitle.trim()) params.set("title", currentTitle);
+    if (currentPerformers.length > 0) params.set("performers", currentPerformers.join(","));
+    if (currentTags.length > 0) params.set("tags", currentTags.join(","));
+    if (currentRating !== "all") params.set("rating", currentRating);
+    if (currentSort !== "title-asc") params.set("sort", currentSort);
+    if (currentPage > 1) params.set("page", currentPage.toString());
+
+    router.replace(`/scenes${params.toString() ? `?${params.toString()}` : ""}`, { scroll: false });
   };
 
-  // Get performers data (cached aggressively for performance)
   const { data: performersData, loading: performersLoading } = useQuery(GET_PERFORMERS, {
-    fetchPolicy: 'cache-first',
-    notifyOnNetworkStatusChange: false
+    fetchPolicy: "cache-first",
+    notifyOnNetworkStatusChange: false,
   });
 
-  // Determine if we're filtering (search or filters applied)
-  const isFiltering = useMemo(() => {
-    return searchQuery.trim() !== '' || selectedPerformerIds.length > 0 || selectedTagIds.length > 0 || ratingFilter !== 'all';
-  }, [searchQuery, selectedPerformerIds, selectedTagIds, ratingFilter]);
+  const isFiltering = useMemo(
+    () =>
+      searchQuery.trim() !== "" ||
+      selectedPerformerIds.length > 0 ||
+      selectedTagIds.length > 0 ||
+      ratingFilter !== "all",
+    [searchQuery, selectedPerformerIds, selectedTagIds, ratingFilter]
+  );
 
-  // Choose query and parameters based on filtering state
   const { query, variables } = useMemo(() => {
     if (isFiltering) {
-      // When filtering: get all matching results
       return {
         query: GET_SCENES_FILTERED,
-        variables: { 
+        variables: {
           title: searchQuery.trim() || "",
           performers: selectedPerformerIds.length > 0 ? selectedPerformerIds : null,
           tags: selectedTagIds.length > 0 ? selectedTagIds : null,
-          rating: getRatingFilterValue(ratingFilter)
-        }
-      };
-    } else {
-      // When browsing: use pagination
-      return {
-        query: GET_SCENES_PAGINATED,
-        variables: { pageNumber, perPage }
+          rating: getRatingFilterValue(ratingFilter),
+        },
       };
     }
+    return { query: GET_SCENES_PAGINATED, variables: { pageNumber, perPage } };
   }, [isFiltering, searchQuery, selectedPerformerIds, selectedTagIds, ratingFilter, pageNumber, perPage]);
 
-  // Main GraphQL query
   const { data: queryData, loading, error } = useQuery(query, {
     variables,
-    fetchPolicy: 'cache-and-network',
-    errorPolicy: 'all'
+    fetchPolicy: "cache-and-network",
+    errorPolicy: "all",
   });
 
-  // Extract scenes and total count from query response
-  const allScenes: Scene[] = useMemo(() => {
-    return queryData?.findScenes?.scenes || [];
-  }, [queryData]);
+  const allScenes: Scene[] = useMemo(() => queryData?.findScenes?.scenes || [], [queryData]);
 
-  // Update total count when query data changes
   useEffect(() => {
-    if (queryData?.findScenes?.count !== undefined) {
-      setTotalCount(queryData.findScenes.count);
-    }
+    if (queryData?.findScenes?.count !== undefined) setTotalCount(queryData.findScenes.count);
   }, [queryData]);
 
-  // Apply client-side sorting (rating filtering now handled server-side)
   const scenes = useMemo(() => {
-    // Apply sorting (create a copy to avoid mutating read-only array)
-    const sorted = [...allScenes].sort((a, b) => {
+    return [...allScenes].sort((a, b) => {
       switch (sortOption) {
         case "title-desc":
           return b.title.localeCompare(a.title);
         case "date-desc":
         case "date-asc":
-          // We don't have date field, fallback to title
-          return sortOption === "date-desc" ? 
-            b.title.localeCompare(a.title) : a.title.localeCompare(b.title);
+          return sortOption === "date-desc" ? b.title.localeCompare(a.title) : a.title.localeCompare(b.title);
         case "rating-desc":
           return (b.rating100 || 0) - (a.rating100 || 0);
         case "rating-asc":
@@ -385,177 +460,135 @@ function ScenesContent() {
           return a.title.localeCompare(b.title);
       }
     });
-
-    return sorted;
   }, [allScenes, sortOption]);
 
-  // Prepare options for filters
-  type FilterOption = { id: string; label: string };
+  const performerOptions: FilterOption[] = useMemo(
+    () =>
+      (performersData?.findPerformers?.performers || []).map((p: { id: string; name: string }) => ({
+        id: String(p.id),
+        label: p.name,
+      })),
+    [performersData]
+  );
 
-  const performerOptions: FilterOption[] = useMemo(() => {
-    return (performersData?.findPerformers?.performers || []).map((p: { id: string; name: string }) => ({
-      id: String(p.id),
-      label: p.name
-    }));
-  }, [performersData]);
-
-  const tagOptions: FilterOption[] = useMemo(() => {
-    return (stashTags || []).map((t: { id: string; name: string }) => ({
-      id: String(t.id),
-      label: t.name
-    }));
-  }, [stashTags]);
-
-  const selectedPerformerOptions = useMemo(() => {
-    return selectedPerformerIds.map(id =>
-      performerOptions.find((p: FilterOption) => p.id === id)
-    ).filter((v): v is FilterOption => v !== undefined);
-  }, [selectedPerformerIds, performerOptions]);
-
-  const selectedTagOptions = useMemo(() => {
-    return selectedTagIds.map(id =>
-      tagOptions.find((t: FilterOption) => t.id === id)
-    ).filter((v): v is FilterOption => v !== undefined);
-  }, [selectedTagIds, tagOptions]);
+  const tagOptions: FilterOption[] = useMemo(
+    () => (stashTags || []).map((t: { id: string; name: string }) => ({ id: String(t.id), label: t.name })),
+    [stashTags]
+  );
 
   const anyLoading = loading || tagsLoading || performersLoading;
 
-  return (
-    <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
-      {/* Header */}
-      <Box sx={{ mb: 2 }}>
-        <Typography level="h2" sx={{ mb: 1 }}>
-          All Scenes
-        </Typography>
-        {!anyLoading && allScenes.length > 0 && (
-          <Typography level="body-sm" color="neutral">
-            {isFiltering 
-              ? (scenes.length === allScenes.length 
-                  ? `${scenes.length} scene${scenes.length === 1 ? '' : 's'}`
-                  : `${scenes.length} of ${allScenes.length} scenes`)
-              : `Page ${pageNumber} • ${allScenes.length} scene${allScenes.length === 1 ? '' : 's'}`
-            }
-          </Typography>
-        )}
-      </Box>
+  const countLine = !anyLoading && allScenes.length > 0
+    ? isFiltering
+      ? scenes.length === allScenes.length
+        ? `${scenes.length} SCENE${scenes.length === 1 ? "" : "S"}`
+        : `${scenes.length} OF ${allScenes.length} SCENES`
+      : `PAGE ${pageNumber} · ${allScenes.length} SCENE${allScenes.length === 1 ? "" : "S"}`
+    : "…";
 
-      {/* Search and Filters */}
-      <Stack 
-        direction={{ xs: "column", lg: "row" }} 
-        spacing={2} 
-        alignItems={{ xs: "stretch", lg: "center" }}
-        sx={{ mb: 2 }}
-      >
-        <FormControl sx={{ flexGrow: 1, maxWidth: { lg: 300 } }}>
-          <Input
-            placeholder="Search scenes..."
+  return (
+    <div className="flex min-h-full flex-col">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 px-[26px] pt-[22px]">
+        <div>
+          <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">All Scenes</h2>
+          <div className="con-count mt-1">{countLine}</div>
+        </div>
+        {!isFiltering && !anyLoading && scenes.length > 0 && (
+          <PaginationControls
+            pageNumber={pageNumber}
+            perPage={perPage}
+            totalCount={totalCount}
+            onPageChange={(newPage) => {
+              setPageNumber(newPage);
+              updateURLWithFilters(undefined, undefined, undefined, undefined, undefined, newPage);
+            }}
+          />
+        )}
+      </div>
+
+      {/* Filter row */}
+      <div className="flex flex-wrap items-center gap-[9px] px-[26px] pb-4 pt-[18px]">
+        <div className="relative w-[230px]">
+          <Search size={14} className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2" style={{ color: "var(--con-faint)" }} />
+          <input
             value={searchQuery}
             onChange={(e) => {
-              const newValue = e.target.value;
-              setSearchQuery(newValue);
+              const v = e.target.value;
+              setSearchQuery(v);
               setPageNumber(1);
-              updateURLWithFilters(newValue, undefined, undefined, undefined, undefined, 1);
+              updateURLWithFilters(v, undefined, undefined, undefined, undefined, 1);
             }}
-            startDecorator={<Search size={16} />}
-            endDecorator={
-              searchQuery && (
-                <IconButton
-                  size="sm"
-                  variant="plain"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setPageNumber(1);
-                    updateURLWithFilters("", undefined, undefined, undefined, undefined, 1);
-                  }}
-                  sx={{ minHeight: 0, minWidth: 0 }}
-                >
-                  ×
-                </IconButton>
-              )
-            }
-            size="sm"
+            placeholder="search scenes…"
+            aria-label="Search scenes"
+            className="con-input w-full pl-[33px]"
           />
-        </FormControl>
-        
-        <FormControl sx={{ minWidth: { xs: "100%", lg: 180 } }}>
-          <Select
-            value={sortOption}
-            onChange={(_, value) => {
-              const newSort = value as SortOption;
-              setSortOption(newSort);
-              updateURLWithFilters(undefined, undefined, undefined, undefined, newSort);
-            }}
-            startDecorator={<ArrowUpDown size={16} />}
-            size="sm"
-          >
-            <Option value="title-asc">Title (A-Z)</Option>
-            <Option value="title-desc">Title (Z-A)</Option>
-            <Option value="date-desc">Newest First</Option>
-            <Option value="date-asc">Oldest First</Option>
-            <Option value="rating-desc">Highest Rated</Option>
-            <Option value="rating-asc">Lowest Rated</Option>
-          </Select>
-        </FormControl>
+        </div>
 
-        <FormControl sx={{ flexGrow: 1, minWidth: { xs: "100%", lg: 200 } }}>
-          <Autocomplete
-            placeholder="Filter by performers..."
-            multiple
+        <Select
+          value={sortOption}
+          onValueChange={(v) => {
+            const s = v as SortOption;
+            setSortOption(s);
+            updateURLWithFilters(undefined, undefined, undefined, undefined, s);
+          }}
+        >
+          <SelectTrigger className="h-auto gap-2 rounded-[6px] border-[var(--con-border)] bg-[var(--well)] px-3 py-2 font-mono text-[12px] text-[var(--con-text-2)]" style={{ minWidth: 150 }}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
+              <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="min-w-[200px] flex-1">
+          <MultiSelect
+            placeholder="Filter by performers…"
             options={performerOptions}
-            value={selectedPerformerOptions}
-            onChange={(_e, val) => {
-              const newPerformerIds = val.map(v => v.id);
-              setSelectedPerformerIds(newPerformerIds);
+            selectedIds={selectedPerformerIds}
+            onChange={(ids) => {
+              setSelectedPerformerIds(ids);
               setPageNumber(1);
-              updateURLWithFilters(undefined, newPerformerIds, undefined, undefined, undefined, 1);
+              updateURLWithFilters(undefined, ids, undefined, undefined, undefined, 1);
             }}
-            getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
-            isOptionEqualToValue={(a, b) => a?.id === b?.id}
-            size="sm"
           />
-        </FormControl>
+        </div>
 
-        <FormControl sx={{ flexGrow: 1, minWidth: { xs: "100%", lg: 200 } }}>
-          <Autocomplete
-            placeholder="Filter by tags..."
-            multiple
+        <div className="min-w-[200px] flex-1">
+          <MultiSelect
+            placeholder="Filter by tags…"
             options={tagOptions}
-            value={selectedTagOptions}
-            onChange={(_e, val) => {
-              const newTagIds = val.map(v => v.id);
-              setSelectedTagIds(newTagIds);
+            selectedIds={selectedTagIds}
+            onChange={(ids) => {
+              setSelectedTagIds(ids);
               setPageNumber(1);
-              updateURLWithFilters(undefined, undefined, newTagIds, undefined, undefined, 1);
+              updateURLWithFilters(undefined, undefined, ids, undefined, undefined, 1);
             }}
-            getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
-            isOptionEqualToValue={(a, b) => a?.id === b?.id}
-            size="sm"
           />
-        </FormControl>
+        </div>
 
-        <FormControl sx={{ minWidth: { xs: "100%", lg: 120 } }}>
-          <Select
-            value={ratingFilter}
-            onChange={(_, value) => {
-              const newRating = value as RatingFilter;
-              setRatingFilter(newRating);
-              setPageNumber(1);
-              updateURLWithFilters(undefined, undefined, undefined, newRating, undefined, 1);
-            }}
-            size="sm"
-          >
-            <Option value="all">All Ratings</Option>
-            <Option value="1+">1+ Stars</Option>
-            <Option value="2+">2+ Stars</Option>
-            <Option value="3+">3+ Stars</Option>
-            <Option value="4+">4+ Stars</Option>
-            <Option value="5">5 Stars</Option>
-          </Select>
-        </FormControl>
+        <Select
+          value={ratingFilter}
+          onValueChange={(v) => {
+            const r = v as RatingFilter;
+            setRatingFilter(r);
+            setPageNumber(1);
+            updateURLWithFilters(undefined, undefined, undefined, r, undefined, 1);
+          }}
+        >
+          <SelectTrigger className="h-auto rounded-[6px] border-[var(--con-border)] bg-[var(--well)] px-3 py-2 text-[12px] text-[var(--con-text-2)]" style={{ minWidth: 120 }}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(RATING_LABELS) as RatingFilter[]).map((k) => (
+              <SelectItem key={k} value={k}>{RATING_LABELS[k]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        <Button
-          size="sm"
-          variant="plain"
+        <button
           onClick={() => {
             setSearchQuery("");
             setSelectedPerformerIds([]);
@@ -565,260 +598,72 @@ function ScenesContent() {
             setPageNumber(1);
             updateURLWithFilters("", [], [], "all", "title-asc", 1);
           }}
-          sx={{ minWidth: "auto" }}
+          className="font-mono text-[12px]"
+          style={{ color: "var(--accent-cyan)" }}
         >
-          Clear all
-        </Button>
-      </Stack>
+          CLEAR
+        </button>
+      </div>
 
-      {/* Top Pagination Controls - only show when not filtering */}
-      {!isFiltering && !anyLoading && scenes.length > 0 && (
-        <PaginationControls 
-          pageNumber={pageNumber}
-          perPage={perPage}
-          totalCount={totalCount}
-          onPageChange={(newPage) => {
-            setPageNumber(newPage);
-            updateURLWithFilters(undefined, undefined, undefined, undefined, undefined, newPage);
-          }}
-          sx={{ mb: 2 }}
-        />
-      )}
+      <div className="px-[26px] pb-[26px]">
+        {anyLoading && <SkeletonGrid />}
 
-      {/* Loading / Errors */}
-      {anyLoading && (
-        <Grid container spacing={2}>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Grid key={i} xs={12} sm={6} md={4} lg={3} xl={2}>
-              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
-                <AspectRatio ratio="16/9">
-                  <Skeleton />
-                </AspectRatio>
-                <JoyCardContent>
-                  <Skeleton variant="text" level="title-sm" />
-                  <Skeleton variant="text" level="body-sm" />
-                </JoyCardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+        {!anyLoading && (error || tagsError) && (
+          <p className="text-[13px]" style={{ color: "var(--danger)" }}>{error?.message || String(tagsError)}</p>
+        )}
 
-      {!anyLoading && (error || tagsError) && (
-        <Typography color="danger" level="body-sm" sx={{ mb: 2 }}>
-          {error?.message || tagsError}
-        </Typography>
-      )}
+        {!anyLoading && scenes.length === 0 && totalCount === 0 && (
+          <div className="rounded-[7px] p-6 text-center" style={{ background: "var(--surface)", border: "1px solid var(--con-border)" }}>
+            <div className="text-[14px] font-semibold">No scenes found.</div>
+          </div>
+        )}
 
-      {/* Empty state */}
-      {!anyLoading && scenes.length === 0 && totalCount === 0 && (
-        <Sheet
-          variant="soft"
-          color="neutral"
-          sx={{ p: 3, borderRadius: "lg", textAlign: "center" }}
-        >
-          <Typography level="title-md">No scenes found.</Typography>
-        </Sheet>
-      )}
+        {!anyLoading && scenes.length === 0 && totalCount > 0 && (
+          <div className="rounded-[7px] p-6 text-center" style={{ background: "var(--surface)", border: "1px solid var(--con-border)" }}>
+            <div className="text-[14px] font-semibold">No scenes match your filters.</div>
+            <div className="mt-1 text-[13px]" style={{ color: "var(--con-muted)" }}>
+              Try adjusting your search terms or clearing filters.
+            </div>
+          </div>
+        )}
 
-      {/* No results after filtering */}
-      {!anyLoading && scenes.length === 0 && totalCount > 0 && (
-        <Sheet
-          variant="soft"
-          color="neutral"
-          sx={{ p: 3, borderRadius: "lg", textAlign: "center" }}
-        >
-          <Typography level="title-md">No scenes match your filters.</Typography>
-          <Typography level="body-sm" sx={{ mt: 1 }}>
-            Try adjusting your search terms or clearing filters.
-          </Typography>
-        </Sheet>
-      )}
-
-      {/* Scene Cards */}
-      {!anyLoading && scenes.length > 0 && (
-        <>
-          <Grid container spacing={2}>
-            {scenes.map((scene: Scene) => (
-              <Grid key={scene.id} xs={12} sm={6} md={4} lg={3} xl={2}>
-                <Link href={`/scenes/${scene.id}`} style={{ textDecoration: "none" }}>
-                  <Card
-                    sx={{
-                      p: 0,
-                      overflow: "hidden",
-                      borderRadius: "lg",
-                      position: "relative",
-                      boxShadow: "sm",
-                      transition: "transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease",
-                      border: "2px solid transparent",
-                      "&:hover": { 
-                        transform: "translateY(-2px)", 
-                        boxShadow: "md",
-                        borderColor: "primary.200",
-                      },
-                      cursor: "pointer",
-                    }}
-                  >
-                    <AspectRatio ratio="16/9">
-                      <CardCover sx={{ pointerEvents: "auto" }}>
-                        <HoverPreview
-                          screenshot={scene.paths?.screenshot}
-                          alt={scene.title}
-                          stashBase={stashServer}
-                          apiKey={stashAPI}
-                        />
-                      </CardCover>
-
-                      {/* Rating display (top-right) */}
-                      {scene.rating100 && (
-                        <Box
-                          sx={{
-                            position: "absolute",
-                            top: 8,
-                            right: 8,
-                            backgroundColor: "rgba(0, 0, 0, 0.7)",
-                            borderRadius: "6px",
-                            px: 0.75,
-                            py: 0.25,
-                            backdropFilter: "blur(4px)",
-                            border: "1px solid rgba(255, 255, 255, 0.2)",
-                          }}
-                        >
-                          <Typography
-                            level="body-xs"
-                            sx={{ color: "#fff", fontWeight: 600 }}
-                          >
-                            ★ {Math.round(scene.rating100 / 20)}
-                          </Typography>
-                        </Box>
-                      )}
-
-                      {/* Performers chips (top-left) */}
-                      {scene.performers && scene.performers.length > 0 && (
-                        <Box
-                          sx={{
-                            position: "absolute",
-                            top: 8,
-                            left: 8,
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 0.5,
-                            maxWidth: "calc(100% - 16px)",
-                          }}
-                        >
-                          {scene.performers.slice(0, 2).map((performer) => (
-                            <Chip
-                              key={performer.id}
-                              size="sm"
-                              variant="soft"
-                              sx={{
-                                backgroundColor: "rgba(0, 0, 0, 0.7)",
-                                color: "#fff",
-                                backdropFilter: "blur(4px)",
-                                border: "1px solid rgba(255, 255, 255, 0.2)",
-                                fontSize: "0.75rem",
-                              }}
-                            >
-                              {performer.name}
-                            </Chip>
-                          ))}
-                          {scene.performers.length > 2 && (
-                            <Chip
-                              size="sm"
-                              variant="soft"
-                              sx={{
-                                backgroundColor: "rgba(0, 0, 0, 0.7)",
-                                color: "#fff",
-                                backdropFilter: "blur(4px)",
-                                border: "1px solid rgba(255, 255, 255, 0.2)",
-                                fontSize: "0.75rem",
-                              }}
-                            >
-                              +{scene.performers.length - 2}
-                            </Chip>
-                          )}
-                        </Box>
-                      )}
-
-                      {/* Bottom gradient + title */}
-                      <Box
-                        sx={{
-                          position: "absolute",
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          px: 1,
-                          py: 0.75,
-                          background:
-                            "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 80%)",
-                        }}
-                      >
-                        <Typography
-                          level="title-sm"
-                          sx={{
-                            color: "#fff",
-                            textShadow: "0 1px 2px rgba(0,0,0,0.6)",
-                            overflow: "hidden",
-                            whiteSpace: "nowrap",
-                            textOverflow: "ellipsis",
-                          }}
-                          title={scene.title}
-                        >
-                          {scene.title}
-                        </Typography>
-                      </Box>
-                    </AspectRatio>
-                  </Card>
-                </Link>
-              </Grid>
+        {!anyLoading && scenes.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+            {scenes.map((scene) => (
+              <SceneCard key={scene.id} scene={scene} stashBase={stashServer} apiKey={stashAPI} />
             ))}
-          </Grid>
-        </>
-      )}
+          </div>
+        )}
 
-      {/* Bottom Pagination Controls - only show when not filtering */}
-      {!isFiltering && !anyLoading && scenes.length > 0 && (
-        <PaginationControls 
-          pageNumber={pageNumber}
-          perPage={perPage}
-          totalCount={totalCount}
-          onPageChange={(newPage) => {
-            setPageNumber(newPage);
-            updateURLWithFilters(undefined, undefined, undefined, undefined, undefined, newPage);
-          }}
-          sx={{ mt: 3 }}
-        />
-      )}
-    </Sheet>
+        {!isFiltering && !anyLoading && scenes.length > 0 && (
+          <PaginationControls
+            className="mt-5 justify-center"
+            pageNumber={pageNumber}
+            perPage={perPage}
+            totalCount={totalCount}
+            onPageChange={(newPage) => {
+              setPageNumber(newPage);
+              updateURLWithFilters(undefined, undefined, undefined, undefined, undefined, newPage);
+            }}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
 export default function ScenesPage() {
   return (
-    <Suspense fallback={
-      <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography level="h2" sx={{ mb: 1 }}>
-            All Scenes
-          </Typography>
-        </Box>
-        <Grid container spacing={2}>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Grid key={i} xs={12} sm={6} md={4} lg={3} xl={2}>
-              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
-                <AspectRatio ratio="16/9">
-                  <Skeleton />
-                </AspectRatio>
-                <JoyCardContent>
-                  <Skeleton variant="text" level="title-sm" />
-                  <Skeleton variant="text" level="body-sm" />
-                </JoyCardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Sheet>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-full flex-col px-[26px] pt-[22px]">
+          <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">All Scenes</h2>
+          <div className="mt-5">
+            <SkeletonGrid />
+          </div>
+        </div>
+      }
+    >
       <ScenesContent />
     </Suspense>
   );

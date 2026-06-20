@@ -7,23 +7,7 @@ import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
 import { makeStashUrl } from "@/lib/urlUtils";
 import Link from "next/link";
-
-import {
-  Sheet,
-  Box,
-  Typography,
-  Grid,
-  Card,
-  CardContent as JoyCardContent,
-  AspectRatio,
-  CardCover,
-  Button,
-  Chip,
-  Skeleton,
-  Input,
-} from "@mui/joy";
-import SearchIcon from "@mui/icons-material/Search";
-import ClearIcon from "@mui/icons-material/Clear";
+import { Search, X } from "lucide-react";
 
 // Query for unorganised scenes (scenes with markers but without "Markers Organised" tag)
 const GET_UNORGANISED_SCENES = gql`
@@ -82,100 +66,92 @@ type Scene = {
   performers?: { id: string; name: string }[];
 };
 
-// Pagination controls component
+/** Mono pagination: PREV · [1] 2 3 · NEXT (active = accent square). */
 function PaginationControls({
   pageNumber,
   perPage,
   totalCount,
   onPageChange,
-  sx = {}
+  className = "",
 }: {
   pageNumber: number;
   perPage: number;
   totalCount: number;
   onPageChange: (page: number) => void;
-  sx?: Record<string, unknown>;
+  className?: string;
 }) {
   const maxPage = Math.ceil(totalCount / perPage);
-
+  const pages = [pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2].filter(
+    (n) => n >= 1 && n <= maxPage
+  );
   return (
-    <Box sx={{ display: "flex", justifyContent: "center", gap: 1, alignItems: "center", ...sx }}>
-      <Button
-        size="sm"
-        variant="plain"
-        disabled={pageNumber <= 1}
-        onClick={() => onPageChange(pageNumber - 1)}
-      >
-        Previous
-      </Button>
-
-      {[pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2]
-        .filter((n) => n >= 1 && n <= maxPage)
-        .map((n) => (
-          <Chip
-            key={n}
-            variant={n === pageNumber ? "solid" : "soft"}
-            color={n === pageNumber ? "primary" : "neutral"}
-            size="sm"
-            onClick={() => onPageChange(n)}
-            sx={{ cursor: "pointer" }}
-          >
+    <div className={`flex items-center gap-2 font-mono text-[11px] ${className}`} style={{ color: "var(--con-muted)" }}>
+      <button disabled={pageNumber <= 1} onClick={() => onPageChange(pageNumber - 1)}
+        style={{ color: pageNumber <= 1 ? "var(--con-faint)" : "var(--accent-cyan)" }}>PREV</button>
+      {pages.map((n) => {
+        const active = n === pageNumber;
+        return (
+          <button key={n} onClick={() => onPageChange(n)}
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px]"
+            style={active
+              ? { background: "var(--accent-cyan)", color: "var(--accent-ink)", fontWeight: 500 }
+              : { border: "1px solid var(--con-border)" }}>
             {n}
-          </Chip>
-        ))}
-
-      <Button
-        size="sm"
-        variant="plain"
-        disabled={pageNumber >= maxPage}
-        onClick={() => onPageChange(pageNumber + 1)}
-      >
-        Next
-      </Button>
-    </Box>
+          </button>
+        );
+      })}
+      <button disabled={pageNumber >= maxPage} onClick={() => onPageChange(pageNumber + 1)}
+        style={{ color: pageNumber >= maxPage ? "var(--con-faint)" : "var(--accent-cyan)" }}>NEXT</button>
+    </div>
   );
 }
 
-function HoverPreview({
-  screenshot,
-  alt,
-  stashBase,
-  apiKey,
-}: {
-  screenshot?: string;
-  alt: string;
-  stashBase?: string;
-  apiKey?: string;
-}) {
-  const resolvedShot = makeStashUrl(screenshot, stashBase, apiKey);
-
+function SceneCard({ scene, shot }: { scene: Scene; shot: string }) {
   return (
-    <Box sx={{ position: "relative", width: "100%", height: "100%", outline: "none" }}>
+    <Link href={`/scenes/${scene.id}`} className="group relative block aspect-video overflow-hidden rounded-[6px] no-underline"
+      style={{ border: "1px solid var(--con-border)" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={resolvedShot || ""}
-        alt={alt}
-        loading="lazy"
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          pointerEvents: "none",
-        }}
-      />
-    </Box>
+      <img src={shot} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" style={{ background: "var(--well)" }} />
+
+      {/* Needs-organising amber dot (top-left) */}
+      <span className="absolute left-[7px] top-[7px] z-10 h-[7px] w-[7px] rounded-full" style={{ background: "var(--rating)" }} />
+
+      {/* Hover overlay: performers (top) + title (bottom) */}
+      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100"
+        style={{ background: "linear-gradient(to top,rgba(8,10,12,0.92) 0%,rgba(8,10,12,0.1) 45%,rgba(8,10,12,0.55) 100%)" }} />
+      {scene.performers && scene.performers.length > 0 && (
+        <div className="absolute left-[7px] top-[18px] z-10 flex max-w-[calc(100%-14px)] flex-wrap gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {scene.performers.slice(0, 2).map((p) => (
+            <span key={p.id} className="rounded-[4px] px-[6px] py-[2px] text-[9px] text-white"
+              style={{ background: "rgba(76,179,224,0.25)", border: "1px solid rgba(76,179,224,0.4)" }}>{p.name}</span>
+          ))}
+          {scene.performers.length > 2 && (
+            <span className="rounded-[4px] px-[6px] py-[2px] text-[9px] text-white"
+              style={{ background: "rgba(76,179,224,0.25)", border: "1px solid rgba(76,179,224,0.4)" }}>+{scene.performers.length - 2}</span>
+          )}
+        </div>
+      )}
+      <div className="absolute bottom-0 left-0 right-0 z-10 px-2 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold text-white" title={scene.title}>{scene.title}</div>
+      </div>
+    </Link>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+      {Array.from({ length: 15 }).map((_, i) => (
+        <div key={i} className="aspect-video animate-pulse rounded-[6px]" style={{ background: "var(--well)", border: "1px solid var(--con-border)" }} />
+      ))}
+    </div>
   );
 }
 
 function HomeContent() {
-  // Pagination state
   const [pageNumber, setPageNumber] = useState(1);
   const perPage = 42;
   const [totalCount, setTotalCount] = useState(0);
-
-  // Search state
   const [searchTerm, setSearchTerm] = useState("");
 
   const settings = useSettings();
@@ -184,68 +160,52 @@ function HomeContent() {
 
   const { stashTags, loading: tagsLoading, error: tagsError } = useStashTags();
 
-  // Find "Markers Organised" tag ID
   const markersOrganisedTagId = useMemo(() => {
     const tag = stashTags?.find((t: { id: string; name: string }) => t.name === "Markers Organised");
     return tag?.id ? String(tag.id) : null;
   }, [stashTags]);
 
-  // Determine if we're filtering
   const isFiltering = searchTerm.trim().length > 0;
 
-  // Scroll to top on page change
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, [pageNumber]);
 
-  // Reset to page 1 when search changes
   useEffect(() => {
     setPageNumber(1);
   }, [searchTerm]);
 
-  // Query variables for paginated (non-filtered) query
   const paginatedVariables = useMemo(() => ({
     markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
     pageNumber,
     perPage,
   }), [markersOrganisedTagId, pageNumber, perPage]);
 
-  // Query variables for filtered query
   const filteredVariables = useMemo(() => ({
     markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
     titleQuery: searchTerm.trim(),
   }), [markersOrganisedTagId, searchTerm]);
 
-  // Paginated query - skip when filtering or tag not found
   const { data: paginatedData, loading: paginatedLoading, error: paginatedError } = useQuery(GET_UNORGANISED_SCENES, {
     variables: paginatedVariables,
     skip: !markersOrganisedTagId || isFiltering,
     fetchPolicy: "cache-and-network",
   });
 
-  // Filtered query - only run when filtering
   const { data: filteredData, loading: filteredLoading, error: filteredError } = useQuery(GET_UNORGANISED_SCENES_FILTERED, {
     variables: filteredVariables,
     skip: !markersOrganisedTagId || !isFiltering,
     fetchPolicy: "cache-and-network",
   });
 
-  // Select appropriate data based on mode
   const data = isFiltering ? filteredData : paginatedData;
   const loading = isFiltering ? filteredLoading : paginatedLoading;
   const error = isFiltering ? filteredError : paginatedError;
 
-  // Extract scenes and update total count
-  const scenes: Scene[] = useMemo(() => {
-    return data?.findScenes?.scenes || [];
-  }, [data]);
+  const scenes: Scene[] = useMemo(() => data?.findScenes?.scenes || [], [data]);
 
   useEffect(() => {
-    if (data?.findScenes?.count !== undefined) {
-      setTotalCount(data.findScenes.count);
-    }
+    if (data?.findScenes?.count !== undefined) setTotalCount(data.findScenes.count);
   }, [data]);
 
   const anyLoading = loading || tagsLoading;
@@ -254,289 +214,112 @@ function HomeContent() {
   // Tag not found state
   if (!tagsLoading && !markersOrganisedTagId) {
     return (
-      <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography level="h2" sx={{ mb: 1 }}>
-            Unorganised Scenes
-          </Typography>
-        </Box>
-        <Sheet
-          variant="soft"
-          color="warning"
-          sx={{ p: 3, borderRadius: "lg", textAlign: "center" }}
-        >
-          <Typography level="title-md">
+      <div className="flex min-h-full flex-col px-[26px] pt-[22px]">
+        <h2 className="m-0 mb-4 text-[22px] font-semibold tracking-[-0.01em]">Unorganised Scenes</h2>
+        <div className="rounded-[7px] p-6 text-center"
+          style={{ background: "var(--rating-tint-bg)", border: "1px solid var(--rating-tint-bd)" }}>
+          <div className="text-[14px] font-semibold" style={{ color: "var(--rating)" }}>
             &quot;Markers Organised&quot; tag not found in Stash
-          </Typography>
-          <Typography level="body-sm" sx={{ mt: 1 }}>
+          </div>
+          <div className="mt-1 text-[13px]" style={{ color: "var(--con-muted)" }}>
             Create a tag named &quot;Markers Organised&quot; in your Stash server to enable this feature.
-          </Typography>
-        </Sheet>
-      </Sheet>
+          </div>
+        </div>
+      </div>
     );
   }
 
+  const countLine = !anyLoading && totalCount > 0
+    ? isFiltering
+      ? `${totalCount} SCENE${totalCount === 1 ? "" : "S"} MATCHING “${searchTerm.toUpperCase()}”`
+      : `PAGE ${pageNumber} OF ${maxPage} · ${totalCount} SCENES NEED ORGANISING`
+    : "…";
+
   return (
-    <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
+    <div className="flex min-h-full flex-col">
       {/* Header */}
-      <Box sx={{ mb: 2 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2, mb: 1 }}>
-          <Typography level="h2">
-            Unorganised Scenes
-          </Typography>
-          <Input
-            size="sm"
-            placeholder="Search by title..."
+      <div className="flex flex-wrap items-start justify-between gap-3 px-[26px] pt-[22px]">
+        <div>
+          <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Unorganised Scenes</h2>
+          <div className="con-count mt-1" style={{ color: "var(--rating)" }}>{countLine}</div>
+        </div>
+        <div className="relative w-[250px]">
+          <Search size={14} className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2" style={{ color: "var(--con-faint)" }} />
+          <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            startDecorator={<SearchIcon sx={{ fontSize: 18 }} />}
-            endDecorator={
-              searchTerm && (
-                <ClearIcon
-                  sx={{ fontSize: 16, cursor: "pointer", opacity: 0.6, "&:hover": { opacity: 1 } }}
-                  onClick={() => setSearchTerm("")}
-                />
-              )
-            }
-            sx={{ width: 250 }}
+            placeholder="search by title…"
+            aria-label="Search scenes"
+            className="con-input w-full pl-[33px] pr-[30px]"
           />
-        </Box>
-        {!anyLoading && totalCount > 0 && (
-          <Typography level="body-sm" color="neutral">
-            {isFiltering ? (
-              <>{totalCount} scene{totalCount === 1 ? '' : 's'} matching &quot;{searchTerm}&quot;</>
-            ) : (
-              <>Page {pageNumber} of {maxPage} &bull; {totalCount} scene{totalCount === 1 ? '' : 's'} with markers need organising</>
-            )}
-          </Typography>
-        )}
-      </Box>
-
-      {/* Top Pagination Controls - only show when browsing (not filtering) */}
-      {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
-        <PaginationControls
-          pageNumber={pageNumber}
-          perPage={perPage}
-          totalCount={totalCount}
-          onPageChange={setPageNumber}
-          sx={{ mb: 2 }}
-        />
-      )}
-
-      {/* Loading skeletons */}
-      {anyLoading && (
-        <Grid container spacing={2}>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <Grid key={i} xs={12} sm={6} md={4} lg={3} xl={2}>
-              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
-                <AspectRatio ratio="16/9">
-                  <Skeleton />
-                </AspectRatio>
-                <JoyCardContent>
-                  <Skeleton variant="text" level="title-sm" />
-                  <Skeleton variant="text" level="body-sm" />
-                </JoyCardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
-
-      {/* Error state */}
-      {!anyLoading && (error || tagsError) && (
-        <Typography color="danger" level="body-sm" sx={{ mb: 2 }}>
-          {error?.message || tagsError}
-        </Typography>
-      )}
-
-      {/* Empty state */}
-      {!anyLoading && !error && scenes.length === 0 && totalCount === 0 && (
-        <Box
-          sx={{
-            p: 3,
-            borderRadius: "lg",
-            textAlign: "center",
-            border: "1px dashed",
-            borderColor: "neutral.outlinedBorder",
-            bgcolor: "background.level1",
-          }}
-        >
-          {isFiltering ? (
-            <>
-              <Typography level="title-md">No scenes match &quot;{searchTerm}&quot;</Typography>
-              <Typography level="body-sm" sx={{ mt: 1, color: "text.secondary" }}>
-                Try a different search term or{" "}
-                <Button variant="plain" size="sm" onClick={() => setSearchTerm("")}>
-                  clear the filter
-                </Button>
-              </Typography>
-            </>
-          ) : (
-            <>
-              <Typography level="title-md">There are no unorganised scenes</Typography>
-              <Typography level="body-sm" sx={{ mt: 1, color: "text.secondary" }}>
-                All scenes with markers have been organised.
-              </Typography>
-            </>
+          {searchTerm && (
+            <button onClick={() => setSearchTerm("")} aria-label="Clear search"
+              className="absolute right-[10px] top-1/2 -translate-y-1/2" style={{ color: "var(--con-muted)" }}>
+              <X size={13} />
+            </button>
           )}
-        </Box>
-      )}
+        </div>
+      </div>
 
-      {/* Scene Cards */}
-      {!anyLoading && scenes.length > 0 && (
-        <Grid container spacing={2}>
-          {scenes.map((scene: Scene) => (
-            <Grid key={scene.id} xs={12} sm={6} md={4} lg={3} xl={2}>
-              <Link href={`/scenes/${scene.id}`} style={{ textDecoration: "none" }}>
-                <Card
-                  sx={{
-                    p: 0,
-                    overflow: "hidden",
-                    borderRadius: "lg",
-                    position: "relative",
-                    boxShadow: "sm",
-                    transition: "transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease",
-                    border: "2px solid transparent",
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      boxShadow: "md",
-                      borderColor: "primary.200",
-                    },
-                    cursor: "pointer",
-                  }}
-                >
-                  <AspectRatio ratio="16/9">
-                    <CardCover sx={{ pointerEvents: "auto" }}>
-                      <HoverPreview
-                        screenshot={scene.paths?.screenshot}
-                        alt={scene.title}
-                        stashBase={stashServer}
-                        apiKey={stashAPI}
-                      />
-                    </CardCover>
+      <div className="px-[26px] pb-[26px] pt-[18px]">
+        {/* Top pagination */}
+        {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
+          <PaginationControls className="mb-4 justify-center" pageNumber={pageNumber} perPage={perPage} totalCount={totalCount} onPageChange={setPageNumber} />
+        )}
 
-                    {/* Performers chips (top-left) */}
-                    {scene.performers && scene.performers.length > 0 && (
-                      <Box
-                        sx={{
-                          position: "absolute",
-                          top: 8,
-                          left: 8,
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 0.5,
-                          maxWidth: "calc(100% - 16px)",
-                        }}
-                      >
-                        {scene.performers.slice(0, 2).map((performer) => (
-                          <Chip
-                            key={performer.id}
-                            size="sm"
-                            variant="soft"
-                            sx={{
-                              backgroundColor: "rgba(0, 0, 0, 0.7)",
-                              color: "#fff",
-                              backdropFilter: "blur(4px)",
-                              border: "1px solid rgba(255, 255, 255, 0.2)",
-                              fontSize: "0.75rem",
-                            }}
-                          >
-                            {performer.name}
-                          </Chip>
-                        ))}
-                        {scene.performers.length > 2 && (
-                          <Chip
-                            size="sm"
-                            variant="soft"
-                            sx={{
-                              backgroundColor: "rgba(0, 0, 0, 0.7)",
-                              color: "#fff",
-                              backdropFilter: "blur(4px)",
-                              border: "1px solid rgba(255, 255, 255, 0.2)",
-                              fontSize: "0.75rem",
-                            }}
-                          >
-                            +{scene.performers.length - 2}
-                          </Chip>
-                        )}
-                      </Box>
-                    )}
+        {anyLoading && <SkeletonGrid />}
 
-                    {/* Bottom gradient + title */}
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        px: 1,
-                        py: 0.75,
-                        background:
-                          "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 80%)",
-                      }}
-                    >
-                      <Typography
-                        level="title-sm"
-                        sx={{
-                          color: "#fff",
-                          textShadow: "0 1px 2px rgba(0,0,0,0.6)",
-                          overflow: "hidden",
-                          whiteSpace: "nowrap",
-                          textOverflow: "ellipsis",
-                        }}
-                        title={scene.title}
-                      >
-                        {scene.title}
-                      </Typography>
-                    </Box>
-                  </AspectRatio>
-                </Card>
-              </Link>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+        {!anyLoading && (error || tagsError) && (
+          <p className="text-[13px]" style={{ color: "var(--danger)" }}>{error?.message || String(tagsError)}</p>
+        )}
 
-      {/* Bottom Pagination Controls - only show when browsing (not filtering) */}
-      {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
-        <PaginationControls
-          pageNumber={pageNumber}
-          perPage={perPage}
-          totalCount={totalCount}
-          onPageChange={setPageNumber}
-          sx={{ mt: 3 }}
-        />
-      )}
-    </Sheet>
+        {/* Empty states */}
+        {!anyLoading && !error && scenes.length === 0 && totalCount === 0 && (
+          <div className="rounded-[7px] p-6 text-center" style={{ background: "var(--surface)", border: "1px dashed var(--con-border-strong)" }}>
+            {isFiltering ? (
+              <>
+                <div className="text-[14px] font-semibold">No scenes match “{searchTerm}”</div>
+                <button onClick={() => setSearchTerm("")} className="mt-2 text-[13px]" style={{ color: "var(--accent-cyan)" }}>Clear the filter</button>
+              </>
+            ) : (
+              <>
+                <div className="text-[14px] font-semibold">There are no unorganised scenes</div>
+                <div className="mt-1 text-[13px]" style={{ color: "var(--con-muted)" }}>All scenes with markers have been organised.</div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Grid */}
+        {!anyLoading && scenes.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+            {scenes.map((scene) => (
+              <SceneCard key={scene.id} scene={scene} shot={makeStashUrl(scene.paths?.screenshot, stashServer, stashAPI) || ""} />
+            ))}
+          </div>
+        )}
+
+        {/* Bottom pagination */}
+        {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
+          <PaginationControls className="mt-5 justify-center" pageNumber={pageNumber} perPage={perPage} totalCount={totalCount} onPageChange={setPageNumber} />
+        )}
+      </div>
+    </div>
   );
 }
 
 export default function Home() {
   return (
-    <Suspense fallback={
-      <Sheet sx={{ p: 2, maxWidth: "90vw", mx: "auto" }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography level="h2" sx={{ mb: 1 }}>
-            Unorganised Scenes
-          </Typography>
-        </Box>
-        <Grid container spacing={2}>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <Grid key={i} xs={12} sm={6} md={4} lg={3} xl={2}>
-              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
-                <AspectRatio ratio="16/9">
-                  <Skeleton />
-                </AspectRatio>
-                <JoyCardContent>
-                  <Skeleton variant="text" level="title-sm" />
-                  <Skeleton variant="text" level="body-sm" />
-                </JoyCardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Sheet>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-full flex-col px-[26px] pt-[22px]">
+          <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Unorganised Scenes</h2>
+          <div className="mt-5">
+            <SkeletonGrid />
+          </div>
+        </div>
+      }
+    >
       <HomeContent />
     </Suspense>
   );

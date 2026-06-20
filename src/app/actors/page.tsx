@@ -3,21 +3,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Search, Plus } from "lucide-react";
 import { useSettings } from "@/app/context/SettingsContext";
 import { makeStashUrl } from "@/lib/urlUtils";
-import {
-  Grid,
-  Card,
-  CardCover,
-  CardContent,
-  Typography,
-  AspectRatio,
-  Sheet,
-  Skeleton,
-  Box,
-  Button,
-  Input,
-} from "@mui/joy";
 
 type Actor = {
   id: string;
@@ -63,152 +51,103 @@ export default function MyActorsPage() {
   }, [sortedActors, q]);
 
   return (
-    <Sheet sx={{ p: 2, maxWidth: 1600, mx: "auto" }}>
-      {/* Header row: title left, controls (Add + Search) right */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1.5,
-          mb: 2,
-          flexWrap: "wrap",
-        }}
-      >
-        <Typography level="h2" sx={{ flexGrow: 1 }}>
-          Actors
-        </Typography>
-
-        <Box
-          sx={{
-            display: "flex",
-            gap: 1,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search actors…"
-            size="sm"
-            sx={{ minWidth: { xs: 180, sm: 240 } }}
-            slotProps={{
-              input: { "aria-label": "Search actors" },
-            }}
-          />
-          <Button component={Link} href="/actors/add" variant="solid" size="sm">
-            + Add Actors
-          </Button>
-        </Box>
-      </Box>
+    <div className="flex min-h-full flex-col">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 px-[26px] pt-[22px]">
+        <div>
+          <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Actors</h2>
+          <div className="con-count mt-1">
+            {actors ? `${actors.length} PERFORMERS` : "…"}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-[220px]">
+            <Search
+              size={14}
+              strokeWidth={2}
+              className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2"
+              style={{ color: "var(--con-faint)" }}
+            />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="search actors…"
+              aria-label="Search actors"
+              className="con-input w-full pl-[33px]"
+            />
+          </div>
+          <Link href="/actors/add" className="con-btn-primary">
+            <Plus size={13} strokeWidth={2.6} />
+            Add Actors
+          </Link>
+        </div>
+      </div>
 
       {error && (
-        <Typography level="body-sm" color="danger" sx={{ mb: 2 }}>
+        <p className="px-[26px] pt-4 text-[13px]" style={{ color: "var(--danger)" }}>
           Failed to load actors: {error}
-        </Typography>
+        </p>
       )}
 
+      {/* Empty state */}
       {actors && filteredActors.length === 0 && (
-        <Sheet
-          variant="soft"
-          color="neutral"
-          sx={{
-            p: 3,
-            borderRadius: "lg",
-            textAlign: "center",
-          }}
-        >
-          <Typography level="title-md" sx={{ mb: 1 }}>
-            No actors match “{q}”.
-          </Typography>
-          <Button size="sm" variant="plain" onClick={() => setQ("")}>
+        <div className="mx-[26px] mt-5 rounded-[7px] p-6 text-center"
+          style={{ background: "var(--surface)", border: "1px solid var(--con-border)" }}>
+          <div className="mb-2 text-[14px] font-semibold">No actors match “{q}”.</div>
+          <button onClick={() => setQ("")} className="text-[13px]" style={{ color: "var(--accent-cyan)" }}>
             Clear search
-          </Button>
-        </Sheet>
+          </button>
+        </div>
       )}
 
+      {/* Loading skeleton */}
       {!actors && !error && (
-        <Grid container spacing={2}>
+        <div className="grid grid-cols-2 gap-[14px] px-[26px] pb-[26px] pt-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {Array.from({ length: 12 }).map((_, i) => (
-            <Grid key={i} xs={6} sm={4} md={3} lg={2}>
-              <Card sx={{ borderRadius: "lg", overflow: "hidden" }}>
-                <AspectRatio ratio="2/3">
-                  <Skeleton />
-                </AspectRatio>
-                <CardContent>
-                  <Skeleton variant="text" level="title-sm" />
-                </CardContent>
-              </Card>
-            </Grid>
+            <div key={i} className="overflow-hidden rounded-[7px]"
+              style={{ border: "1px solid var(--con-border)", background: "var(--surface)" }}>
+              <div className="aspect-[3/4] animate-pulse" style={{ background: "var(--well)" }} />
+              <div className="p-[9px]">
+                <div className="mx-auto h-3 w-2/3 animate-pulse rounded" style={{ background: "var(--well)" }} />
+              </div>
+            </div>
           ))}
-        </Grid>
+        </div>
       )}
 
+      {/* Grid */}
       {actors && filteredActors.length > 0 && (
-        <Grid container spacing={2}>
+        <div className="grid grid-cols-2 gap-[14px] px-[26px] pb-[26px] pt-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {filteredActors.map((actor) => (
-            <Grid key={actor.id} xs={6} sm={4} md={3} lg={2}>
-              <Link href={`/actors/${actor.id}/playlists`} style={{ textDecoration: "none" }}>
-                <Card
-                  sx={{
-                    borderRadius: "lg",
-                    overflow: "hidden",
-                    p: 0,
-                    boxShadow: "md",
-                    transition: "transform 150ms ease, box-shadow 150ms ease",
-                    "&:hover": {
-                      transform: "translateY(-2px)",
-                      boxShadow: "lg",
-                    },
-                  }}
-                >
-                  <AspectRatio ratio="2/3">
-                    {/* Image */}
-                    <CardCover>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={makeStashUrl(actor.image_path, String(settings["STASH_SERVER"] || ""), String(settings["STASH_API"] || ""))}
-                        alt={actor.name}
-                        style={{ objectFit: "cover" }}
-                        loading="lazy"
-                      />
-                    </CardCover>
-
-                    {/* Bottom-anchored name bar */}
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        px: 1,
-                        py: 0.5,
-                        background:
-                          "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.0) 80%)",
-                      }}
-                    >
-                      <Typography
-                        level="title-sm"
-                        sx={{
-                          color: "#fff",
-                          textAlign: "center",
-                          textShadow: "0 1px 2px rgba(0,0,0,0.6)",
-                          overflow: "hidden",
-                          whiteSpace: "nowrap",
-                          textOverflow: "ellipsis",
-                        }}
-                        title={actor.name}
-                      >
-                        {actor.name}
-                      </Typography>
-                    </Box>
-                  </AspectRatio>
-                </Card>
-              </Link>
-            </Grid>
+            <Link
+              key={actor.id}
+              href={`/actors/${actor.id}/playlists`}
+              className="con-card group block overflow-hidden no-underline"
+            >
+              <div className="relative aspect-[3/4]" style={{ background: "var(--well)" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={makeStashUrl(
+                    actor.image_path,
+                    String(settings["STASH_SERVER"] || ""),
+                    String(settings["STASH_API"] || "")
+                  )}
+                  alt={actor.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              <div
+                className="overflow-hidden text-ellipsis whitespace-nowrap px-[10px] py-[9px] text-center text-[12px] font-medium"
+                style={{ color: "var(--con-text)" }}
+                title={actor.name}
+              >
+                {actor.name}
+              </div>
+            </Link>
           ))}
-        </Grid>
+        </div>
       )}
-    </Sheet>
+    </div>
   );
 }
