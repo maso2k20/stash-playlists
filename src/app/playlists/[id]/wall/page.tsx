@@ -23,7 +23,8 @@ import {
   Minimize2,
 } from "lucide-react";
 import VideoWallQuadrant from "@/components/VideoWallQuadrant";
-import VideoWallMarkerCard from "@/components/VideoWallMarkerCard";
+import VideoWallSummaryTile from "@/components/VideoWallSummaryTile";
+import MarkerTagEditor from "@/components/MarkerTagEditor";
 import { useSettings } from "@/app/context/SettingsContext";
 
 // GraphQL queries and mutations for marker tag editing
@@ -136,6 +137,9 @@ export default function VideoWallPage() {
 
   // Audio state - which quadrant is unmuted (null = all muted)
   const [unmutedQuadrant, setUnmutedQuadrant] = useState<number | null>(null);
+
+  // Which quadrant's marker is shown in the focused tag editor
+  const [selectedQuadrant, setSelectedQuadrant] = useState(0);
 
   // Pause state
   const [isPaused, setIsPaused] = useState(false);
@@ -445,6 +449,14 @@ export default function VideoWallPage() {
     [updateSceneMarker]
   );
 
+  // Resolve the quadrant shown in the focused editor: fall back to the first
+  // non-empty quadrant if the selected one is empty (e.g. a video rotated out).
+  const effectiveQuadrant = useMemo(() => {
+    if (quadrantItems[selectedQuadrant]) return selectedQuadrant;
+    const firstFilled = quadrantItems.findIndex((it) => it !== null);
+    return firstFilled === -1 ? selectedQuadrant : firstFilled;
+  }, [quadrantItems, selectedQuadrant]);
+
   // Loading state
   if (loading) {
     return (
@@ -559,30 +571,74 @@ export default function VideoWallPage() {
 
         {/* Marker Info Grid - hide in fullscreen */}
         {!isFullscreen && (
-          <Grid container spacing={1} sx={{ mt: 2, flexShrink: 0 }}>
-            {[0, 1, 2, 3].map((quadrantIndex) => {
-              const item = quadrantItems[quadrantIndex];
-              const markerDetails = item
-                ? markerDetailsCache[item.item.id]
-                : null;
-              const isLoading = item
-                ? loadingMarkers[item.item.id]
-                : false;
+          <Box sx={{ mt: 2, flexShrink: 0 }}>
+            {/* Summary tiles — one per quadrant, click to focus the editor */}
+            <Grid container spacing={1}>
+              {[0, 1, 2, 3].map((quadrantIndex) => {
+                const item = quadrantItems[quadrantIndex];
+                const markerDetails = item
+                  ? markerDetailsCache[item.item.id]
+                  : null;
+
+                return (
+                  <Grid key={quadrantIndex} xs={6} md={3}>
+                    <VideoWallSummaryTile
+                      item={item}
+                      quadrantIndex={quadrantIndex}
+                      markerDetails={markerDetails || null}
+                      selected={quadrantIndex === effectiveQuadrant}
+                      onSelect={setSelectedQuadrant}
+                      onRatingChange={handleRatingChange}
+                    />
+                  </Grid>
+                );
+              })}
+            </Grid>
+
+            {/* Focused tag editor for the selected quadrant */}
+            {(() => {
+              const selItem = quadrantItems[effectiveQuadrant];
+              if (!selItem) {
+                return (
+                  <Typography
+                    level="body-sm"
+                    sx={{ mt: 2, opacity: 0.7, textAlign: "center" }}
+                  >
+                    No video to edit
+                  </Typography>
+                );
+              }
+              const selDetails = markerDetailsCache[selItem.item.id] || null;
+              const selLoading = loadingMarkers[selItem.item.id] || false;
 
               return (
-                <Grid key={quadrantIndex} xs={6} md={3}>
-                  <VideoWallMarkerCard
-                    item={item}
-                    quadrantIndex={quadrantIndex}
-                    markerDetails={markerDetails || null}
-                    markerLoading={isLoading}
-                    onRatingChange={handleRatingChange}
-                    onTagSave={handleTagSave}
-                  />
-                </Grid>
+                <Box sx={{ mt: 2 }}>
+                  <Typography level="title-sm" sx={{ mb: 1 }}>
+                    Editing {effectiveQuadrant + 1} — {selItem.item.title}
+                  </Typography>
+                  {selDetails ? (
+                    <MarkerTagEditor
+                      key={selItem.item.id}
+                      markerId={selItem.item.id}
+                      currentPrimaryTag={selDetails.primary_tag}
+                      currentTags={selDetails.tags || []}
+                      onSave={handleTagSave}
+                      loading={selLoading}
+                      compact={false}
+                    />
+                  ) : selLoading ? (
+                    <Typography level="body-sm" sx={{ opacity: 0.7 }}>
+                      Loading marker details…
+                    </Typography>
+                  ) : (
+                    <Typography level="body-sm" sx={{ opacity: 0.7 }}>
+                      No marker details available
+                    </Typography>
+                  )}
+                </Box>
               );
-            })}
-          </Grid>
+            })()}
+          </Box>
         )}
       </Box>
     </Container>
