@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, gql } from "@apollo/client";
-import { Grid, Container, Sheet, Box, Typography, Button } from '@mui/joy';
+import { Grid, Container, Sheet, Box, Typography, Button, Chip } from '@mui/joy';
 import VideoJS from "@/components/videojs/VideoJS";
 import { PlaylistDetail } from '@/components/PlaylistDetail';
 import StarRating from '@/components/StarRating';
@@ -16,6 +16,8 @@ const GET_SCENE_MARKER_DETAILS = gql`
   query getSceneMarkerDetails($id: ID!) {
     findScene(id: $id) {
       id
+      title
+      performers { id name }
       scene_markers {
         id
         title
@@ -73,6 +75,8 @@ type MarkerDetails = {
 type SceneMarkerDetailsData = {
   findScene: {
     id: string;
+    title: string | null;
+    performers: Array<{ id: string; name: string }>;
     scene_markers: MarkerDetails[];
   } | null;
 };
@@ -375,6 +379,8 @@ export default function PlaylistPlayer() {
                 onEnded={handleVideoEnded}
                 ratingValue={currentItem?.item?.rating ?? null}
                 onRatingChange={handleOverlayRatingChange}
+                sceneTitle={sceneData?.findScene?.title || currentItem?.item?.title || ''}
+                performers={sceneData?.findScene?.performers ?? []}
               />
             </Box>
 
@@ -406,6 +412,23 @@ export default function PlaylistPlayer() {
                     />
                   </Box>
                 </Box>
+
+                {/* Performers in the current clip's scene (read-only) */}
+                {sceneData?.findScene?.performers && sceneData.findScene.performers.length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                    {sceneData.findScene.performers.map((performer) => (
+                      <Chip
+                        key={performer.id}
+                        size="sm"
+                        variant="outlined"
+                        color="primary"
+                        sx={{ fontWeight: 500 }}
+                      >
+                        {performer.name}
+                      </Chip>
+                    ))}
+                  </Box>
+                )}
 
                 {/* Marker Tag Editor */}
                 {currentMarkerDetails ? (

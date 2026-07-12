@@ -186,6 +186,28 @@ const RatingOverlay = ({ value, onChange }) => (
   </div>
 );
 
+// In-player scene info overlay (top-left): scene title with performer chips
+// beneath it. Read-only (pointer-events: none) and portaled into the player
+// root so it shows in fullscreen. Visibility is keyed to `.vjs-user-active`,
+// so it fades in/out with the control bar.
+const InfoOverlay = ({ title, performers }) => {
+  if (!title && !(performers && performers.length > 0)) return null;
+  return (
+    <div className='vjs-info-overlay'>
+      {title && <div className='vjs-info-title'>{title}</div>}
+      {performers && performers.length > 0 && (
+        <div className='vjs-info-performers'>
+          {performers.map((performer) => (
+            <span key={performer.id} className='vjs-info-chip'>
+              {performer.name}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
@@ -197,7 +219,7 @@ export const VideoJS = (props) => {
   const currentSrcRef = React.useRef(null);
   const retryCountRef = React.useRef(0);
   const MAX_RETRIES = 2;
-  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode, ratingValue, onRatingChange } = props;
+  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode, ratingValue, onRatingChange, sceneTitle, performers } = props;
 
   const sourceUrl = options?.sources?.[0]?.src;
   const offsetStart = offset?.start;
@@ -440,6 +462,11 @@ export const VideoJS = (props) => {
           <RatingOverlay value={ratingValue ?? null} onChange={onRatingChange} />,
           playerEl,
         )}
+      {playerEl && !wallMode &&
+        createPortal(
+          <InfoOverlay title={sceneTitle} performers={performers} />,
+          playerEl,
+        )}
     </div>
   );
 };
@@ -455,7 +482,10 @@ const arePropsEqual = (prevProps, nextProps) => {
   // clip's rating changes or the change handler is rebound to a new item.
   const ratingEqual = prevProps.ratingValue === nextProps.ratingValue;
   const onRatingChangeEqual = prevProps.onRatingChange === nextProps.onRatingChange;
-  return sourcesEqual && offsetEqual && onEndedEqual && wallModeEqual && ratingEqual && onRatingChangeEqual;
+  // Scene info drives the top-left overlay; refresh when title or performers change.
+  const sceneTitleEqual = prevProps.sceneTitle === nextProps.sceneTitle;
+  const performersEqual = JSON.stringify(prevProps.performers) === JSON.stringify(nextProps.performers);
+  return sourcesEqual && offsetEqual && onEndedEqual && wallModeEqual && ratingEqual && onRatingChangeEqual && sceneTitleEqual && performersEqual;
 };
 
 export default React.memo(VideoJS, arePropsEqual);

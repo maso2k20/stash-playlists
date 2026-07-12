@@ -215,6 +215,58 @@
   border-color: rgba(255, 255, 255, 0.6);
 }
 
+/* In-player scene info overlay (top-left): scene title + performer chips.
+   Read-only, and faded in/out with the control bar via .vjs-user-active. */
+.video-js .vjs-info-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1002;
+  max-width: 65%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.video-js.vjs-user-active .vjs-info-overlay {
+  opacity: 1;
+}
+
+.video-js .vjs-info-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  /* Clamp very long titles to two lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.video-js .vjs-info-performers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.video-js .vjs-info-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 /* Responsive adjustments */
 @media (max-width: 600px) {
   .video-js .vjs-forward-30-control,
