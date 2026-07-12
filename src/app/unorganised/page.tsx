@@ -309,7 +309,7 @@ function UnorganisedContent() {
 
         {/* Bottom pagination */}
         {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
-          <PaginationControls className="mt-5 justify-center" pageNumber={pageNumber} perPage={perPage} totalCount={totalCount} onPageChange={setPageNumber} />
+          <PaginationControls edges="firstlast" className="mt-5 justify-center" pageNumber={pageNumber} perPage={perPage} totalCount={totalCount} onPageChange={setPageNumber} />
         )}
       </div>
     </div>
