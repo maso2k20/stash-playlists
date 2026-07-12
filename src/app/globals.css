@@ -139,6 +139,24 @@
   }
 }
 
+/* Playlist card grid: scale column count up on wider viewports, capped at 4.
+   Thresholds are tuned so cards stay wide enough (~400px) to avoid truncating
+   playlist titles. Plain media queries (not Tailwind arbitrary variants) so the
+   rules are always emitted regardless of JIT scanning. */
+.playlist-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1024px) {
+  .playlist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1500px) {
+  .playlist-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1900px) {
+  .playlist-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

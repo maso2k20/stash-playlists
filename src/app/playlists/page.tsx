@@ -453,7 +453,7 @@ export default function PlaylistsPage() {
       )}
 
       {/* Grid */}
-      <div className="grid grid-cols-1 gap-[11px] px-[26px] pb-[26px] pt-0.5 lg:grid-cols-2">
+      <div className="playlist-grid gap-[11px] px-[26px] pb-[26px] pt-0.5">
         {filteredAndSortedPlaylists.map((playlist) => (
           <PlaylistCard
             key={playlist.id}
