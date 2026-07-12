@@ -11,6 +11,7 @@ import {
   Sliders,
   Play,
   PanelLeft,
+  Inbox,
 } from "lucide-react";
 
 type NavItem = {
@@ -21,6 +22,7 @@ type NavItem = {
 
 const LIBRARY: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
+  { href: "/unorganised", label: "Unorganised", icon: Inbox },
   { href: "/playlists", label: "Playlists", icon: List },
   { href: "/actors", label: "Actors", icon: Users },
   { href: "/scenes", label: "Scenes", icon: Clapperboard },
