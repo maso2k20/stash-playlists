@@ -66,28 +66,34 @@ type Scene = {
   performers?: { id: string; name: string }[];
 };
 
-/** Mono pagination: PREV · [1] 2 3 · NEXT (active = accent square). */
+/** Mono pagination: PREV · [1] 2 3 · NEXT (active = accent square).
+ *  With `edges="firstlast"` the end buttons jump to the first/last page. */
 function PaginationControls({
   pageNumber,
   perPage,
   totalCount,
   onPageChange,
   className = "",
+  edges = "prevnext",
 }: {
   pageNumber: number;
   perPage: number;
   totalCount: number;
   onPageChange: (page: number) => void;
   className?: string;
+  edges?: "prevnext" | "firstlast";
 }) {
   const maxPage = Math.ceil(totalCount / perPage);
   const pages = [pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2].filter(
     (n) => n >= 1 && n <= maxPage
   );
+  const firstLast = edges === "firstlast";
+  const prevTarget = firstLast ? 1 : pageNumber - 1;
+  const nextTarget = firstLast ? maxPage : pageNumber + 1;
   return (
     <div className={`flex items-center gap-2 font-mono text-[11px] ${className}`} style={{ color: "var(--con-muted)" }}>
-      <button disabled={pageNumber <= 1} onClick={() => onPageChange(pageNumber - 1)}
-        style={{ color: pageNumber <= 1 ? "var(--con-faint)" : "var(--accent-cyan)" }}>PREV</button>
+      <button disabled={pageNumber <= 1} onClick={() => onPageChange(prevTarget)}
+        style={{ color: pageNumber <= 1 ? "var(--con-faint)" : "var(--accent-cyan)" }}>{firstLast ? "FIRST" : "PREV"}</button>
       {pages.map((n) => {
         const active = n === pageNumber;
         return (
@@ -100,8 +106,8 @@ function PaginationControls({
           </button>
         );
       })}
-      <button disabled={pageNumber >= maxPage} onClick={() => onPageChange(pageNumber + 1)}
-        style={{ color: pageNumber >= maxPage ? "var(--con-faint)" : "var(--accent-cyan)" }}>NEXT</button>
+      <button disabled={pageNumber >= maxPage} onClick={() => onPageChange(nextTarget)}
+        style={{ color: pageNumber >= maxPage ? "var(--con-faint)" : "var(--accent-cyan)" }}>{firstLast ? "LAST" : "NEXT"}</button>
     </div>
   );
 }
@@ -266,7 +272,7 @@ function UnorganisedContent() {
       <div className="px-[26px] pb-[26px] pt-[18px]">
         {/* Top pagination */}
         {!anyLoading && !isFiltering && scenes.length > 0 && totalCount > perPage && (
-          <PaginationControls className="mb-4 justify-center" pageNumber={pageNumber} perPage={perPage} totalCount={totalCount} onPageChange={setPageNumber} />
+          <PaginationControls edges="firstlast" className="mb-4 justify-center" pageNumber={pageNumber} perPage={perPage} totalCount={totalCount} onPageChange={setPageNumber} />
         )}
 
         {anyLoading && <SkeletonGrid />}
