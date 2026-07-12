@@ -101,7 +101,18 @@ export default function Dashboard() {
         <div className="con-count mt-1">OVERVIEW</div>
       </div>
 
-      <div className="stat-grid px-[26px] pb-[26px] pt-[18px]">
+      {/* Library totals + rating breakdown */}
+      <div className="stat-grid px-[26px] pt-[18px]">
+        <StatCard label="Total Clips" value={stats?.clips} loading={statsLoading} />
+        <StatCard label="Playlists" value={stats?.playlists} loading={statsLoading} href="/playlists" />
+        <StatCard label="Loved" value={stats?.ratings.love} loading={statsLoading} valueColor="var(--accent-cyan)" />
+        <StatCard label="Liked" value={stats?.ratings.like} loading={statsLoading} valueColor="var(--success)" />
+        <StatCard label="Disliked" value={stats?.ratings.dislike} loading={statsLoading} valueColor="var(--danger)" />
+      </div>
+
+      {/* Things needing attention */}
+      <div className="stat-grid px-[26px] pb-[26px] pt-[12px]">
+        <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
         <StatCard
           label="Unorganised Scenes"
           value={unorganisedCount}
@@ -109,12 +120,6 @@ export default function Dashboard() {
           href="/unorganised"
           valueColor="var(--rating)"
         />
-        <StatCard label="Playlists" value={stats?.playlists} loading={statsLoading} href="/playlists" />
-        <StatCard label="Total Clips" value={stats?.clips} loading={statsLoading} />
-        <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
-        <StatCard label="Disliked" value={stats?.ratings.dislike} loading={statsLoading} valueColor="var(--danger)" />
-        <StatCard label="Liked" value={stats?.ratings.like} loading={statsLoading} valueColor="var(--success)" />
-        <StatCard label="Loved" value={stats?.ratings.love} loading={statsLoading} valueColor="var(--accent-cyan)" />
       </div>
     </div>
   );
