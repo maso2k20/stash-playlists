@@ -10,6 +10,7 @@ import { useStashTags } from "@/context/StashTagsContext";
 type DashboardStats = {
   playlists: number;
   actors: number;
+  clips: number;
   ratings: { dislike: number; like: number; love: number };
 };
 
@@ -109,6 +110,7 @@ export default function Dashboard() {
           valueColor="var(--rating)"
         />
         <StatCard label="Playlists" value={stats?.playlists} loading={statsLoading} href="/playlists" />
+        <StatCard label="Total Clips" value={stats?.clips} loading={statsLoading} />
         <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
         <StatCard label="Disliked" value={stats?.ratings.dislike} loading={statsLoading} valueColor="var(--danger)" />
         <StatCard label="Liked" value={stats?.ratings.like} loading={statsLoading} valueColor="var(--success)" />
