@@ -223,6 +223,18 @@ export default function PlaylistCard({
           >
             <Shuffle size={13} />
           </button>
+          {itemCount >= 4 && (
+            <button
+              type="button"
+              onClick={() => router.push(`/playlists/${playlist.id}/wall`)}
+              aria-label="Play as wall"
+              title="Play as wall"
+              className="flex h-[30px] w-[30px] items-center justify-center rounded-[6px]"
+              style={{ border: "1px solid var(--con-border-strong)", color: "var(--con-muted)" }}
+            >
+              <LayoutGrid size={13} />
+            </button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -239,11 +251,6 @@ export default function PlaylistCard({
               <DropdownMenuItem onClick={() => router.push(editPath())}>
                 <Pencil size={14} /> Edit
               </DropdownMenuItem>
-              {itemCount >= 4 && (
-                <DropdownMenuItem onClick={() => router.push(`/playlists/${playlist.id}/wall`)}>
-                  <LayoutGrid size={14} /> Play as Wall
-                </DropdownMenuItem>
-              )}
               {isSmart && onRefresh && (
                 <DropdownMenuItem
                   onClick={() => onRefresh(playlist.id)}
