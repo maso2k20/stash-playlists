@@ -3,8 +3,17 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { useQuery, gql } from "@apollo/client";
 import { useStashTags } from "@/context/StashTagsContext";
+
+type DashboardStats = {
+  playlists: number;
+  actors: number;
+  ratings: { dislike: number; like: number; love: number };
+};
+
+const statsFetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // Count-only query: scenes with markers but without the "Markers Organised"
 // tag. Selecting just `count` keeps the dashboard cheap to load.
@@ -81,6 +90,9 @@ export default function Dashboard() {
   const unorganisedCount: number | null | undefined = data?.findScenes?.count;
   const unorganisedLoading = tagsLoading || (!!markersOrganisedTagId && countLoading);
 
+  const { data: stats } = useSWR<DashboardStats>("/api/dashboard-stats", statsFetcher);
+  const statsLoading = !stats;
+
   return (
     <div className="flex min-h-full flex-col">
       <div className="px-[26px] pt-[22px]">
@@ -96,6 +108,11 @@ export default function Dashboard() {
           href="/unorganised"
           valueColor="var(--rating)"
         />
+        <StatCard label="Playlists" value={stats?.playlists} loading={statsLoading} href="/playlists" />
+        <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
+        <StatCard label="Disliked" value={stats?.ratings.dislike} loading={statsLoading} valueColor="var(--danger)" />
+        <StatCard label="Liked" value={stats?.ratings.like} loading={statsLoading} valueColor="var(--success)" />
+        <StatCard label="Loved" value={stats?.ratings.love} loading={statsLoading} valueColor="var(--accent-cyan)" />
       </div>
     </div>
   );
