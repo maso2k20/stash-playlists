@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import videojsOffset from 'videojs-offset';
@@ -152,6 +153,39 @@ const addCustomMarkers = (player, markers) => {
   });
 };
 
+// In-player rating overlay (top-right). Rendered via a portal into the
+// player's root element so it stays inside the fullscreen element. Its
+// visibility is driven purely by CSS keyed to `.vjs-user-active`, so it
+// fades in/out in lockstep with the control bar (see custom-controls.css).
+// 1 = Dislike 👎, 2 = Like 👍, 3 = Love 👍👍, null = unrated.
+const RATING_LEVELS = [
+  { value: 1, emoji: '👎', label: 'Dislike' },
+  { value: 2, emoji: '👍', label: 'Like' },
+  { value: 3, emoji: '👍👍', label: 'Love' },
+];
+
+const RatingOverlay = ({ value, onChange }) => (
+  <div className='vjs-rating-overlay'>
+    {RATING_LEVELS.map((level) => (
+      <button
+        key={level.value}
+        type='button'
+        title={level.label}
+        aria-label={level.label}
+        className={`vjs-rating-btn${value === level.value ? ' active' : ''}`}
+        onClick={(e) => {
+          // Don't let the click bubble to the player (toggles play/pause).
+          e.stopPropagation();
+          // Clicking the active level clears it, matching StarRating.
+          onChange(value === level.value ? null : level.value);
+        }}
+      >
+        {level.emoji}
+      </button>
+    ))}
+  </div>
+);
+
 export const VideoJS = (props) => {
   const videoRef = React.useRef(null);
   const playerRef = React.useRef(null);
@@ -163,13 +197,15 @@ export const VideoJS = (props) => {
   const currentSrcRef = React.useRef(null);
   const retryCountRef = React.useRef(0);
   const MAX_RETRIES = 2;
-  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode } = props;
+  const { options, onReady, offset, vttPath, stashServer, stashAPI, markers, wallMode, ratingValue, onRatingChange } = props;
 
   const sourceUrl = options?.sources?.[0]?.src;
   const offsetStart = offset?.start;
   const offsetEnd = offset?.end;
 
   const [visible, setVisible] = React.useState(true);
+  // Set once the player is ready; used as the portal host for the rating overlay.
+  const [playerEl, setPlayerEl] = React.useState(null);
 
   // Keep latest onEnded in a ref so the player listener (registered once at
   // mount) always invokes the current handler.
@@ -225,6 +261,9 @@ export const VideoJS = (props) => {
       }
 
       if (onReady) onReady(player);
+
+      // Expose the player root as the portal host for the rating overlay.
+      setPlayerEl(player.el());
 
       if (markers && markers.length > 0) {
         addCustomMarkers(player, markers);
@@ -396,6 +435,11 @@ export const VideoJS = (props) => {
       style={{ opacity: visible ? 1 : 0, transition: 'opacity 1s' }}
     >
       <div ref={videoRef} />
+      {playerEl && !wallMode && onRatingChange &&
+        createPortal(
+          <RatingOverlay value={ratingValue ?? null} onChange={onRatingChange} />,
+          playerEl,
+        )}
     </div>
   );
 };
@@ -407,7 +451,11 @@ const arePropsEqual = (prevProps, nextProps) => {
   const offsetEqual = JSON.stringify(prevProps.offset) === JSON.stringify(nextProps.offset);
   const onEndedEqual = prevProps.onEnded === nextProps.onEnded;
   const wallModeEqual = prevProps.wallMode === nextProps.wallMode;
-  return sourcesEqual && offsetEqual && onEndedEqual && wallModeEqual;
+  // Rating props must be compared so the overlay re-renders when the current
+  // clip's rating changes or the change handler is rebound to a new item.
+  const ratingEqual = prevProps.ratingValue === nextProps.ratingValue;
+  const onRatingChangeEqual = prevProps.onRatingChange === nextProps.onRatingChange;
+  return sourcesEqual && offsetEqual && onEndedEqual && wallModeEqual && ratingEqual && onRatingChangeEqual;
 };
 
 export default React.memo(VideoJS, arePropsEqual);

@@ -163,6 +163,58 @@
   order: 7;
 }
 
+/* In-player rating overlay (top-right). Hidden by default; fades in only
+   while the user is active, matching the control bar's show/hide behaviour.
+   Video.js toggles vjs-user-active / vjs-user-inactive on the player root
+   (and forces "active" while paused), so keying off it keeps the overlay in
+   lockstep with the control bar. */
+.video-js .vjs-rating-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1002;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.video-js.vjs-user-active .vjs-rating-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.video-js .vjs-rating-btn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2em;
+  height: 2em;
+  padding: 0 0.4em;
+  font-size: 1rem;
+  line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  opacity: 0.65;
+  transition: opacity 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.video-js .vjs-rating-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.08);
+}
+
+.video-js .vjs-rating-btn.active {
+  opacity: 1;
+  background: rgba(66, 165, 245, 0.9);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
 /* Responsive adjustments */
 @media (max-width: 600px) {
   .video-js .vjs-forward-30-control,

@@ -277,7 +277,17 @@ export default function PlaylistPlayer() {
   // Current item derived from playOrder
   const currentItemIndex = playOrder[currentIndex] ?? 0;
   const currentItem = items[currentItemIndex];
-  
+
+  // Rating handler bound to the current clip, for the in-player overlay.
+  const currentItemId = currentItem?.item?.id;
+  const handleOverlayRatingChange = useCallback(
+    (rating: number | null) => {
+      if (!currentItemId) return;
+      handleRatingChange(currentItemId, rating);
+    },
+    [currentItemId, handleRatingChange],
+  );
+
 
   // Memoize video options to prevent re-renders when only scene data changes
   const videoJsOptions = useMemo(() => {
@@ -363,6 +373,8 @@ export default function PlaylistPlayer() {
                 offset={offset}
                 onReady={handlePlayerReady}
                 onEnded={handleVideoEnded}
+                ratingValue={currentItem?.item?.rating ?? null}
+                onRatingChange={handleOverlayRatingChange}
               />
             </Box>
 
