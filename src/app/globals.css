@@ -157,6 +157,26 @@
   .playlist-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
+/* Dashboard stat tiles. Lighter surface + a clearly visible border so the
+   card reads against the near-black --app-bg (the default --surface is too
+   close to it). Fixed-size square-ish tiles packed left. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+.stat-card {
+  min-height: 152px;
+  background: #1a1d22;
+  border: 1px solid var(--con-border-faint);
+  border-radius: 10px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.stat-card:hover {
+  border-color: var(--accent-cyan);
+  background: #1e222a;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

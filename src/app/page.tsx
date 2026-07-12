@@ -41,12 +41,23 @@ function StatCard({
 
   const inner = (
     <>
+      {/* Top row: icon (left) + big count (right) */}
       <div className="flex items-center justify-between">
         <span
-          className="flex h-9 w-9 items-center justify-center rounded-[8px]"
-          style={{ background: "var(--well)", border: "1px solid var(--con-border)", color: "var(--accent-cyan)" }}
+          className="flex h-10 w-10 items-center justify-center rounded-[9px]"
+          style={{ background: "var(--well)", border: "1px solid var(--con-border-strong)", color: "var(--accent-cyan)" }}
         >
-          <Icon size={18} strokeWidth={2} />
+          <Icon size={20} strokeWidth={2} />
+        </span>
+        <span className="text-[38px] font-semibold leading-none tracking-[-0.02em] tabular-nums">
+          {display}
+        </span>
+      </div>
+
+      {/* Bottom row: title (left) + hover arrow (right) */}
+      <div className="flex items-end justify-between">
+        <span className="text-[13px] font-medium" style={{ color: "var(--con-text-2)" }}>
+          {label}
         </span>
         {href && (
           <ArrowRight
@@ -56,16 +67,10 @@ function StatCard({
           />
         )}
       </div>
-      <div className="mt-3 text-[30px] font-semibold leading-none tracking-[-0.02em] tabular-nums">
-        {display}
-      </div>
-      <div className="mt-1.5 text-[12px]" style={{ color: "var(--con-muted)" }}>
-        {label}
-      </div>
     </>
   );
 
-  const className = "con-card group flex flex-col p-4 no-underline";
+  const className = "stat-card group flex flex-col justify-between p-[18px] no-underline";
   return href ? (
     <Link href={href} className={className} style={{ color: "var(--con-text)" }}>
       {inner}
@@ -101,7 +106,7 @@ export default function Dashboard() {
         <div className="con-count mt-1">OVERVIEW</div>
       </div>
 
-      <div className="grid grid-cols-2 gap-[11px] px-[26px] pb-[26px] pt-[18px] sm:grid-cols-3 lg:grid-cols-4">
+      <div className="stat-grid px-[26px] pb-[26px] pt-[18px]">
         <StatCard
           label="Unorganised Scenes"
           value={unorganisedCount}
