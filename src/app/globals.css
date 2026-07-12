@@ -166,7 +166,7 @@
   gap: 12px;
 }
 .stat-card {
-  min-height: 152px;
+  min-height: 118px;
   background: #1a1d22;
   border: 1px solid var(--con-border-faint);
   border-radius: 10px;
