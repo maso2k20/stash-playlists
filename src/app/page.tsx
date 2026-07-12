@@ -111,8 +111,7 @@ export default function Dashboard() {
       </div>
 
       {/* Things needing attention */}
-      <div className="stat-grid px-[26px] pb-[26px] pt-[12px]">
-        <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
+      <div className="stat-grid px-[26px] pt-[12px]">
         <StatCard
           label="Unorganised Scenes"
           value={unorganisedCount}
@@ -120,6 +119,10 @@ export default function Dashboard() {
           href="/unorganised"
           valueColor="var(--rating)"
         />
+      </div>
+
+      <div className="stat-grid px-[26px] pb-[26px] pt-[12px]">
+        <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
       </div>
     </div>
   );
