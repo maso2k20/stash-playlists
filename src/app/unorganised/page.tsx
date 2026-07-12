@@ -150,7 +150,9 @@ function SkeletonGrid() {
 
 function UnorganisedContent() {
   const [pageNumber, setPageNumber] = useState(1);
-  const perPage = 42;
+  // 60 divides evenly into every column count the grid uses (2/3/4/5), so full
+  // pages never leave a ragged last row of empty cells.
+  const perPage = 60;
   const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
 
