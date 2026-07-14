@@ -244,24 +244,35 @@ export default function MyActorsPage() {
       {/* Grid */}
       {actors && filteredActors.length > 0 && (
         <div className="grid grid-cols-2 gap-[14px] px-[26px] pb-[26px] pt-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {filteredActors.map((actor) => (
+          {filteredActors.map((actor) => {
+            const shot = makeStashUrl(
+              actor.image_path,
+              String(settings["STASH_SERVER"] || ""),
+              String(settings["STASH_API"] || "")
+            );
+            return (
             <Link
               key={actor.id}
               href={`/actors/${actor.id}/playlists`}
               className="con-card group block overflow-hidden no-underline"
             >
               <div className="relative aspect-[3/4]" style={{ background: "var(--well)" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={makeStashUrl(
-                    actor.image_path,
-                    String(settings["STASH_SERVER"] || ""),
-                    String(settings["STASH_API"] || "")
-                  )}
-                  alt={actor.name}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
+                {shot ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={shot}
+                    alt={actor.name}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div
+                    className="flex h-full w-full items-center justify-center font-mono text-[28px]"
+                    style={{ background: "linear-gradient(150deg,#1e2226,#15181b)", color: "var(--con-faint)" }}
+                  >
+                    {actor.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 {actor.markerCountUpdatedAt != null && (
                   <span
                     className="absolute right-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-medium tabular-nums"
@@ -297,7 +308,8 @@ export default function MyActorsPage() {
                 {actor.name}
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
