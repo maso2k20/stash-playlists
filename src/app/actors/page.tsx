@@ -288,11 +288,11 @@ export default function MyActorsPage() {
                 )}
                 {actor.unorganisedSceneCount > 0 && (
                   <span
-                    className="absolute left-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-medium tabular-nums"
+                    className="absolute left-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-semibold tabular-nums"
                     style={{
-                      background: "rgba(224,128,128,0.2)",
-                      color: "var(--danger)",
-                      border: "1px solid rgba(224,128,128,0.5)",
+                      background: "rgba(8,10,12,0.82)",
+                      color: "#ff8b8b",
+                      border: "1px solid rgba(224,128,128,0.7)",
                     }}
                     title={`${actor.unorganisedSceneCount.toLocaleString()} scenes still need organising`}
                   >
