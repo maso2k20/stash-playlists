@@ -77,6 +77,8 @@ model Item {
   rating     Int?
   sceneId    String?   // Scene ID from Stash server for maintenance checks
   orphaned   Boolean   @default(false) // Mark items whose scenes no longer exist in Stash
+  playCount    Int       @default(0)  // Times this marker has finished playing in a playlist
+  lastPlayedAt DateTime?              // When it last finished playing
 
   playlists  PlaylistItem[]
 
@@ -85,6 +87,7 @@ model Item {
 
   @@index([sceneId])
   @@index([orphaned])
+  @@index([playCount])
 }
 
 model RefreshLog {

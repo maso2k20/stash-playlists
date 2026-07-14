@@ -97,6 +97,8 @@ export default function PlaylistPlayer() {
 
   const playerRef = useRef<any>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  // Dedupes the play-count increment against an accidental double 'ended' event.
+  const lastPlayRecordedRef = useRef<{ id: string; at: number } | null>(null);
 
   // Tag editing state
   const [currentMarkerDetails, setCurrentMarkerDetails] = useState<MarkerDetails | null>(null);
@@ -320,10 +322,23 @@ export default function PlaylistPlayer() {
     setHasStarted(true);
     // Mark current item as played
     const currentItemIndex = playOrder[currentIndex] ?? 0;
+
+    // Record a completed play for this marker (fire-and-forget). Guard against
+    // a rare double 'ended' event; genuine replays are >1s apart so still count.
+    const finishedId = items[currentItemIndex]?.item?.id;
+    if (finishedId) {
+      const now = Date.now();
+      const last = lastPlayRecordedRef.current;
+      if (!last || last.id !== finishedId || now - last.at > 1000) {
+        lastPlayRecordedRef.current = { id: finishedId, at: now };
+        fetch(`/api/items/${finishedId}/play`, { method: "POST" }).catch(() => {});
+      }
+    }
+
     setPlayedItemIndices(prev => new Set(prev).add(currentItemIndex));
     // Move to next item
     if (currentIndex < playOrder.length - 1) setCurrentIndex(i => i + 1);
-  }, [playOrder, currentIndex, setCurrentIndex]);
+  }, [playOrder, currentIndex, items, setCurrentIndex]);
 
   // Memoize offset to prevent video restarts when only scene data changes
   const offset = useMemo(() => {
