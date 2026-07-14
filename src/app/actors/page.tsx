@@ -35,6 +35,7 @@ type SortOption =
   | "outstanding-asc";
 
 const ACTORS_PREFS_KEY = "actorsPagePrefs";
+const ACTORS_REFRESH_KEY = "actorsCountsLastRefresh";
 
 const SORT_LABELS: Record<SortOption, string> = {
   "name-asc": "Name (A–Z)",
@@ -87,6 +88,7 @@ export default function MyActorsPage() {
   const [q, setQ] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
   const [needsOrganising, setNeedsOrganising] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const settings = useSettings();
 
   useEffect(() => {
@@ -97,6 +99,44 @@ export default function MyActorsPage() {
       })
       .then((data: Actor[]) => setActors(data))
       .catch((e) => setError(e.message));
+  }, []);
+
+  // Refresh the precomputed counts from Stash in the background when the page
+  // loads, then re-fetch the actors so the badges update in place. The page
+  // still paints instantly from the cached values above. Throttled so rapid
+  // back-and-forth navigation doesn't repeatedly hit Stash.
+  useEffect(() => {
+    const THROTTLE_MS = 30_000;
+    let cancelled = false;
+    try {
+      const last = Number(sessionStorage.getItem(ACTORS_REFRESH_KEY) || 0);
+      if (Date.now() - last < THROTTLE_MS) return;
+      sessionStorage.setItem(ACTORS_REFRESH_KEY, String(Date.now()));
+    } catch {
+      /* ignore */
+    }
+
+    setRefreshing(true);
+    fetch("/api/actor-marker-counts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "refresh" }),
+    })
+      .then(() => fetch("/api/actors", { cache: "no-store" }))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Actor[] | null) => {
+        if (data && !cancelled) setActors(data);
+      })
+      .catch(() => {
+        /* leave cached counts in place on failure */
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Restore the search / sort / filter controls when returning to the page,
@@ -167,6 +207,9 @@ export default function MyActorsPage() {
                 ? `${actors.length} PERFORMERS`
                 : `${filteredActors.length} OF ${actors.length} PERFORMERS`
               : "…"}
+            {refreshing && (
+              <span style={{ color: "var(--con-faint)" }}> · UPDATING…</span>
+            )}
           </div>
         </div>
         <Link href="/actors/add" className="con-btn-primary">
