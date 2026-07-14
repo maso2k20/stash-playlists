@@ -3,9 +3,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Check } from "lucide-react";
 import { useSettings } from "@/app/context/SettingsContext";
 import { makeStashUrl } from "@/lib/urlUtils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Actor = {
   id: string;
@@ -19,10 +26,65 @@ type Actor = {
   updatedAt: string;
 };
 
+type SortOption =
+  | "name-asc"
+  | "name-desc"
+  | "markers-desc"
+  | "markers-asc"
+  | "outstanding-desc"
+  | "outstanding-asc";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  "name-asc": "Name (A–Z)",
+  "name-desc": "Name (Z–A)",
+  "markers-desc": "Most Markers",
+  "markers-asc": "Fewest Markers",
+  "outstanding-desc": "Most Outstanding",
+  "outstanding-asc": "Fewest Outstanding",
+};
+
+/** Token-styled toggle pill with a checkbox square (matches the Playlists controls). */
+function TogglePill({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-[7px] rounded-[6px] px-[11px] py-[7px] text-[12px]"
+      style={{
+        background: "var(--well)",
+        border: "1px solid var(--con-border)",
+        color: checked ? "var(--con-text-2)" : "var(--con-muted)",
+      }}
+    >
+      <span
+        className="flex h-[14px] w-[14px] items-center justify-center rounded-[4px]"
+        style={
+          checked
+            ? { background: "var(--accent-cyan)", color: "var(--accent-ink)" }
+            : { border: "1px solid var(--con-border-faint)" }
+        }
+      >
+        {checked && <Check size={9} strokeWidth={4} />}
+      </span>
+      {label}
+    </button>
+  );
+}
+
 export default function MyActorsPage() {
   const [actors, setActors] = useState<Actor[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("name-asc");
+  const [needsOrganising, setNeedsOrganising] = useState(false);
   const settings = useSettings();
 
   useEffect(() => {
@@ -35,23 +97,34 @@ export default function MyActorsPage() {
       .catch((e) => setError(e.message));
   }, []);
 
-  const sortedActors = useMemo(() => {
-    if (!actors) return [];
-    return actors
-      .slice()
-      .sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-      );
-  }, [actors]);
-
   const filteredActors = useMemo(() => {
-    if (!q.trim()) return sortedActors;
+    if (!actors) return [];
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-    return sortedActors.filter((a) => {
-      const name = a.name.toLowerCase();
-      return terms.every((t) => name.includes(t));
+
+    const list = actors.filter((a) => {
+      if (needsOrganising && !(a.unorganisedSceneCount > 0)) return false;
+      if (terms.length) {
+        const name = a.name.toLowerCase();
+        if (!terms.every((t) => name.includes(t))) return false;
+      }
+      return true;
     });
-  }, [sortedActors, q]);
+
+    const byName = (a: Actor, b: Actor) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+
+    return list.slice().sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc": return byName(a, b);
+        case "name-desc": return byName(b, a);
+        case "markers-desc": return b.markerCount - a.markerCount || byName(a, b);
+        case "markers-asc": return a.markerCount - b.markerCount || byName(a, b);
+        case "outstanding-desc": return b.unorganisedSceneCount - a.unorganisedSceneCount || byName(a, b);
+        case "outstanding-asc": return a.unorganisedSceneCount - b.unorganisedSceneCount || byName(a, b);
+        default: return 0;
+      }
+    });
+  }, [actors, q, sortBy, needsOrganising]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -60,30 +133,51 @@ export default function MyActorsPage() {
         <div>
           <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Actors</h2>
           <div className="con-count mt-1">
-            {actors ? `${actors.length} PERFORMERS` : "…"}
+            {actors
+              ? filteredActors.length === actors.length
+                ? `${actors.length} PERFORMERS`
+                : `${filteredActors.length} OF ${actors.length} PERFORMERS`
+              : "…"}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-[220px]">
-            <Search
-              size={14}
-              strokeWidth={2}
-              className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2"
-              style={{ color: "var(--con-faint)" }}
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="search actors…"
-              aria-label="Search actors"
-              className="con-input w-full pl-[33px]"
-            />
-          </div>
-          <Link href="/actors/add" className="con-btn-primary">
-            <Plus size={13} strokeWidth={2.6} />
-            Add Actors
-          </Link>
+        <Link href="/actors/add" className="con-btn-primary">
+          <Plus size={13} strokeWidth={2.6} />
+          Add Actors
+        </Link>
+      </div>
+
+      {/* Controls row */}
+      <div className="flex flex-wrap items-center gap-[10px] px-[26px] pt-[18px]">
+        <div className="relative max-w-[260px] flex-1">
+          <Search
+            size={14}
+            strokeWidth={2}
+            className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2"
+            style={{ color: "var(--con-faint)" }}
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="search actors…"
+            aria-label="Search actors"
+            className="con-input w-full pl-[33px]"
+          />
         </div>
+        <TogglePill label="Needs organising" checked={needsOrganising} onChange={setNeedsOrganising} />
+        <div className="flex-1" />
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+          <SelectTrigger
+            className="h-auto gap-2 rounded-[6px] border-[var(--con-border)] bg-[var(--well)] px-3 py-2 font-mono text-[12px] text-[var(--con-text-2)]"
+            style={{ minWidth: 180 }}
+          >
+            <SelectValue placeholder="Sort" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
+              <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {error && (
