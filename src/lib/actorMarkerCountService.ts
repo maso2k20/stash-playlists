@@ -141,29 +141,49 @@ export class ActorMarkerCountService {
       }
 
       const errors: string[] = [];
-      const counts: { id: string; count: number }[] = [];
 
-      // Query Stash in batches of aliased findSceneMarkers COUNTs — one request
-      // per batch rather than one per actor.
+      // The unorganised count mirrors the Unorganised page filter: scenes with
+      // markers that lack the "Markers Organised" tag. Without that tag id we
+      // can't compute it, so we still do marker counts but skip unorganised.
+      const organisedTagId = await this.getMarkersOrganisedTagId();
+      if (!organisedTagId) {
+        errors.push('"Markers Organised" tag not found in Stash; unorganised scene counts were not updated.');
+      }
+
+      const results: { id: string; markerCount: number; unorganisedCount: number | null }[] = [];
+
+      // Query Stash in batches. Each actor contributes two aliased COUNTs (its
+      // total markers and its unorganised scenes) in a single request per batch.
       for (let i = 0; i < actors.length; i += BATCH_SIZE) {
         const batch = actors.slice(i, i + BATCH_SIZE);
         const aliases = batch
-          .map(
-            (actor, idx) =>
-              `a${idx}: findSceneMarkers(` +
-              `filter: { per_page: 0 }, ` +
-              `scene_marker_filter: { performers: { modifier: INCLUDES, value: [${JSON.stringify(actor.id)}] } }` +
-              `) { count }`
-          )
+          .map((actor, idx) => {
+            const id = JSON.stringify(actor.id);
+            const markerAlias =
+              `m${idx}: findSceneMarkers(filter: { per_page: 0 }, ` +
+              `scene_marker_filter: { performers: { modifier: INCLUDES, value: [${id}] } }) { count }`;
+            const unorgAlias = organisedTagId
+              ? `u${idx}: findScenes(filter: { per_page: 0 }, ` +
+                `scene_filter: { has_markers: "true", ` +
+                `performers: { modifier: INCLUDES, value: [${id}] }, ` +
+                `tags: { modifier: EXCLUDES, value: [${JSON.stringify(organisedTagId)}] } }) { count }`
+              : "";
+            return `${markerAlias}\n${unorgAlias}`;
+          })
           .join("\n");
-        const query = `query ActorMarkerCounts { ${aliases} }`;
+        const query = `query ActorCounts { ${aliases} }`;
 
         try {
           const data = await stashGraph<Record<string, { count: number } | null>>(query, {});
           batch.forEach((actor, idx) => {
-            const count = data[`a${idx}`]?.count;
-            if (typeof count === "number") {
-              counts.push({ id: actor.id, count });
+            const markerCount = data[`m${idx}`]?.count;
+            const unorganisedCount = organisedTagId ? data[`u${idx}`]?.count : null;
+            if (typeof markerCount === "number") {
+              results.push({
+                id: actor.id,
+                markerCount,
+                unorganisedCount: typeof unorganisedCount === "number" ? unorganisedCount : null,
+              });
             } else {
               errors.push(`No count returned for ${actor.name} (${actor.id})`);
             }
@@ -178,10 +198,14 @@ export class ActorMarkerCountService {
       // Persist the counts. Use a single timestamp for the whole run.
       const updatedAt = new Date();
       await prisma.$transaction(
-        counts.map((c) =>
+        results.map((r) =>
           prisma.actor.update({
-            where: { id: c.id },
-            data: { markerCount: c.count, markerCountUpdatedAt: updatedAt },
+            where: { id: r.id },
+            data: {
+              markerCount: r.markerCount,
+              ...(r.unorganisedCount != null ? { unorganisedSceneCount: r.unorganisedCount } : {}),
+              markerCountUpdatedAt: updatedAt,
+            },
           })
         )
       );
@@ -189,10 +213,10 @@ export class ActorMarkerCountService {
       const duration = Date.now() - startTime;
       const result: MarkerCountResult = {
         success: errors.length === 0,
-        message: `Updated marker counts for ${counts.length} of ${actors.length} actors`,
-        data: { actorsProcessed: actors.length, actorsUpdated: counts.length, errors, duration },
+        message: `Updated counts for ${results.length} of ${actors.length} actors`,
+        data: { actorsProcessed: actors.length, actorsUpdated: results.length, errors, duration },
       };
-      console.log("✅ Actor marker-count refresh completed:", result.data);
+      console.log("✅ Actor counts refresh completed:", result.data);
       return result;
     } catch (error) {
       console.error("❌ Actor marker-count refresh failed:", error);
@@ -203,6 +227,21 @@ export class ActorMarkerCountService {
       };
     } finally {
       this.isRunning = false;
+    }
+  }
+
+  private async getMarkersOrganisedTagId(): Promise<string | null> {
+    try {
+      const data = await stashGraph<{ findTags: { tags: { id: string; name: string }[] } }>(
+        `query { findTags(tag_filter: { name: { value: "Markers Organised", modifier: EQUALS } }, filter: { per_page: 1 }) { tags { id name } } }`,
+        {}
+      );
+      const tags = data?.findTags?.tags ?? [];
+      const tag = tags.find((t) => t.name === "Markers Organised") ?? tags[0];
+      return tag?.id ? String(tag.id) : null;
+    } catch (error) {
+      console.error("❌ Failed to look up 'Markers Organised' tag:", error);
+      return null;
     }
   }
 

@@ -1815,7 +1815,7 @@ export default function SettingsPage() {
                         {markerCountLoading ? 'Refreshing...' : 'Refresh Marker Counts Now'}
                       </Button>
                       <Typography level="body-xs" sx={{ color: 'text.secondary', mt: 1 }}>
-                        Recalculates each actor&apos;s total marker count from Stash. Run this after importing new scenes or performers.
+                        Recalculates each actor&apos;s marker count and unorganised-scene count from Stash. Run this after importing new scenes or performers.
                       </Typography>
                     </Box>
 

@@ -282,7 +282,7 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
     type: 'select',
     category: SETTING_CATEGORIES.ACTOR_MARKER_COUNT,
     label: 'Enable Nightly Refresh',
-    description: 'Recalculate each actor\'s total marker count from Stash once a night so the Actors page badges stay current.',
+    description: 'Recalculate each actor\'s marker count and unorganised-scene count from Stash once a night so the Actors page badges stay current.',
     required: false,
     options: ['true', 'false'],
   },

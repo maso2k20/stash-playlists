@@ -21,9 +21,10 @@ model Actor {
   id                   String    @id
   name                 String
   image_path           String    // Relative path like "/performer/123/image" (server URL added at runtime)
-  rating               Int
-  markerCount          Int       @default(0) // Total scene markers for this performer in Stash (precomputed)
-  markerCountUpdatedAt DateTime? // When markerCount was last refreshed
+  rating                Int
+  markerCount           Int       @default(0) // Total scene markers for this performer in Stash (precomputed)
+  unorganisedSceneCount Int       @default(0) // Scenes with markers not yet tagged "Markers Organised" (precomputed)
+  markerCountUpdatedAt  DateTime? // When the precomputed counts were last refreshed
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @default(now()) @updatedAt
 }

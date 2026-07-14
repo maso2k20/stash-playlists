@@ -13,6 +13,7 @@ type Actor = {
   image_path: string;
   rating: number;
   markerCount: number;
+  unorganisedSceneCount: number;
   markerCountUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -149,6 +150,19 @@ export default function MyActorsPage() {
                     title={`${actor.markerCount.toLocaleString()} markers`}
                   >
                     {actor.markerCount.toLocaleString()}
+                  </span>
+                )}
+                {actor.unorganisedSceneCount > 0 && (
+                  <span
+                    className="absolute left-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-medium tabular-nums"
+                    style={{
+                      background: "rgba(224,128,128,0.2)",
+                      color: "var(--danger)",
+                      border: "1px solid rgba(224,128,128,0.5)",
+                    }}
+                    title={`${actor.unorganisedSceneCount.toLocaleString()} scenes still need organising`}
+                  >
+                    {actor.unorganisedSceneCount.toLocaleString()}
                   </span>
                 )}
               </div>
