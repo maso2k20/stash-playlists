@@ -1,7 +1,7 @@
 // filepath: src/app/actors/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, Plus, Check } from "lucide-react";
 import { useSettings } from "@/app/context/SettingsContext";
@@ -33,6 +33,8 @@ type SortOption =
   | "markers-asc"
   | "outstanding-desc"
   | "outstanding-asc";
+
+const ACTORS_PREFS_KEY = "actorsPagePrefs";
 
 const SORT_LABELS: Record<SortOption, string> = {
   "name-asc": "Name (A–Z)",
@@ -96,6 +98,33 @@ export default function MyActorsPage() {
       .then((data: Actor[]) => setActors(data))
       .catch((e) => setError(e.message));
   }, []);
+
+  // Restore the search / sort / filter controls when returning to the page,
+  // then persist them on change (session-scoped).
+  const prefsHydrated = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(ACTORS_PREFS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p.q === "string") setQ(p.q);
+        if (typeof p.sortBy === "string" && p.sortBy in SORT_LABELS) setSortBy(p.sortBy as SortOption);
+        if (typeof p.needsOrganising === "boolean") setNeedsOrganising(p.needsOrganising);
+      }
+    } catch {
+      /* ignore */
+    }
+    prefsHydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!prefsHydrated.current) return;
+    try {
+      sessionStorage.setItem(ACTORS_PREFS_KEY, JSON.stringify({ q, sortBy, needsOrganising }));
+    } catch {
+      /* ignore */
+    }
+  }, [q, sortBy, needsOrganising]);
 
   const filteredActors = useMemo(() => {
     if (!actors) return [];
