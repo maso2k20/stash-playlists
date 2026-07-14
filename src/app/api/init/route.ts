@@ -5,6 +5,7 @@ import { initializeBackupService } from '@/lib/backupService';
 import { initializeRefreshService } from '@/lib/smartPlaylistRefreshService';
 import { maintenanceService } from '@/lib/maintenanceService';
 import { actorPlaylistGenerationService } from '@/lib/actorPlaylistGenerationService';
+import { actorMarkerCountService } from '@/lib/actorMarkerCountService';
 
 let initialized = false;
 
@@ -15,6 +16,7 @@ export async function GET() {
       await initializeRefreshService();
       await maintenanceService.startScheduler();
       await actorPlaylistGenerationService.startScheduler();
+      await actorMarkerCountService.startScheduler();
       initialized = true;
       console.log('Application initialized successfully');
       return NextResponse.json({

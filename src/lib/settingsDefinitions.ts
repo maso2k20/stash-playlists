@@ -21,6 +21,7 @@ export const SETTING_CATEGORIES = {
   RECOMMENDED_TAGS: 'Recommended Tags',
   SMART_PLAYLIST_REFRESH: 'Smart Playlist Refresh',
   ACTOR_PLAYLIST_GENERATION: 'Template Generation',
+  ACTOR_MARKER_COUNT: 'Actor Marker Counts',
   BACKUP: 'Database Backup',
   MAINTENANCE: 'Database Maintenance',
 } as const;
@@ -267,6 +268,31 @@ export const SETTINGS_DEFINITIONS: SettingDefinition[] = [
     category: SETTING_CATEGORIES.ACTOR_PLAYLIST_GENERATION,
     label: 'Generation Time (Hour)',
     description: 'Hour of the day to run automatic generation (0-23, in server timezone). Should be different from refresh and maintenance times.',
+    required: false,
+    validation: (value) => {
+      const num = parseInt(value);
+      if (isNaN(num)) return 'Must be a number';
+      if (num < 0 || num > 23) return 'Must be between 0-23 (24-hour format)';
+      return null;
+    },
+  },
+  {
+    key: 'ACTOR_MARKER_COUNT_ENABLED',
+    defaultValue: 'true',
+    type: 'select',
+    category: SETTING_CATEGORIES.ACTOR_MARKER_COUNT,
+    label: 'Enable Nightly Refresh',
+    description: 'Recalculate each actor\'s total marker count from Stash once a night so the Actors page badges stay current.',
+    required: false,
+    options: ['true', 'false'],
+  },
+  {
+    key: 'ACTOR_MARKER_COUNT_HOUR',
+    defaultValue: '5',
+    type: 'number',
+    category: SETTING_CATEGORIES.ACTOR_MARKER_COUNT,
+    label: 'Refresh Time (Hour)',
+    description: 'Hour of the day to refresh actor marker counts (0-23, in server timezone). Should be different from other scheduled times.',
     required: false,
     validation: (value) => {
       const num = parseInt(value);

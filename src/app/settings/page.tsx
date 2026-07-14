@@ -138,6 +138,23 @@ export default function SettingsPage() {
     createdAt: string;
   }[]>([]);
   const [generationLoading, setGenerationLoading] = useState(false);
+  const [markerCountStatus, setMarkerCountStatus] = useState<{
+    enabled: boolean;
+    hour: number;
+    isRunning: boolean;
+    nextRun?: string;
+    cronActive: boolean;
+  } | null>(null);
+  const [markerCountHistory, setMarkerCountHistory] = useState<{
+    id: string;
+    refreshType: string;
+    success: boolean;
+    refreshedPlaylists: number;
+    errors: string[] | null;
+    duration: number;
+    createdAt: string;
+  }[]>([]);
+  const [markerCountLoading, setMarkerCountLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [automationSubTab, setAutomationSubTab] = useState(0);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -181,6 +198,7 @@ export default function SettingsPage() {
     loadMaintenanceInfo();
     loadBackfillStatus();
     loadGenerationInfo();
+    loadMarkerCountInfo();
   }, []);
 
   const loadBackupInfo = async () => {
@@ -277,6 +295,23 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Failed to load generation info:', error);
+    }
+  };
+
+  const loadMarkerCountInfo = async () => {
+    try {
+      const res = await fetch("/api/actor-marker-counts", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setMarkerCountStatus(data.data);
+      }
+      const historyRes = await fetch("/api/actor-marker-counts?action=history", { method: "GET", cache: "no-store" });
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setMarkerCountHistory(historyData.data);
+      }
+    } catch (error) {
+      console.error('Failed to load marker-count info:', error);
     }
   };
 
@@ -469,6 +504,23 @@ export default function SettingsPage() {
           });
         } catch (error) {
           console.error('Failed to update generation scheduler:', error);
+        }
+      }
+
+      // Update marker-count scheduler if its settings changed
+      const markerCountSettingsChanged = changed.some(c =>
+        ['ACTOR_MARKER_COUNT_ENABLED', 'ACTOR_MARKER_COUNT_HOUR'].includes(c.key)
+      );
+
+      if (markerCountSettingsChanged) {
+        try {
+          await fetch('/api/actor-marker-counts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'restart-scheduler' }),
+          });
+        } catch (error) {
+          console.error('Failed to update marker-count scheduler:', error);
         }
       }
 
@@ -674,6 +726,28 @@ export default function SettingsPage() {
     }
   };
 
+  const handleMarkerCountAction = async () => {
+    setMarkerCountLoading(true);
+    try {
+      const res = await fetch('/api/actor-marker-counts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'refresh' }),
+      });
+      const result = await res.json();
+      setSnack({
+        open: true,
+        msg: result.message || (result.success ? 'Marker counts refreshed' : 'Marker count refresh failed'),
+        color: result.success ? 'success' : 'danger',
+      });
+      await loadMarkerCountInfo();
+    } catch (error) {
+      setSnack({ open: true, msg: 'Actor marker-count refresh failed', color: 'danger' });
+    } finally {
+      setMarkerCountLoading(false);
+    }
+  };
+
   // Renders the appropriate editor for a setting
   const renderEditor = (s: Setting, definition: SettingDefinition) => {
     const hasError = !!validationErrors[s.key];
@@ -787,6 +861,7 @@ export default function SettingsPage() {
       automation: [
         'Smart Playlist Refresh',
         'Template Generation',
+        'Actor Marker Counts',
         'Database Maintenance'
       ],
       backup: [
@@ -1466,6 +1541,7 @@ export default function SettingsPage() {
               <TabList sx={{ mb: 2 }}>
                 <Tab>Playlist Refresh</Tab>
                 <Tab>Template Generation</Tab>
+                <Tab>Marker Counts</Tab>
                 <Tab>Maintenance</Tab>
               </TabList>
 
@@ -1667,8 +1743,109 @@ export default function SettingsPage() {
                 )}
               </TabPanel>
 
-              {/* Database Maintenance Sub-Tab */}
+              {/* Actor Marker Counts Sub-Tab */}
               <TabPanel value={2} sx={{ p: 0 }}>
+                {tabGroupedSettings.automation['Actor Marker Counts'] && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {tabGroupedSettings.automation['Actor Marker Counts'].map(({ setting, definition }) => {
+                      const origVal = original?.find((o) => o.key === setting.key)?.value ?? "";
+                      const dirty = (setting.value ?? "") !== origVal;
+                      const hasError = !!validationErrors[setting.key];
+
+                      return (
+                        <FormControl key={setting.key} error={hasError || undefined}>
+                          <FormLabel>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {definition.label}
+                              {dirty && (
+                                <Chip size="sm" color="warning" variant="soft">Modified</Chip>
+                              )}
+                            </Box>
+                          </FormLabel>
+                          <Box sx={{ display: 'flex', alignItems: 'start', gap: 1, mb: 1 }}>
+                            <Box sx={{ flexGrow: 1 }}>{renderEditor(setting, definition)}</Box>
+                            {dirty && (
+                              <Tooltip title="Revert to saved value">
+                                <IconButton size="sm" variant="plain" onClick={() => resetOne(setting.key)}>
+                                  <RotateCcw size={14} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                          <FormHelperText>
+                            {hasError && <Typography color="danger" level="body-xs">{validationErrors[setting.key]}</Typography>}
+                            <Typography level="body-xs" sx={{ opacity: 0.8 }}>{definition.description}</Typography>
+                          </FormHelperText>
+                        </FormControl>
+                      );
+                    })}
+
+                    {/* Marker Count Status */}
+                    {markerCountStatus && (
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <RefreshCw size={16} />
+                          <Typography level="body-sm" fontWeight="lg">
+                            Status: {markerCountStatus.enabled ? 'Enabled' : 'Disabled'}
+                          </Typography>
+                          {markerCountStatus.isRunning && <Chip size="sm" variant="soft" color="primary">Running</Chip>}
+                        </Box>
+                        {markerCountStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                            Schedule: Daily at {markerCountStatus.hour}:00 UTC
+                          </Typography>
+                        )}
+                        {markerCountStatus.nextRun && markerCountStatus.enabled && (
+                          <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
+                            Next refresh: {new Date(markerCountStatus.nextRun).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+
+                    {/* Manual Refresh Controls */}
+                    <Box>
+                      <Button
+                        startDecorator={markerCountLoading ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+                        onClick={handleMarkerCountAction}
+                        disabled={markerCountLoading}
+                        variant="solid"
+                        color="primary"
+                      >
+                        {markerCountLoading ? 'Refreshing...' : 'Refresh Marker Counts Now'}
+                      </Button>
+                      <Typography level="body-xs" sx={{ color: 'text.secondary', mt: 1 }}>
+                        Recalculates each actor&apos;s total marker count from Stash. Run this after importing new scenes or performers.
+                      </Typography>
+                    </Box>
+
+                    {/* Marker Count History */}
+                    {markerCountHistory.length > 0 && (
+                      <Box sx={{ p: 2, borderRadius: 'md', bgcolor: 'background.level1' }}>
+                        <Typography level="title-sm" sx={{ mb: 2 }}>Recent History</Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 200, overflowY: 'auto' }}>
+                          {markerCountHistory.map((log) => (
+                            <Box key={log.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 1.5, borderRadius: 'sm', bgcolor: log.success ? 'success.50' : 'danger.50' }}>
+                              {log.success ? <CheckCircle size={16} color="var(--joy-palette-success-500)" /> : <XCircle size={16} color="var(--joy-palette-danger-500)" />}
+                              <Box sx={{ flexGrow: 1 }}>
+                                <Typography level="body-sm" fontWeight="lg">
+                                  {log.success ? `${log.refreshedPlaylists} actor(s) updated` : 'Refresh failed'}
+                                </Typography>
+                                <Typography level="body-xs" sx={{ color: 'text.secondary' }}>
+                                  {new Date(log.createdAt).toLocaleString()} • {log.duration}ms
+                                </Typography>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </TabPanel>
+
+              {/* Database Maintenance Sub-Tab */}
+              <TabPanel value={3} sx={{ p: 0 }}>
                 {tabGroupedSettings.automation['Database Maintenance'] && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {tabGroupedSettings.automation['Database Maintenance'].map(({ setting, definition }) => {

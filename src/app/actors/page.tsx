@@ -12,6 +12,8 @@ type Actor = {
   name: string;
   image_path: string;
   rating: number;
+  markerCount: number;
+  markerCountUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -136,6 +138,19 @@ export default function MyActorsPage() {
                   className="h-full w-full object-cover"
                   loading="lazy"
                 />
+                {actor.markerCountUpdatedAt != null && (
+                  <span
+                    className="absolute right-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-medium tabular-nums"
+                    style={{
+                      background: "rgba(8,10,12,0.82)",
+                      color: "var(--con-text)",
+                      border: "1px solid var(--con-border-strong)",
+                    }}
+                    title={`${actor.markerCount.toLocaleString()} markers`}
+                  >
+                    {actor.markerCount.toLocaleString()}
+                  </span>
+                )}
               </div>
               <div
                 className="overflow-hidden text-ellipsis whitespace-nowrap px-[10px] py-[9px] text-center text-[12px] font-medium"
