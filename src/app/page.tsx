@@ -17,12 +17,14 @@ type DashboardStats = {
 const statsFetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // Count-only query: scenes with markers but without the "Markers Organised"
-// tag. Selecting just `count` keeps the dashboard cheap to load.
+// tag, limited to the app's added actors (performers). Selecting just `count`
+// keeps the dashboard cheap to load.
 const GET_UNORGANISED_COUNT = gql`
-  query getUnorganisedCount($markersOrganisedIds: [ID!]!) {
+  query getUnorganisedCount($markersOrganisedIds: [ID!]!, $performerIds: [ID!]!) {
     findScenes(
       scene_filter: {
         has_markers: "true"
+        performers: { modifier: INCLUDES, value: $performerIds }
         tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
       }
       filter: { per_page: 0 }
@@ -82,14 +84,24 @@ export default function Dashboard() {
     return tag?.id ? String(tag.id) : null;
   }, [stashTags]);
 
+  // Added actors — the unorganised count is scoped to scenes featuring these.
+  const { data: actorsData } = useSWR<Array<{ id: string }>>("/api/actors", statsFetcher);
+  const actorIds = useMemo(() => (actorsData ?? []).map((a) => String(a.id)), [actorsData]);
+  const actorsReady = actorsData !== undefined;
+  const noActors = actorsReady && actorIds.length === 0;
+
   const { data, loading: countLoading } = useQuery(GET_UNORGANISED_COUNT, {
-    variables: { markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [] },
-    skip: !markersOrganisedTagId,
+    variables: {
+      markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
+      performerIds: actorIds,
+    },
+    skip: !markersOrganisedTagId || !actorsReady || noActors,
     fetchPolicy: "cache-and-network",
   });
 
-  const unorganisedCount: number | null | undefined = data?.findScenes?.count;
-  const unorganisedLoading = tagsLoading || (!!markersOrganisedTagId && countLoading);
+  const unorganisedCount: number | null | undefined = noActors ? 0 : data?.findScenes?.count;
+  const unorganisedLoading =
+    tagsLoading || !actorsReady || (!!markersOrganisedTagId && !noActors && countLoading);
 
   const { data: stats } = useSWR<DashboardStats>("/api/dashboard-stats", statsFetcher);
   const statsLoading = !stats;

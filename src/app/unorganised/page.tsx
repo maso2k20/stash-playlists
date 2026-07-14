@@ -9,16 +9,19 @@ import { makeStashUrl } from "@/lib/urlUtils";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 
-// Query for unorganised scenes (scenes with markers but without "Markers Organised" tag)
+// Query for unorganised scenes (scenes with markers but without "Markers
+// Organised" tag), limited to the app's added actors (performers).
 const GET_UNORGANISED_SCENES = gql`
   query getUnorganisedScenes(
     $markersOrganisedIds: [ID!]!
+    $performerIds: [ID!]!
     $pageNumber: Int!
     $perPage: Int!
   ) {
     findScenes(
       scene_filter: {
         has_markers: "true"
+        performers: { modifier: INCLUDES, value: $performerIds }
         tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
       }
       filter: { page: $pageNumber, per_page: $perPage }
@@ -38,11 +41,13 @@ const GET_UNORGANISED_SCENES = gql`
 const GET_UNORGANISED_SCENES_FILTERED = gql`
   query getUnorganisedScenesFiltered(
     $markersOrganisedIds: [ID!]!
+    $performerIds: [ID!]!
     $titleQuery: String!
   ) {
     findScenes(
       scene_filter: {
         has_markers: "true"
+        performers: { modifier: INCLUDES, value: $performerIds }
         tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
         title: { value: $titleQuery, modifier: INCLUDES }
       }
@@ -173,6 +178,17 @@ function UnorganisedContent() {
     return tag?.id ? String(tag.id) : null;
   }, [stashTags]);
 
+  // Added actors — unorganised scenes are limited to those featuring them.
+  const [actorIds, setActorIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    fetch("/api/actors", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Array<{ id: string }>) => setActorIds((data ?? []).map((a) => String(a.id))))
+      .catch(() => setActorIds([]));
+  }, []);
+  const actorsReady = actorIds !== null;
+  const noActors = actorsReady && actorIds!.length === 0;
+
   const isFiltering = searchTerm.trim().length > 0;
 
   useEffect(() => {
@@ -185,24 +201,26 @@ function UnorganisedContent() {
 
   const paginatedVariables = useMemo(() => ({
     markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
+    performerIds: actorIds ?? [],
     pageNumber,
     perPage,
-  }), [markersOrganisedTagId, pageNumber, perPage]);
+  }), [markersOrganisedTagId, actorIds, pageNumber, perPage]);
 
   const filteredVariables = useMemo(() => ({
     markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
+    performerIds: actorIds ?? [],
     titleQuery: searchTerm.trim(),
-  }), [markersOrganisedTagId, searchTerm]);
+  }), [markersOrganisedTagId, actorIds, searchTerm]);
 
   const { data: paginatedData, loading: paginatedLoading, error: paginatedError } = useQuery(GET_UNORGANISED_SCENES, {
     variables: paginatedVariables,
-    skip: !markersOrganisedTagId || isFiltering,
+    skip: !markersOrganisedTagId || !actorsReady || noActors || isFiltering,
     fetchPolicy: "cache-and-network",
   });
 
   const { data: filteredData, loading: filteredLoading, error: filteredError } = useQuery(GET_UNORGANISED_SCENES_FILTERED, {
     variables: filteredVariables,
-    skip: !markersOrganisedTagId || !isFiltering,
+    skip: !markersOrganisedTagId || !actorsReady || noActors || !isFiltering,
     fetchPolicy: "cache-and-network",
   });
 
@@ -216,7 +234,7 @@ function UnorganisedContent() {
     if (data?.findScenes?.count !== undefined) setTotalCount(data.findScenes.count);
   }, [data]);
 
-  const anyLoading = loading || tagsLoading;
+  const anyLoading = loading || tagsLoading || !actorsReady;
   const maxPage = Math.ceil(totalCount / perPage);
 
   // Tag not found state
