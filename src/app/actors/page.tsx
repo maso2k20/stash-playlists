@@ -275,7 +275,7 @@ export default function MyActorsPage() {
                 )}
                 {actor.markerCountUpdatedAt != null && (
                   <span
-                    className="absolute right-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-medium tabular-nums"
+                    className="absolute right-[6px] bottom-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-medium tabular-nums"
                     style={{
                       background: "rgba(8,10,12,0.82)",
                       color: "var(--con-text)",
@@ -288,7 +288,7 @@ export default function MyActorsPage() {
                 )}
                 {actor.unorganisedSceneCount > 0 && (
                   <span
-                    className="absolute left-[6px] top-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-semibold tabular-nums"
+                    className="absolute left-[6px] bottom-[6px] rounded-[5px] px-[6px] py-[2px] font-mono text-[11px] font-semibold tabular-nums"
                     style={{
                       background: "rgba(8,10,12,0.82)",
                       color: "#ff8b8b",
