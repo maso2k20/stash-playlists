@@ -38,6 +38,8 @@ type Rules = {
   optionalTagIds?: string[];
   minRating?: number | null;
   exactRating?: number | null;
+  playCountMode?: 'atLeast' | 'atMost' | null;
+  playCountValue?: number | null;
 };
 
 // Marker shape returned by /api/smart-playlists/preview. Matches the
@@ -131,6 +133,8 @@ export default function EditAutomaticPlaylistPage() {
           optionalTagIds,
           minRating: typeof cond.minRating === 'number' ? cond.minRating : null,
           exactRating: typeof cond.exactRating === 'number' ? cond.exactRating : null,
+          playCountMode: cond.playCountMode === 'atLeast' || cond.playCountMode === 'atMost' ? cond.playCountMode : null,
+          playCountValue: typeof cond.playCountValue === 'number' ? cond.playCountValue : null,
         });
       } catch (e) {
         console.error(e);

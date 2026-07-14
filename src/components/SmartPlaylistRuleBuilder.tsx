@@ -6,6 +6,7 @@ import Autocomplete from '@mui/joy/Autocomplete';
 import Grid from '@mui/joy/Grid';
 import Select from '@mui/joy/Select';
 import Option from '@mui/joy/Option';
+import Input from '@mui/joy/Input';
 
 interface Actor {
   id: string;
@@ -17,6 +18,8 @@ interface Tag {
 }
 
 // New flexible rules format
+type PlayCountMode = 'atLeast' | 'atMost';
+
 interface SmartRulesOutput {
   actorIds: string[];
   tagIds?: string[];           // Legacy format (kept for backward compat)
@@ -24,6 +27,8 @@ interface SmartRulesOutput {
   optionalTagIds?: string[];   // ANY must match
   minRating?: number | null;
   exactRating?: number | null;
+  playCountMode?: PlayCountMode | null;
+  playCountValue?: number | null;
 }
 
 interface SmartPlaylistRuleBuilderProps {
@@ -36,6 +41,8 @@ interface SmartPlaylistRuleBuilderProps {
     optionalTagIds?: string[];
     minRating?: number | null;
     exactRating?: number | null;
+    playCountMode?: PlayCountMode | null;
+    playCountValue?: number | null;
   };
 }
 
@@ -59,6 +66,8 @@ function initializeSelections(
   setOptionalTags: React.Dispatch<React.SetStateAction<Tag[]>>,
   setRatingMode: React.Dispatch<React.SetStateAction<'any' | 'min' | 'exact'>>,
   setRatingValue: React.Dispatch<React.SetStateAction<number | null>>,
+  setPlayCountMode: React.Dispatch<React.SetStateAction<'any' | PlayCountMode>>,
+  setPlayCountValue: React.Dispatch<React.SetStateAction<number>>,
 ) {
   if (!initialRules) return;
 
@@ -96,6 +105,18 @@ function initializeSelections(
     setRatingMode('any');
     setRatingValue(null);
   }
+
+  if (
+    (initialRules.playCountMode === 'atLeast' || initialRules.playCountMode === 'atMost') &&
+    typeof initialRules.playCountValue === 'number' &&
+    initialRules.playCountValue >= 0
+  ) {
+    setPlayCountMode(initialRules.playCountMode);
+    setPlayCountValue(Math.floor(initialRules.playCountValue));
+  } else {
+    setPlayCountMode('any');
+    setPlayCountValue(0);
+  }
 }
 
 export default function SmartPlaylistRuleBuilder({
@@ -109,6 +130,8 @@ export default function SmartPlaylistRuleBuilder({
   const [optionalTags, setOptionalTags] = useState<Tag[]>([]);
   const [ratingMode, setRatingMode] = useState<'any' | 'min' | 'exact'>('any');
   const [ratingValue, setRatingValue] = useState<number | null>(null);
+  const [playCountMode, setPlayCountMode] = useState<'any' | PlayCountMode>('any');
+  const [playCountValue, setPlayCountValue] = useState<number>(0);
 
   // Track whether we've applied the initial selections
   const hasInitializedRef = useRef(false);
@@ -123,7 +146,9 @@ export default function SmartPlaylistRuleBuilder({
     const ot = (initialRules?.optionalTagIds ?? []).map(String).join(',');
     const r = String(initialRules?.minRating ?? '');
     const er = String(initialRules?.exactRating ?? '');
-    return `${a}|${rt}|${ot}|${r}|${er}`;
+    const pcm = String(initialRules?.playCountMode ?? '');
+    const pcv = String(initialRules?.playCountValue ?? '');
+    return `${a}|${rt}|${ot}|${r}|${er}|${pcm}|${pcv}`;
   }, [initialRules]);
   const lastInitKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -165,7 +190,7 @@ export default function SmartPlaylistRuleBuilder({
     if (!actors.length) return;           // wait for actors
     if (!tags.length) return;             // wait for tags
 
-    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setRatingMode, setRatingValue);
+    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setRatingMode, setRatingValue, setPlayCountMode, setPlayCountValue);
     hasInitializedRef.current = true;
   }, [initialRules, actors, tags]);
 
@@ -193,9 +218,11 @@ export default function SmartPlaylistRuleBuilder({
       tagIds: [...requiredTagIds, ...optionalTagIds],
       minRating: ratingMode === 'min' ? ratingValue : null,
       exactRating: ratingMode === 'exact' ? ratingValue : null,
+      playCountMode: playCountMode === 'any' ? null : playCountMode,
+      playCountValue: playCountMode === 'any' ? null : playCountValue,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedActors, requiredTags, optionalTags, ratingMode, ratingValue]);
+  }, [selectedActors, requiredTags, optionalTags, ratingMode, ratingValue, playCountMode, playCountValue]);
 
   const sortedActors = useMemo(
     () => [...actors].sort((a, b) => a.name.localeCompare(b.name)),
@@ -357,6 +384,47 @@ export default function SmartPlaylistRuleBuilder({
                   <Option value={2}>👍 Liked</Option>
                   <Option value={3}>👍👍 Loved</Option>
                 </Select>
+              )}
+            </Box>
+          </Box>
+        </Grid>
+
+        {/* Play count filter, full width */}
+        <Grid xs={12}>
+          <Box sx={{ mt: 1 }}>
+            <Typography level="title-sm" mb={1.5} sx={{ fontWeight: 600 }}>Play count</Typography>
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Select
+                value={playCountMode}
+                onChange={(_, value) => {
+                  if (!value) return;
+                  setPlayCountMode(value);
+                }}
+                size="sm"
+                sx={{ width: 170 }}
+              >
+                <Option value="any">Any play count</Option>
+                <Option value="atLeast">Played at least</Option>
+                <Option value="atMost">Played at most</Option>
+              </Select>
+              {playCountMode !== 'any' && (
+                <>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={playCountValue}
+                    onChange={(e) => {
+                      const v = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                      setPlayCountValue(v);
+                    }}
+                    slotProps={{ input: { min: 0, step: 1 } }}
+                    sx={{ width: 100 }}
+                  />
+                  <Typography level="body-sm" sx={{ color: 'text.tertiary' }}>
+                    time{playCountValue === 1 ? '' : 's'}
+                    {playCountMode === 'atMost' && playCountValue === 0 ? ' (never played)' : ''}
+                  </Typography>
+                </>
               )}
             </Box>
           </Box>

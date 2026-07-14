@@ -119,6 +119,10 @@ export type SmartPlaylistConditions = {
   optionalTagIds?: string[];   // ANY must match (INCLUDES)
   minRating?: number | null;
   exactRating?: number | null;
+  // Play-count filter (local Item.playCount): "atLeast" keeps markers played
+  // >= value; "atMost" keeps markers played <= value (incl. never-played).
+  playCountMode?: 'atLeast' | 'atMost' | null;
+  playCountValue?: number | null;
   perPage?: number;
   clip?: { before?: number; after?: number };
 };
@@ -178,8 +182,25 @@ function normalizeConditions(conditions: SmartPlaylistConditions) {
     : [];
   const minRating = remapLegacyRating(conditions.minRating as any);
   const exactRating = remapLegacyRating(conditions.exactRating as any);
+
+  // Play count: only a valid mode + a non-negative integer value counts.
+  const rawMode = conditions.playCountMode;
+  const rawValue = Number(conditions.playCountValue);
+  const playCountValue = Number.isFinite(rawValue) && rawValue >= 0 ? Math.floor(rawValue) : null;
+  const playCountMode =
+    (rawMode === 'atLeast' || rawMode === 'atMost') && playCountValue != null ? rawMode : null;
+
   const perPage = Math.max(1, Number(conditions.perPage ?? 10000));
-  return { actorIds, requiredTagIds, optionalTagIds, minRating, exactRating, perPage };
+  return {
+    actorIds,
+    requiredTagIds,
+    optionalTagIds,
+    minRating,
+    exactRating,
+    playCountMode,
+    playCountValue: playCountMode ? playCountValue : null,
+    perPage,
+  };
 }
 
 type NormalizedConditions = ReturnType<typeof normalizeConditions>;
@@ -351,34 +372,41 @@ export async function fetchFilteredStashMarkers(
   conditions: SmartPlaylistConditions,
 ): Promise<StashMarker[]> {
   const n = normalizeConditions(conditions);
-  const { actorIds, requiredTagIds, optionalTagIds, minRating, exactRating } = n;
+  const { actorIds, requiredTagIds, optionalTagIds, minRating, exactRating, playCountMode, playCountValue } = n;
 
   const hasExactRating = !!exactRating && [1, 2, 3].includes(exactRating);
   const hasMinRating = !!minRating && [1, 2, 3].includes(minRating);
   const hasRatingFilter = hasExactRating || hasMinRating;
+  const hasPlayCountFilter = playCountMode != null && playCountValue != null;
   const hasStructuralFilter = actorIds.length > 0 || requiredTagIds.length > 0 || optionalTagIds.length > 0;
 
+  // The local Item where-clause for rating / play count, reused by both paths.
+  const ratingWhere = hasExactRating ? { equals: exactRating! } : hasMinRating ? { gte: minRating! } : undefined;
+  const playCountWhere = hasPlayCountFilter
+    ? playCountMode === 'atLeast'
+      ? { gte: playCountValue! }
+      : { lte: playCountValue! }
+    : undefined;
+
   // No filters at all → nothing to do
-  if (!hasStructuralFilter && !hasRatingFilter) {
+  if (!hasStructuralFilter && !hasRatingFilter && !hasPlayCountFilter) {
     return [];
   }
 
   let markers: RawStashMarker[];
 
-  if (!hasStructuralFilter && hasRatingFilter) {
-    // Rating-only path: query Item table for rated IDs first, then fetch
-    // only those specific markers' details from Stash. This avoids pulling
-    // tens of thousands of unrelated markers when only the rated handful
-    // matter. Items without a cached sceneId (legacy rows synced before
-    // sceneId was added) will be missed — they need to be re-synced via
-    // any normal playlist refresh to populate the field.
-    const ratingWhere = hasExactRating ? { equals: exactRating! } : { gte: minRating! };
-    const ratedItems = await prisma.item.findMany({
-      where: { rating: ratingWhere },
-      select: { id: true },
-    });
-    if (ratedItems.length === 0) return [];
-    markers = await fetchMarkersByItemIds(ratedItems.map((i) => i.id));
+  if (!hasStructuralFilter) {
+    // Local-only path (rating and/or play count, no actor/tag filter): query
+    // the Item table directly, then fetch only those markers from Stash. This
+    // only sees markers that already exist as Items — a never-synced marker
+    // has no Item row, so "at most N" here can't include markers the app has
+    // never seen (combine with an actor/tag filter for that).
+    const where: Record<string, unknown> = {};
+    if (ratingWhere) where.rating = ratingWhere;
+    if (playCountWhere) where.playCount = playCountWhere;
+    const localItems = await prisma.item.findMany({ where, select: { id: true } });
+    if (localItems.length === 0) return [];
+    markers = await fetchMarkersByItemIds(localItems.map((i) => i.id));
   } else {
     // Structural-filter path: query Stash with the dynamically-built filter
     // clauses, then apply optional-tag and rating filters after the fact.
@@ -407,8 +435,7 @@ export async function fetchFilteredStashMarkers(
     // Apply rating filter against the local Item table. Items not in the
     // Item table (never synced to a playlist) cannot have ratings here,
     // so they're correctly excluded.
-    if (hasRatingFilter) {
-      const ratingWhere = hasExactRating ? { equals: exactRating! } : { gte: minRating! };
+    if (ratingWhere) {
       const itemIds = markers.map((m) => m.id);
       const rated = await prisma.item.findMany({
         where: { id: { in: itemIds }, rating: ratingWhere },
@@ -416,6 +443,30 @@ export async function fetchFilteredStashMarkers(
       });
       const ratedSet = new Set(rated.map((r) => r.id));
       markers = markers.filter((m) => ratedSet.has(m.id));
+    }
+
+    // Apply play-count filter against the local Item table.
+    if (hasPlayCountFilter) {
+      const itemIds = markers.map((m) => m.id);
+      if (playCountMode === 'atLeast') {
+        // Keep markers whose Item.playCount >= value. A marker with no Item
+        // row has played 0 times, so it's correctly excluded here.
+        const matched = await prisma.item.findMany({
+          where: { id: { in: itemIds }, playCount: { gte: playCountValue! } },
+          select: { id: true },
+        });
+        const matchedSet = new Set(matched.map((r) => r.id));
+        markers = markers.filter((m) => matchedSet.has(m.id));
+      } else {
+        // "At most N": drop markers whose Item.playCount > value. Markers with
+        // no Item row (never played) pass, so "at most 0" = never played.
+        const over = await prisma.item.findMany({
+          where: { id: { in: itemIds }, playCount: { gt: playCountValue! } },
+          select: { id: true },
+        });
+        const overSet = new Set(over.map((r) => r.id));
+        markers = markers.filter((m) => !overSet.has(m.id));
+      }
     }
   }
 
