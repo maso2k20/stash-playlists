@@ -53,6 +53,7 @@ type PlaylistItem = {
     endTime: number;
     screenshot?: string;
     rating?: number | null;
+    playCount?: number;
   };
 };
 
@@ -331,7 +332,24 @@ export default function PlaylistPlayer() {
       const last = lastPlayRecordedRef.current;
       if (!last || last.id !== finishedId || now - last.at > 1000) {
         lastPlayRecordedRef.current = { id: finishedId, at: now };
-        fetch(`/api/items/${finishedId}/play`, { method: "POST" }).catch(() => {});
+        fetch(`/api/items/${finishedId}/play`, { method: "POST" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            const newCount = data?.item?.playCount;
+            if (typeof newCount === "number") {
+              setPlaylist((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      items: prev.items.map((pi) =>
+                        pi.item.id === finishedId ? { ...pi, item: { ...pi.item, playCount: newCount } } : pi
+                      ),
+                    }
+                  : prev
+              );
+            }
+          })
+          .catch(() => {});
       }
     }
 
@@ -415,6 +433,14 @@ export default function PlaylistPlayer() {
                     {currentItem.item.title}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip
+                      size="sm"
+                      variant="soft"
+                      color="neutral"
+                      title={`Played ${currentItem.item.playCount ?? 0} time${(currentItem.item.playCount ?? 0) === 1 ? '' : 's'}`}
+                    >
+                      ▶ {(currentItem.item.playCount ?? 0).toLocaleString()} played
+                    </Chip>
                     <Typography level="body-sm" sx={{ color: 'text.secondary' }}>
                       Rate:
                     </Typography>
