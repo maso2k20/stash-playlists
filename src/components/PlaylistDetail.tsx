@@ -1,6 +1,7 @@
 import * as React from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
-  Sheet, Box, Input, List, ListItem, ListItemButton,
+  Sheet, Box, Input, ListItemButton,
   ListItemDecorator, ListItemContent, Typography,
   AspectRatio, IconButton
 } from '@mui/joy';
@@ -92,6 +93,20 @@ export function PlaylistDetail({
     return base.filter(({ it }) => it.item.title.toLowerCase().includes(query));
   }, [items, order, q, playedItemIndices, currentIndex]);
 
+  // Virtualize the list so only the rows visible in the viewport render.
+  // Without this, a large playlist mounts thousands of heavy rows and
+  // re-renders them all on every clip change, blocking the main thread.
+  const scrollParentRef = React.useRef<HTMLDivElement>(null);
+  // Rows are a uniform height, so use fixed-size virtualization — no per-row
+  // measurement (dynamic measurement with a large list caused a re-measure loop).
+  const ROW_HEIGHT = 101;
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  });
+
   const handleShuffle = () => {
     const newOrder = shuffleArray(order);
     if (onOrderChange) {
@@ -156,97 +171,110 @@ export function PlaylistDetail({
         </Box>
       </Box>
 
-      {/* Scrollable list */}
-      <List
-        size="lg"
+      {/* Scrollable, virtualized list */}
+      <Box
+        ref={scrollParentRef}
         sx={{
-          p: 0,
           flex: 1,
           minHeight: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
         }}
       >
-        {filtered.map(({ it, idx }) => {
-          const dur = Math.max(0, (it.item.endTime ?? 0) - (it.item.startTime ?? 0));
-          const isCurrentItem = idx === (order[currentIndex] ?? -1);
-          const isPlayedItem = playedItemIndices?.has(idx) && !isCurrentItem;
-          
-          return (
-            <ListItem key={`${it.id}-${idx}`} sx={{ px: 0 }}>
-              <ListItemButton
-                selected={isCurrentItem}
-                onClick={() => {
-                  // when user clicks a row, jump to its position IN THE ORDER
-                  const orderPos = order.indexOf(idx);
-                  if (orderPos !== -1) setCurrentIndex(orderPos);
-                }}
-                onDoubleClick={() => {
-                  const orderPos = order.indexOf(idx);
-                  if (orderPos !== -1) onDoubleClickPlay?.(orderPos);
-                }}
-                sx={{
-                  display: 'flex',
-                  gap: 1.5,
-                  py: 1.25,
+        <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((vRow) => {
+            const { it, idx } = filtered[vRow.index];
+            const dur = Math.max(0, (it.item.endTime ?? 0) - (it.item.startTime ?? 0));
+            const isCurrentItem = idx === (order[currentIndex] ?? -1);
+            const isPlayedItem = playedItemIndices?.has(idx) && !isCurrentItem;
+
+            return (
+              <div
+                key={`${it.id}-${idx}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
                   width: '100%',
-                  minWidth: 0,
-                  opacity: isPlayedItem ? 0.5 : 1,
-                  '&.Mui-selected': { 
-                    backgroundColor: 'primary.softBg',
-                    borderLeft: 3,
-                    borderColor: 'primary.500',
-                  },
-                  '&:hover': {
-                    backgroundColor: isCurrentItem ? 'primary.softHoverBg' : 'neutral.softHoverBg',
-                  },
+                  height: `${vRow.size}px`,
+                  transform: `translateY(${vRow.start}px)`,
                 }}
               >
-                <ListItemDecorator sx={{ alignSelf: 'center', mr: 1.5 }}>
-                  <AspectRatio
-                    ratio="16/9"
-                    sx={{
-                      width: { xs: 96, sm: 120, md: 140 },
-                      borderRadius: 'sm',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {it.item.screenshot ? (
-                      <img src={makeStashUrl(it.item.screenshot, stashServer, stashApiKey)} alt="" loading="lazy" />
-                    ) : (
-                      <div />
-                    )}
-                  </AspectRatio>
-                </ListItemDecorator>
+                <ListItemButton
+                  selected={isCurrentItem}
+                  onClick={() => {
+                    // when user clicks a row, jump to its position IN THE ORDER
+                    const orderPos = order.indexOf(idx);
+                    if (orderPos !== -1) setCurrentIndex(orderPos);
+                  }}
+                  onDoubleClick={() => {
+                    const orderPos = order.indexOf(idx);
+                    if (orderPos !== -1) onDoubleClickPlay?.(orderPos);
+                  }}
+                  sx={{
+                    display: 'flex',
+                    gap: 1.5,
+                    py: 1.25,
+                    width: '100%',
+                    height: '100%',
+                    minWidth: 0,
+                    opacity: isPlayedItem ? 0.5 : 1,
+                    '&.Mui-selected': {
+                      backgroundColor: 'primary.softBg',
+                      borderLeft: 3,
+                      borderColor: 'primary.500',
+                    },
+                    '&:hover': {
+                      backgroundColor: isCurrentItem ? 'primary.softHoverBg' : 'neutral.softHoverBg',
+                    },
+                  }}
+                >
+                  <ListItemDecorator sx={{ alignSelf: 'center', mr: 1.5 }}>
+                    <AspectRatio
+                      ratio="16/9"
+                      sx={{
+                        width: { xs: 96, sm: 120, md: 140 },
+                        borderRadius: 'sm',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {it.item.screenshot ? (
+                        <img src={makeStashUrl(it.item.screenshot, stashServer, stashApiKey)} alt="" loading="lazy" />
+                      ) : (
+                        <div />
+                      )}
+                    </AspectRatio>
+                  </ListItemDecorator>
 
-                <ListItemContent sx={{ minWidth: 0, overflow: 'hidden' }}>
-                  <Typography level="title-md" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {it.item.title || 'Untitled'}
-                  </Typography>
-                  <Typography level="body-sm" sx={{ opacity: 0.8 }}>
-                    {formatLength(dur)}
-                  </Typography>
-                </ListItemContent>
+                  <ListItemContent sx={{ minWidth: 0, overflow: 'hidden' }}>
+                    <Typography level="title-md" noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {it.item.title || 'Untitled'}
+                    </Typography>
+                    <Typography level="body-sm" sx={{ opacity: 0.8 }}>
+                      {formatLength(dur)}
+                    </Typography>
+                  </ListItemContent>
 
-                {onRemoveItem && (
-                  <IconButton
-                    size="sm"
-                    variant="plain"
-                    color="danger"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveItem(it.id);
-                    }}
-                    aria-label="Remove from playlist"
-                  >
-                    <DeleteForeverRounded />
-                  </IconButton>
-                )}
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
-      </List>
+                  {onRemoveItem && (
+                    <IconButton
+                      size="sm"
+                      variant="plain"
+                      color="danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveItem(it.id);
+                      }}
+                      aria-label="Remove from playlist"
+                    >
+                      <DeleteForeverRounded />
+                    </IconButton>
+                  )}
+                </ListItemButton>
+              </div>
+            );
+          })}
+        </div>
+      </Box>
     </Sheet>
   );
 }
