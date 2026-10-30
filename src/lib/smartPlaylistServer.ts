@@ -117,6 +117,10 @@ export type SmartPlaylistConditions = {
   tagIds?: string[];           // Legacy format (treated as requiredTagIds for backward compat)
   requiredTagIds?: string[];   // ALL must match (INCLUDES_ALL)
   optionalTagIds?: string[];   // ANY must match (INCLUDES)
+  // Parent-scene studio filter (ANY of these studios). includeSubStudios
+  // (default true) also matches scenes from child studios of a selected one.
+  studioIds?: string[];
+  includeSubStudios?: boolean;
   minRating?: number | null;
   exactRating?: number | null;
   // Play-count filter (local Item.playCount): "atLeast" keeps markers played
@@ -141,6 +145,7 @@ export type StashMarker = {
     id: string;
     title?: string | null;
     performers?: Array<{ id: string; name: string }>;
+    studio?: { id: string; name: string } | null;
   } | null;
   tags?: Array<{ id: string; name: string }>;
 };
@@ -180,6 +185,8 @@ function normalizeConditions(conditions: SmartPlaylistConditions) {
   const optionalTagIds = Array.isArray(conditions.optionalTagIds)
     ? conditions.optionalTagIds.map(String)
     : [];
+  const studioIds = Array.isArray(conditions.studioIds) ? conditions.studioIds.map(String) : [];
+  const includeSubStudios = conditions.includeSubStudios !== false;
   const minRating = remapLegacyRating(conditions.minRating as any);
   const exactRating = remapLegacyRating(conditions.exactRating as any);
 
@@ -195,6 +202,8 @@ function normalizeConditions(conditions: SmartPlaylistConditions) {
     actorIds,
     requiredTagIds,
     optionalTagIds,
+    studioIds,
+    includeSubStudios,
     minRating,
     exactRating,
     playCountMode,
@@ -210,9 +219,12 @@ type NormalizedConditions = ReturnType<typeof normalizeConditions>;
 // INCLUDES_ALL: [] to Stash returns only entities with NO matching
 // tags/performers, which is the opposite of "no constraint".
 function buildStashMarkerQuery(
-  n: Pick<NormalizedConditions, "actorIds" | "requiredTagIds" | "optionalTagIds" | "perPage">,
+  n: Pick<
+    NormalizedConditions,
+    "actorIds" | "requiredTagIds" | "optionalTagIds" | "studioIds" | "includeSubStudios" | "perPage"
+  >,
 ): { query: string; vars: Record<string, any>; needsOptionalTagFilter: boolean } {
-  const { actorIds, requiredTagIds, optionalTagIds, perPage } = n;
+  const { actorIds, requiredTagIds, optionalTagIds, studioIds, includeSubStudios, perPage } = n;
 
   const filterParts: string[] = [];
   const varDecls: string[] = ["$perPage: Int"];
@@ -244,6 +256,17 @@ function buildStashMarkerQuery(
     vars.requiredTagIds = requiredTagIds;
   }
 
+  // Markers have no studio of their own — filter on the parent scene's studio
+  // via the nested scene_filter. depth -1 includes all descendant studios.
+  if (studioIds.length) {
+    filterParts.push(
+      `scene_filter: { studios: { modifier: INCLUDES, value: $studioIds, depth: $studioDepth } }`,
+    );
+    varDecls.push("$studioIds: [ID!]", "$studioDepth: Int");
+    vars.studioIds = studioIds;
+    vars.studioDepth = includeSubStudios ? -1 : 0;
+  }
+
   const sceneMarkerFilter =
     filterParts.length > 0 ? `scene_marker_filter: { ${filterParts.join("\n")} }` : "";
 
@@ -266,6 +289,7 @@ function buildStashMarkerQuery(
             id
             title
             performers { id name }
+            studio { id name }
           }
           tags { id name }
         }
@@ -288,6 +312,7 @@ type RawStashMarker = {
     id: string;
     title?: string | null;
     performers?: Array<{ id: string; name: string }>;
+    studio?: { id: string; name: string } | null;
   } | null;
   tags?: Array<{ id: string; name: string }>;
 };
@@ -324,6 +349,7 @@ async function fetchMarkersByItemIds(
           id
           title
           performers { id name }
+          studio { id name }
           scene_markers {
             id
             title
@@ -354,6 +380,7 @@ async function fetchMarkersByItemIds(
             id: scene.id,
             title: scene.title,
             performers: scene.performers ?? [],
+            studio: scene.studio ?? null,
           },
           tags: m.tags ?? [],
         });
@@ -372,13 +399,14 @@ export async function fetchFilteredStashMarkers(
   conditions: SmartPlaylistConditions,
 ): Promise<StashMarker[]> {
   const n = normalizeConditions(conditions);
-  const { actorIds, requiredTagIds, optionalTagIds, minRating, exactRating, playCountMode, playCountValue } = n;
+  const { actorIds, requiredTagIds, optionalTagIds, studioIds, minRating, exactRating, playCountMode, playCountValue } = n;
 
   const hasExactRating = !!exactRating && [1, 2, 3].includes(exactRating);
   const hasMinRating = !!minRating && [1, 2, 3].includes(minRating);
   const hasRatingFilter = hasExactRating || hasMinRating;
   const hasPlayCountFilter = playCountMode != null && playCountValue != null;
-  const hasStructuralFilter = actorIds.length > 0 || requiredTagIds.length > 0 || optionalTagIds.length > 0;
+  const hasStructuralFilter =
+    actorIds.length > 0 || requiredTagIds.length > 0 || optionalTagIds.length > 0 || studioIds.length > 0;
 
   // The local Item where-clause for rating / play count, reused by both paths.
   const ratingWhere = hasExactRating ? { equals: exactRating! } : hasMinRating ? { gte: minRating! } : undefined;
@@ -396,7 +424,7 @@ export async function fetchFilteredStashMarkers(
   let markers: RawStashMarker[];
 
   if (!hasStructuralFilter) {
-    // Local-only path (rating and/or play count, no actor/tag filter): query
+    // Local-only path (rating and/or play count, no actor/tag/studio filter): query
     // the Item table directly, then fetch only those markers from Stash. This
     // only sees markers that already exist as Items — a never-synced marker
     // has no Item row, so "at most N" here can't include markers the app has

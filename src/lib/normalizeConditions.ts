@@ -8,8 +8,12 @@ export type ParsedConditions = {
   tagIds: string[];
   requiredTagIds: string[];
   optionalTagIds: string[];
+  studioIds: string[];
+  includeSubStudios: boolean;
   minRating: number | null;
   exactRating: number | null;
+  playCountMode: "atLeast" | "atMost" | null;
+  playCountValue: number | null;
 };
 
 function safeParse(s: string): unknown {
@@ -32,7 +36,11 @@ export function normalizeConditions(raw: unknown): ParsedConditions {
     tagIds: Array.isArray(c?.tagIds) ? c.tagIds.map(String) : [],
     requiredTagIds: Array.isArray(c?.requiredTagIds) ? c.requiredTagIds.map(String) : [],
     optionalTagIds: Array.isArray(c?.optionalTagIds) ? c.optionalTagIds.map(String) : [],
+    studioIds: Array.isArray(c?.studioIds) ? c.studioIds.map(String) : [],
+    includeSubStudios: c?.includeSubStudios !== false,
     minRating: typeof c?.minRating === "number" ? c.minRating : null,
     exactRating: typeof c?.exactRating === "number" ? c.exactRating : null,
+    playCountMode: c?.playCountMode === "atLeast" || c?.playCountMode === "atMost" ? c.playCountMode : null,
+    playCountValue: typeof c?.playCountValue === "number" ? c.playCountValue : null,
   };
 }

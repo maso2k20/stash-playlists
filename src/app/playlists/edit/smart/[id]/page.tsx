@@ -36,6 +36,8 @@ type Rules = {
   tagIds?: string[];
   requiredTagIds?: string[];
   optionalTagIds?: string[];
+  studioIds?: string[];
+  includeSubStudios?: boolean;
   minRating?: number | null;
   exactRating?: number | null;
   playCountMode?: 'atLeast' | 'atMost' | null;
@@ -56,6 +58,7 @@ type PreviewMarker = {
     id: string;
     title?: string | null;
     performers?: Array<{ id: string; name: string }>;
+    studio?: { id: string; name: string } | null;
   } | null;
   tags?: Array<{ id: string; name: string }>;
 };
@@ -131,6 +134,8 @@ export default function EditAutomaticPlaylistPage() {
           tagIds: legacyTagIds,
           requiredTagIds,
           optionalTagIds,
+          studioIds: Array.isArray(cond.studioIds) ? cond.studioIds.map(String) : [],
+          includeSubStudios: cond.includeSubStudios !== false,
           minRating: typeof cond.minRating === 'number' ? cond.minRating : null,
           exactRating: typeof cond.exactRating === 'number' ? cond.exactRating : null,
           playCountMode: cond.playCountMode === 'atLeast' || cond.playCountMode === 'atMost' ? cond.playCountMode : null,
@@ -470,9 +475,14 @@ export default function EditAutomaticPlaylistPage() {
                                       {formatLength((Number(m.end_seconds ?? 0)) - (Number(m.seconds ?? 0)))}
                                     </Typography>
 
-                                    {/* Performers */}
-                                    {performers.length > 0 && (
+                                    {/* Studio + Performers */}
+                                    {(m.scene?.studio || performers.length > 0) && (
                                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {m.scene?.studio && (
+                                          <Chip size="sm" variant="outlined" color="warning">
+                                            {m.scene.studio.name}
+                                          </Chip>
+                                        )}
                                         {performers.slice(0, 3).map((p: { id: string; name: string }) => (
                                           <Chip key={p.id} size="sm" variant="soft" color="primary">
                                             {p.name}

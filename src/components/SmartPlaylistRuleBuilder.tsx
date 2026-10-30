@@ -7,6 +7,7 @@ import Grid from '@mui/joy/Grid';
 import Select from '@mui/joy/Select';
 import Option from '@mui/joy/Option';
 import Input from '@mui/joy/Input';
+import Checkbox from '@mui/joy/Checkbox';
 
 interface Actor {
   id: string;
@@ -15,6 +16,10 @@ interface Actor {
 interface Tag {
   id: string;
   label: string;
+}
+interface Studio {
+  id: string;
+  name: string;
 }
 
 // New flexible rules format
@@ -25,6 +30,8 @@ interface SmartRulesOutput {
   tagIds?: string[];           // Legacy format (kept for backward compat)
   requiredTagIds?: string[];   // ALL must match
   optionalTagIds?: string[];   // ANY must match
+  studioIds?: string[];        // parent scene's studio, ANY must match
+  includeSubStudios?: boolean;
   minRating?: number | null;
   exactRating?: number | null;
   playCountMode?: PlayCountMode | null;
@@ -39,6 +46,8 @@ interface SmartPlaylistRuleBuilderProps {
     tagIds?: string[];
     requiredTagIds?: string[];
     optionalTagIds?: string[];
+    studioIds?: string[];
+    includeSubStudios?: boolean;
     minRating?: number | null;
     exactRating?: number | null;
     playCountMode?: PlayCountMode | null;
@@ -64,6 +73,8 @@ function initializeSelections(
   setSelectedActors: React.Dispatch<React.SetStateAction<Actor[]>>,
   setRequiredTags: React.Dispatch<React.SetStateAction<Tag[]>>,
   setOptionalTags: React.Dispatch<React.SetStateAction<Tag[]>>,
+  setSelectedStudioIds: React.Dispatch<React.SetStateAction<string[]>>,
+  setIncludeSubStudios: React.Dispatch<React.SetStateAction<boolean>>,
   setRatingMode: React.Dispatch<React.SetStateAction<'any' | 'min' | 'exact'>>,
   setRatingValue: React.Dispatch<React.SetStateAction<number | null>>,
   setPlayCountMode: React.Dispatch<React.SetStateAction<'any' | PlayCountMode>>,
@@ -95,6 +106,9 @@ function initializeSelections(
     setRequiredTags(presetRequiredTags);
     setOptionalTags(presetOptionalTags);
   }
+  // Studios are kept as IDs so they apply even before the studio list loads.
+  setSelectedStudioIds((initialRules.studioIds ?? []).map(String));
+  setIncludeSubStudios(initialRules.includeSubStudios !== false);
   if (typeof initialRules.exactRating === 'number' && initialRules.exactRating >= 1) {
     setRatingMode('exact');
     setRatingValue(initialRules.exactRating);
@@ -128,6 +142,9 @@ export default function SmartPlaylistRuleBuilder({
   const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
   const [requiredTags, setRequiredTags] = useState<Tag[]>([]);
   const [optionalTags, setOptionalTags] = useState<Tag[]>([]);
+  const [studios, setStudios] = useState<Studio[]>([]);
+  const [selectedStudioIds, setSelectedStudioIds] = useState<string[]>([]);
+  const [includeSubStudios, setIncludeSubStudios] = useState(true);
   const [ratingMode, setRatingMode] = useState<'any' | 'min' | 'exact'>('any');
   const [ratingValue, setRatingValue] = useState<number | null>(null);
   const [playCountMode, setPlayCountMode] = useState<'any' | PlayCountMode>('any');
@@ -144,11 +161,13 @@ export default function SmartPlaylistRuleBuilder({
     const rtRaw = initialRules?.requiredTagIds;
     const rt = (rtRaw && rtRaw.length > 0 ? rtRaw : (initialRules?.tagIds ?? [])).map(String).join(',');
     const ot = (initialRules?.optionalTagIds ?? []).map(String).join(',');
+    const st = (initialRules?.studioIds ?? []).map(String).join(',');
+    const sub = String(initialRules?.includeSubStudios !== false);
     const r = String(initialRules?.minRating ?? '');
     const er = String(initialRules?.exactRating ?? '');
     const pcm = String(initialRules?.playCountMode ?? '');
     const pcv = String(initialRules?.playCountValue ?? '');
-    return `${a}|${rt}|${ot}|${r}|${er}|${pcm}|${pcv}`;
+    return `${a}|${rt}|${ot}|${st}|${sub}|${r}|${er}|${pcm}|${pcv}`;
   }, [initialRules]);
   const lastInitKeyRef = useRef<string | null>(null);
   useEffect(() => {
@@ -183,6 +202,30 @@ export default function SmartPlaylistRuleBuilder({
     })();
   }, []);
 
+  // Load studios from Stash (via the GraphQL proxy)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/stash-graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `query { findStudios(filter: { per_page: -1, sort: "name", direction: ASC }) { studios { id name } } }`,
+          }),
+        });
+        if (!res.ok) {
+          console.error('[SPRB] findStudios failed:', res.status);
+          return;
+        }
+        const json = await res.json();
+        const list = json?.data?.findStudios?.studios ?? [];
+        setStudios(list.map((s: { id: string | number; name: string }) => ({ id: String(s.id), name: s.name })));
+      } catch (err) {
+        console.error('[SPRB] findStudios error:', err);
+      }
+    })();
+  }, []);
+
   // Initialise selections ONCE when actors + tags + initialRules are all ready.
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -190,7 +233,7 @@ export default function SmartPlaylistRuleBuilder({
     if (!actors.length) return;           // wait for actors
     if (!tags.length) return;             // wait for tags
 
-    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setRatingMode, setRatingValue, setPlayCountMode, setPlayCountValue);
+    initializeSelections(initialRules, actors, tags, setSelectedActors, setRequiredTags, setOptionalTags, setSelectedStudioIds, setIncludeSubStudios, setRatingMode, setRatingValue, setPlayCountMode, setPlayCountValue);
     hasInitializedRef.current = true;
   }, [initialRules, actors, tags]);
 
@@ -216,17 +259,24 @@ export default function SmartPlaylistRuleBuilder({
       optionalTagIds,
       // Keep legacy tagIds for backward compatibility (combine both for display purposes)
       tagIds: [...requiredTagIds, ...optionalTagIds],
+      studioIds: selectedStudioIds,
+      includeSubStudios,
       minRating: ratingMode === 'min' ? ratingValue : null,
       exactRating: ratingMode === 'exact' ? ratingValue : null,
       playCountMode: playCountMode === 'any' ? null : playCountMode,
       playCountValue: playCountMode === 'any' ? null : playCountValue,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedActors, requiredTags, optionalTags, ratingMode, ratingValue, playCountMode, playCountValue]);
+  }, [selectedActors, requiredTags, optionalTags, selectedStudioIds, includeSubStudios, ratingMode, ratingValue, playCountMode, playCountValue]);
 
   const sortedActors = useMemo(
     () => [...actors].sort((a, b) => a.name.localeCompare(b.name)),
     [actors]
+  );
+
+  const selectedStudios = useMemo(
+    () => studios.filter((s) => selectedStudioIds.includes(s.id)),
+    [studios, selectedStudioIds]
   );
 
   // Filter out tags that are already selected in the other group
@@ -350,6 +400,51 @@ export default function SmartPlaylistRuleBuilder({
             <Typography level="body-xs" sx={{ color: 'neutral.500', mt: 0.5 }}>
               Markers must have at least one of these tags (leave empty for any)
             </Typography>
+          </Box>
+        </Grid>
+
+        {/* Studios (parent scene's studio) */}
+        <Grid xs={12}>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+              <Typography level="title-sm" sx={{ fontWeight: 600 }}>
+                Studios
+              </Typography>
+              <Chip size="sm" variant="soft" color="warning">
+                ANY must match
+              </Chip>
+            </Box>
+            <Autocomplete<Studio, true, false, false>
+              multiple
+              options={studios}
+              getOptionLabel={(option) => option.name}
+              isOptionEqualToValue={(opt, val) => opt.id === val.id}
+              value={selectedStudios}
+              onChange={(_, value) => setSelectedStudioIds(value.map((s) => s.id))}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip key={`${option.id}-${index}`} {...tagProps} size="sm" color="warning">
+                      {option.name}
+                    </Chip>
+                  );
+                })
+              }
+              placeholder="Search studios..."
+              size="sm"
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
+              <Typography level="body-xs" sx={{ color: 'neutral.500' }}>
+                Matches markers whose scene belongs to one of these studios
+              </Typography>
+              <Checkbox
+                size="sm"
+                label="Include sub-studios"
+                checked={includeSubStudios}
+                onChange={(e) => setIncludeSubStudios(e.target.checked)}
+              />
+            </Box>
           </Box>
         </Grid>
 
