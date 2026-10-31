@@ -8,6 +8,7 @@ import Select from '@mui/joy/Select';
 import Option from '@mui/joy/Option';
 import Input from '@mui/joy/Input';
 import Checkbox from '@mui/joy/Checkbox';
+import { useStashTags } from '@/context/StashTagsContext';
 
 interface Actor {
   id: string;
@@ -138,6 +139,7 @@ export default function SmartPlaylistRuleBuilder({
   onChange,
   initialRules,
 }: SmartPlaylistRuleBuilderProps) {
+  const { limitToEnabled } = useStashTags();
   const [actors, setActors] = useState<Actor[]>([]);
   const [selectedActors, setSelectedActors] = useState<Actor[]>([]);
   const [requiredTags, setRequiredTags] = useState<Tag[]>([]);
@@ -279,14 +281,21 @@ export default function SmartPlaylistRuleBuilder({
     [studios, selectedStudioIds]
   );
 
+  // Only enabled tags (Tags page) are offered; tags already in either group
+  // always stay so existing rules can still be seen and edited.
+  const enabledTags = useMemo(
+    () => limitToEnabled(tags, [...requiredTags, ...optionalTags].map((t) => t.id)),
+    [limitToEnabled, tags, requiredTags, optionalTags]
+  );
+
   // Filter out tags that are already selected in the other group
   const availableRequiredTags = useMemo(
-    () => tags.filter(t => !optionalTags.some(ot => ot.id === t.id)),
-    [tags, optionalTags]
+    () => enabledTags.filter(t => !optionalTags.some(ot => ot.id === t.id)),
+    [enabledTags, optionalTags]
   );
   const availableOptionalTags = useMemo(
-    () => tags.filter(t => !requiredTags.some(rt => rt.id === t.id)),
-    [tags, requiredTags]
+    () => enabledTags.filter(t => !requiredTags.some(rt => rt.id === t.id)),
+    [enabledTags, requiredTags]
   );
 
   return (

@@ -32,7 +32,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 
 **User Interface:**
 - `src/app/layout.tsx` - Modern navigation bar with Material-UI icons and hover effects
-- Clean navigation design with Dashboard, Unorganised, Playlists, Actors, Studios, Scenes and Settings
+- Clean navigation design with Dashboard, Unorganised, Playlists, Actors, Studios, Tags, Scenes and Settings
 - Responsive layout with smooth transitions and theme compatibility
 
 **Data Layer:**
@@ -63,6 +63,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 ### API Endpoints Structure
 - `/api/actors` - Actor management and scene retrieval
 - `/api/studios` - Tracked studio management; `/api/studios/counts` refreshes precomputed counts
+- `/api/tags/selection` - Enabled / reviewed tag IDs for the tag editors (GET; POST `set` or `markReviewed`)
 - `/api/playlists` - CRUD operations and smart playlist generation
 - `/api/playlists/[id]/items` - Playlist item management with ordering
 - `/api/playlists/[id]/image` - Playlist cover image upload/delete operations
@@ -275,6 +276,13 @@ Studios can be added alongside actors at `/studios` (a `Studio` table mirrors `A
 - **Counts**: `src/lib/studioCountService.ts` precomputes marker and unorganised-scene counts (sub-studios included), refreshed via `POST /api/studios/counts` when the Studios page loads
 - **Unorganised scope**: the Unorganised page and dashboard count scenes featuring an added actor OR from an added studio, built by `src/lib/unorganisedFilter.ts` (Stash `OR` scene filter; shared criteria repeated in each branch)
 - **Smart playlists** can also filter by studio (parent scene's studio via nested `scene_filter`, optional sub-studios)
+
+### Tag Selection
+The Tags page (`/tags`) picks which Stash tags the app's tag editors offer, since Stash has far more tags than are used here:
+- **Storage**: `TagSelection` table (one row per reviewed tag, `enabled` flag); tags with no row are shown as **New**
+- **Page**: All / Enabled / Not enabled / New filters, search, sort, hide unused; enable a parent with all its children; "mark new as reviewed"
+- **Context**: `StashTagsContext` loads the selection and exposes `limitToEnabled(tags, keepIds)` — returns only enabled tags plus `keepIds` (tags already in use), or every tag when none are enabled
+- **Applied to**: Other Tags (`MarkerDetailPanel`) and Common Tags (`BulkTagsPanel`) on the scene editor, Additional Tags in the playlist player (`MarkerTagEditor`), and the Required/Optional tags in `SmartPlaylistRuleBuilder`. Primary tag boxes and the primary tag's child-tag chips are deliberately not limited
 
 ### Actor Browsing System
 Enhanced marker browsing and selection on `/actors/[id]` pages with dual-query pagination system:

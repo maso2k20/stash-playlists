@@ -11,6 +11,7 @@ import {
     Chip,
 } from "@mui/joy";
 import type { Tag } from "@/types/markers";
+import { useStashTags } from "@/context/StashTagsContext";
 
 interface BulkTagsPanelProps {
     tagOptions: Tag[];
@@ -31,6 +32,8 @@ function BulkTagsPanelInner({
     onApplyCommonTags,
     onApplyPerformerTags,
 }: BulkTagsPanelProps) {
+    const { limitToEnabled } = useStashTags();
+
     // Common Tags state
     const [commonTagIds, setCommonTagIds] = useState<string[]>([]);
     const [removeCommonMode, setRemoveCommonMode] = useState(false);
@@ -83,7 +86,8 @@ function BulkTagsPanelInner({
                 <Autocomplete
                     multiple
                     size="sm"
-                    options={tagOptions}
+                    // Only enabled tags (Tags page); already-picked tags always stay.
+                    options={limitToEnabled(tagOptions, commonTagIds)}
                     value={commonTagIds
                         .map((id) => tagOptions.find((t) => t.id === id))
                         .filter(Boolean) as Tag[]}

@@ -369,7 +369,7 @@ export default function Page() {
   );
   const selectedTagOptions = selectedTagIds.map(id => 
     tagOptions.find((t: any) => t.id === id)
-  ).filter(Boolean);
+  ).filter((t): t is { id: string; label: string } => !!t);
 
   // Stable empty array reference to prevent cache misses
   const EMPTY_ARRAY: string[] = useMemo(() => [], []);

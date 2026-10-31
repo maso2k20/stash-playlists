@@ -8,6 +8,7 @@ import {
   List,
   Users,
   Building2,
+  Tag,
   Clapperboard,
   Sliders,
   Play,
@@ -27,6 +28,7 @@ const LIBRARY: NavItem[] = [
   { href: "/playlists", label: "Playlists", icon: List },
   { href: "/actors", label: "Actors", icon: Users },
   { href: "/studios", label: "Studios", icon: Building2 },
+  { href: "/tags", label: "Tags", icon: Tag },
   { href: "/scenes", label: "Scenes", icon: Clapperboard },
 ];
 

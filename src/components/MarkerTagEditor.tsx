@@ -33,7 +33,7 @@ export default function MarkerTagEditor({
   loading = false,
   compact = false,
 }: MarkerTagEditorProps) {
-  const { stashTags, loading: tagsLoading } = useStashTags();
+  const { stashTags, loading: tagsLoading, limitToEnabled } = useStashTags();
   
   // Draft state
   const [draftPrimaryTagId, setDraftPrimaryTagId] = useState<string | null>(
@@ -220,7 +220,8 @@ export default function MarkerTagEditor({
             <Autocomplete
               multiple
               size="sm"
-              options={tagOptions.filter(t => t.id !== draftPrimaryTagId)}
+              // Only enabled tags (Tags page); tags already on the marker always stay.
+              options={limitToEnabled(tagOptions, draftTagIds).filter((t: Tag) => t.id !== draftPrimaryTagId)}
               value={otherTagIds
                 .map(tid => tagOptions.find(t => t.id === tid))
                 .filter(Boolean) as Tag[]}

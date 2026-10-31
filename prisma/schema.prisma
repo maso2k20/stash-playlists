@@ -43,6 +43,17 @@ model Studio {
   updatedAt             DateTime  @default(now()) @updatedAt
 }
 
+// A Stash tag the user has reviewed on the Tags page. Enabled tags are the only
+// ones offered in the Other Tags / Common Tags boxes (scene editor), the playlist
+// player's tag editor and the smart playlist rule builder. Tags with no row are
+// "new" (appeared in Stash since the user last reviewed).
+model TagSelection {
+  id        String   @id // Stash tag id
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 enum PlaylistType {
   MANUAL
   SMART

@@ -21,6 +21,7 @@ import ContentPasteIcon from "@mui/icons-material/ContentPaste";
 import TimeInput from "@/components/TimeInput";
 import StarRating from "@/components/StarRating";
 import type { Tag, Draft } from "@/types/markers";
+import { useStashTags } from "@/context/StashTagsContext";
 import { formatSecondsToMMSS } from "@/lib/formatLength";
 
 interface MarkerDetailPanelProps {
@@ -60,6 +61,8 @@ function MarkerDetailPanelInner({
     rating,
     onRatingChange,
 }: MarkerDetailPanelProps) {
+    const { limitToEnabled } = useStashTags();
+
     if (!selectedMarkerId || !draft) {
         return (
             <Card
@@ -338,7 +341,8 @@ function MarkerDetailPanelInner({
                 <Autocomplete
                     size="sm"
                     multiple
-                    options={tagOptions.filter((t) => t.id !== draft.primary_tag_id)}
+                    // Only enabled tags (Tags page); tags already on the marker always stay.
+                    options={limitToEnabled(tagOptions, draft.tag_ids).filter((t) => t.id !== draft.primary_tag_id)}
                     value={selectedTags}
                     onChange={(_e, vals) => {
                         const newTagIds = vals.map((v) => v.id);
