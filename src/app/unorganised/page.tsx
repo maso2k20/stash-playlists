@@ -8,6 +8,7 @@ import { useStashTags } from "@/context/StashTagsContext";
 import { makeStashUrl } from "@/lib/urlUtils";
 import { buildUnorganisedSceneFilter } from "@/lib/unorganisedFilter";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 
 // Query for unorganised scenes (scenes with markers but without "Markers
@@ -77,9 +78,11 @@ function PaginationControls({
   edges?: "prevnext" | "firstlast";
 }) {
   const maxPage = Math.ceil(totalCount / perPage);
-  const pages = [pageNumber - 2, pageNumber - 1, pageNumber, pageNumber + 1, pageNumber + 2].filter(
-    (n) => n >= 1 && n <= maxPage
-  );
+  // A window of up to 6 page numbers around the current page, shifted so it
+  // stays full at either end (e.g. 1–6 on page 1, the last 6 on the last page).
+  const PAGE_WINDOW = 6;
+  const start = Math.max(1, Math.min(pageNumber - 2, maxPage - PAGE_WINDOW + 1));
+  const pages = Array.from({ length: Math.min(PAGE_WINDOW, maxPage) }, (_, i) => start + i);
   const firstLast = edges === "firstlast";
   const prevTarget = firstLast ? 1 : pageNumber - 1;
   const nextTarget = firstLast ? maxPage : pageNumber + 1;
@@ -148,12 +151,17 @@ function SkeletonGrid() {
 }
 
 function UnorganisedContent() {
-  const [pageNumber, setPageNumber] = useState(1);
+  // Page and search live in the URL so that editing a scene and coming back
+  // (router.back() on the scene page) returns to the same page.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [pageNumber, setPageNumber] = useState(() => Math.max(1, Number(searchParams.get("page")) || 1));
   // 60 divides evenly into every column count the grid uses (2/3/4/5), so full
   // pages never leave a ragged last row of empty cells.
   const perPage = 60;
   const [totalCount, setTotalCount] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("q") ?? "");
 
   const settings = useSettings();
   const stashServer = settings["STASH_SERVER"];
@@ -188,9 +196,20 @@ function UnorganisedContent() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, [pageNumber]);
 
-  useEffect(() => {
+  // Reset to page 1 on a new search (in the handler, not an effect, so a page
+  // restored from the URL isn't clobbered on mount).
+  const changeSearch = (value: string) => {
+    setSearchTerm(value);
     setPageNumber(1);
-  }, [searchTerm]);
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchTerm.trim()) params.set("q", searchTerm);
+    if (pageNumber > 1) params.set("page", String(pageNumber));
+    const qs = params.toString();
+    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+  }, [searchTerm, pageNumber, pathname, router]);
 
   const paginatedVariables = useMemo(() => ({
     sceneFilter: markersOrganisedTagId && tracked
@@ -232,6 +251,15 @@ function UnorganisedContent() {
     if (data?.findScenes?.count !== undefined) setTotalCount(data.findScenes.count);
   }, [data]);
 
+  // Organising scenes shrinks the list, so a restored page can end up past the
+  // last one — step back to the last page that still has scenes.
+  useEffect(() => {
+    const count = data?.findScenes?.count;
+    if (isFiltering || count === undefined || count === 0) return;
+    const lastPage = Math.ceil(count / perPage);
+    if (pageNumber > lastPage) setPageNumber(lastPage);
+  }, [data, isFiltering, pageNumber, perPage]);
+
   const anyLoading = loading || tagsLoading || !trackedReady;
   const maxPage = Math.ceil(totalCount / perPage);
 
@@ -271,13 +299,13 @@ function UnorganisedContent() {
           <Search size={14} className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2" style={{ color: "var(--con-faint)" }} />
           <input
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => changeSearch(e.target.value)}
             placeholder="search by title…"
             aria-label="Search scenes"
             className="con-input w-full pl-[33px] pr-[30px]"
           />
           {searchTerm && (
-            <button onClick={() => setSearchTerm("")} aria-label="Clear search"
+            <button onClick={() => changeSearch("")} aria-label="Clear search"
               className="absolute right-[10px] top-1/2 -translate-y-1/2" style={{ color: "var(--con-muted)" }}>
               <X size={13} />
             </button>
@@ -303,7 +331,7 @@ function UnorganisedContent() {
             {isFiltering ? (
               <>
                 <div className="text-[14px] font-semibold">No scenes match “{searchTerm}”</div>
-                <button onClick={() => setSearchTerm("")} className="mt-2 text-[13px]" style={{ color: "var(--accent-cyan)" }}>Clear the filter</button>
+                <button onClick={() => changeSearch("")} className="mt-2 text-[13px]" style={{ color: "var(--accent-cyan)" }}>Clear the filter</button>
               </>
             ) : (
               <>
