@@ -6,10 +6,12 @@ import Link from "next/link";
 import useSWR from "swr";
 import { useQuery, gql } from "@apollo/client";
 import { useStashTags } from "@/context/StashTagsContext";
+import { buildUnorganisedSceneFilter } from "@/lib/unorganisedFilter";
 
 type DashboardStats = {
   playlists: number;
   actors: number;
+  studios: number;
   clips: number;
   ratings: { dislike: number; like: number; love: number };
 };
@@ -17,18 +19,11 @@ type DashboardStats = {
 const statsFetcher = (url: string) => fetch(url).then((r) => r.json());
 
 // Count-only query: scenes with markers but without the "Markers Organised"
-// tag, limited to the app's added actors (performers). Selecting just `count`
-// keeps the dashboard cheap to load.
+// tag, limited to the app's added actors OR added studios (see
+// buildUnorganisedSceneFilter). Selecting just `count` keeps it cheap.
 const GET_UNORGANISED_COUNT = gql`
-  query getUnorganisedCount($markersOrganisedIds: [ID!]!, $performerIds: [ID!]!) {
-    findScenes(
-      scene_filter: {
-        has_markers: "true"
-        performers: { modifier: INCLUDES, value: $performerIds }
-        tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
-      }
-      filter: { per_page: 0 }
-    ) {
+  query getUnorganisedCount($sceneFilter: SceneFilterType) {
+    findScenes(scene_filter: $sceneFilter, filter: { per_page: 0 }) {
       count
     }
   }
@@ -84,24 +79,33 @@ export default function Dashboard() {
     return tag?.id ? String(tag.id) : null;
   }, [stashTags]);
 
-  // Added actors — the unorganised count is scoped to scenes featuring these.
+  // Added actors and studios — the unorganised count is scoped to scenes
+  // featuring an added actor or belonging to an added studio.
   const { data: actorsData } = useSWR<Array<{ id: string }>>("/api/actors", statsFetcher);
-  const actorIds = useMemo(() => (actorsData ?? []).map((a) => String(a.id)), [actorsData]);
-  const actorsReady = actorsData !== undefined;
-  const noActors = actorsReady && actorIds.length === 0;
+  const { data: studiosData } = useSWR<Array<{ id: string }>>("/api/studios", statsFetcher);
+  const trackedReady = actorsData !== undefined && studiosData !== undefined;
+  const sceneFilter = useMemo(
+    () =>
+      markersOrganisedTagId && trackedReady
+        ? buildUnorganisedSceneFilter({
+            organisedTagId: markersOrganisedTagId,
+            actorIds: (actorsData ?? []).map((a) => String(a.id)),
+            studioIds: (studiosData ?? []).map((s) => String(s.id)),
+          })
+        : null,
+    [markersOrganisedTagId, trackedReady, actorsData, studiosData]
+  );
+  const nothingTracked = trackedReady && !!markersOrganisedTagId && sceneFilter === null;
 
   const { data, loading: countLoading } = useQuery(GET_UNORGANISED_COUNT, {
-    variables: {
-      markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
-      performerIds: actorIds,
-    },
-    skip: !markersOrganisedTagId || !actorsReady || noActors,
+    variables: { sceneFilter },
+    skip: !sceneFilter,
     fetchPolicy: "cache-and-network",
   });
 
-  const unorganisedCount: number | null | undefined = noActors ? 0 : data?.findScenes?.count;
+  const unorganisedCount: number | null | undefined = nothingTracked ? 0 : data?.findScenes?.count;
   const unorganisedLoading =
-    tagsLoading || !actorsReady || (!!markersOrganisedTagId && !noActors && countLoading);
+    tagsLoading || !trackedReady || (!!sceneFilter && countLoading);
 
   const { data: stats } = useSWR<DashboardStats>("/api/dashboard-stats", statsFetcher);
   const statsLoading = !stats;
@@ -135,6 +139,7 @@ export default function Dashboard() {
 
       <div className="stat-grid px-[26px] pb-[26px] pt-[12px]">
         <StatCard label="Actors" value={stats?.actors} loading={statsLoading} href="/actors" />
+        <StatCard label="Studios" value={stats?.studios} loading={statsLoading} href="/studios" />
       </div>
     </div>
   );

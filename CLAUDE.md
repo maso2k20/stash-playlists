@@ -32,7 +32,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 
 **User Interface:**
 - `src/app/layout.tsx` - Modern navigation bar with Material-UI icons and hover effects
-- Clean navigation design with Home, Playlists, Actors, and Settings (cog icon)
+- Clean navigation design with Dashboard, Unorganised, Playlists, Actors, Studios, Scenes and Settings
 - Responsive layout with smooth transitions and theme compatibility
 
 **Data Layer:**
@@ -62,6 +62,7 @@ This is a Next.js application that creates playlists from Stash server markers, 
 
 ### API Endpoints Structure
 - `/api/actors` - Actor management and scene retrieval
+- `/api/studios` - Tracked studio management; `/api/studios/counts` refreshes precomputed counts
 - `/api/playlists` - CRUD operations and smart playlist generation
 - `/api/playlists/[id]/items` - Playlist item management with ordering
 - `/api/playlists/[id]/image` - Playlist cover image upload/delete operations
@@ -266,6 +267,14 @@ Comprehensive scene browsing and navigation at `/scenes` with advanced filtering
 - **Scene Navigation**: Click any scene card to navigate to `/scenes/[id]` for marker editing
 - **Responsive Design**: Clean JoyUI layout with proper loading states, empty states, and error handling
 - **GraphQL Integration**: Uses Stash proxy endpoint `/api/stash-graphql` with proper error handling and debug logging
+
+### Studio Tracking
+Studios can be added alongside actors at `/studios` (a `Studio` table mirrors `Actor`):
+- **Add page** (`/studios/add`): fetches all Stash studios once and searches/paginates client-side; shows parent network or sub-studio count
+- **Studio page** (`/studios/[id]`): scenes from the studio and its sub-studios, filterable by Unorganised / Organised / All, has-markers and title (state kept in the URL); remove button
+- **Counts**: `src/lib/studioCountService.ts` precomputes marker and unorganised-scene counts (sub-studios included), refreshed via `POST /api/studios/counts` when the Studios page loads
+- **Unorganised scope**: the Unorganised page and dashboard count scenes featuring an added actor OR from an added studio, built by `src/lib/unorganisedFilter.ts` (Stash `OR` scene filter; shared criteria repeated in each branch)
+- **Smart playlists** can also filter by studio (parent scene's studio via nested `scene_filter`, optional sub-studios)
 
 ### Actor Browsing System
 Enhanced marker browsing and selection on `/actors/[id]` pages with dual-query pagination system:

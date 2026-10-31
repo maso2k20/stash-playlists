@@ -29,6 +29,20 @@ model Actor {
   updatedAt            DateTime  @default(now()) @updatedAt
 }
 
+// A Stash studio the user tracks (like Actor). Unorganised scenes are scoped to
+// added actors OR added studios; studio filters always include sub-studios.
+model Studio {
+  id                    String    @id
+  name                  String
+  image_path            String?   // Relative path like "/studio/123/image" (server URL added at runtime)
+  parentName            String?   // Parent studio name, for display only
+  markerCount           Int       @default(0) // Scene markers in this studio + sub-studios (precomputed)
+  unorganisedSceneCount Int       @default(0) // Scenes with markers not yet tagged "Markers Organised" (precomputed)
+  countsUpdatedAt       DateTime? // When the precomputed counts were last refreshed
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
+}
+
 enum PlaylistType {
   MANUAL
   SMART

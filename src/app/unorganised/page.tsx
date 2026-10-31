@@ -6,24 +6,21 @@ import { useQuery, gql } from "@apollo/client";
 import { useSettings } from "@/app/context/SettingsContext";
 import { useStashTags } from "@/context/StashTagsContext";
 import { makeStashUrl } from "@/lib/urlUtils";
+import { buildUnorganisedSceneFilter } from "@/lib/unorganisedFilter";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 
 // Query for unorganised scenes (scenes with markers but without "Markers
-// Organised" tag), limited to the app's added actors (performers).
+// Organised" tag), limited to the app's added actors OR added studios. The
+// filter is built by buildUnorganisedSceneFilter and passed as a variable.
 const GET_UNORGANISED_SCENES = gql`
   query getUnorganisedScenes(
-    $markersOrganisedIds: [ID!]!
-    $performerIds: [ID!]!
+    $sceneFilter: SceneFilterType
     $pageNumber: Int!
     $perPage: Int!
   ) {
     findScenes(
-      scene_filter: {
-        has_markers: "true"
-        performers: { modifier: INCLUDES, value: $performerIds }
-        tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
-      }
+      scene_filter: $sceneFilter
       filter: { page: $pageNumber, per_page: $perPage }
     ) {
       count
@@ -37,20 +34,11 @@ const GET_UNORGANISED_SCENES = gql`
   }
 `;
 
-// Query with title filter
+// Query with title filter (the title criterion is part of $sceneFilter)
 const GET_UNORGANISED_SCENES_FILTERED = gql`
-  query getUnorganisedScenesFiltered(
-    $markersOrganisedIds: [ID!]!
-    $performerIds: [ID!]!
-    $titleQuery: String!
-  ) {
+  query getUnorganisedScenesFiltered($sceneFilter: SceneFilterType) {
     findScenes(
-      scene_filter: {
-        has_markers: "true"
-        performers: { modifier: INCLUDES, value: $performerIds }
-        tags: { modifier: EXCLUDES, value: $markersOrganisedIds }
-        title: { value: $titleQuery, modifier: INCLUDES }
-      }
+      scene_filter: $sceneFilter
       filter: { per_page: -1 }
     ) {
       count
@@ -178,16 +166,21 @@ function UnorganisedContent() {
     return tag?.id ? String(tag.id) : null;
   }, [stashTags]);
 
-  // Added actors — unorganised scenes are limited to those featuring them.
-  const [actorIds, setActorIds] = useState<string[] | null>(null);
+  // Added actors and studios — unorganised scenes are limited to those
+  // featuring an added actor or belonging to an added studio.
+  const [tracked, setTracked] = useState<{ actorIds: string[]; studioIds: string[] } | null>(null);
   useEffect(() => {
-    fetch("/api/actors", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: Array<{ id: string }>) => setActorIds((data ?? []).map((a) => String(a.id))))
-      .catch(() => setActorIds([]));
+    const ids = (url: string) =>
+      fetch(url, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data: Array<{ id: string }>) => (data ?? []).map((x) => String(x.id)))
+        .catch(() => [] as string[]);
+    Promise.all([ids("/api/actors"), ids("/api/studios")]).then(([actorIds, studioIds]) =>
+      setTracked({ actorIds, studioIds })
+    );
   }, []);
-  const actorsReady = actorIds !== null;
-  const noActors = actorsReady && actorIds!.length === 0;
+  const trackedReady = tracked !== null;
+  const nothingTracked = trackedReady && tracked!.actorIds.length === 0 && tracked!.studioIds.length === 0;
 
   const isFiltering = searchTerm.trim().length > 0;
 
@@ -200,27 +193,32 @@ function UnorganisedContent() {
   }, [searchTerm]);
 
   const paginatedVariables = useMemo(() => ({
-    markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
-    performerIds: actorIds ?? [],
+    sceneFilter: markersOrganisedTagId && tracked
+      ? buildUnorganisedSceneFilter({ organisedTagId: markersOrganisedTagId, ...tracked })
+      : null,
     pageNumber,
     perPage,
-  }), [markersOrganisedTagId, actorIds, pageNumber, perPage]);
+  }), [markersOrganisedTagId, tracked, pageNumber, perPage]);
 
   const filteredVariables = useMemo(() => ({
-    markersOrganisedIds: markersOrganisedTagId ? [markersOrganisedTagId] : [],
-    performerIds: actorIds ?? [],
-    titleQuery: searchTerm.trim(),
-  }), [markersOrganisedTagId, actorIds, searchTerm]);
+    sceneFilter: markersOrganisedTagId && tracked
+      ? buildUnorganisedSceneFilter({
+          organisedTagId: markersOrganisedTagId,
+          ...tracked,
+          extra: { title: { value: searchTerm.trim(), modifier: "INCLUDES" } },
+        })
+      : null,
+  }), [markersOrganisedTagId, tracked, searchTerm]);
 
   const { data: paginatedData, loading: paginatedLoading, error: paginatedError } = useQuery(GET_UNORGANISED_SCENES, {
     variables: paginatedVariables,
-    skip: !markersOrganisedTagId || !actorsReady || noActors || isFiltering,
+    skip: !markersOrganisedTagId || !trackedReady || nothingTracked || isFiltering,
     fetchPolicy: "cache-and-network",
   });
 
   const { data: filteredData, loading: filteredLoading, error: filteredError } = useQuery(GET_UNORGANISED_SCENES_FILTERED, {
     variables: filteredVariables,
-    skip: !markersOrganisedTagId || !actorsReady || noActors || !isFiltering,
+    skip: !markersOrganisedTagId || !trackedReady || nothingTracked || !isFiltering,
     fetchPolicy: "cache-and-network",
   });
 
@@ -234,7 +232,7 @@ function UnorganisedContent() {
     if (data?.findScenes?.count !== undefined) setTotalCount(data.findScenes.count);
   }, [data]);
 
-  const anyLoading = loading || tagsLoading || !actorsReady;
+  const anyLoading = loading || tagsLoading || !trackedReady;
   const maxPage = Math.ceil(totalCount / perPage);
 
   // Tag not found state

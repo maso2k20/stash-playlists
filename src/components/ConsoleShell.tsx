@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   List,
   Users,
+  Building2,
   Clapperboard,
   Sliders,
   Play,
@@ -25,6 +26,7 @@ const LIBRARY: NavItem[] = [
   { href: "/unorganised", label: "Unorganised", icon: Inbox },
   { href: "/playlists", label: "Playlists", icon: List },
   { href: "/actors", label: "Actors", icon: Users },
+  { href: "/studios", label: "Studios", icon: Building2 },
   { href: "/scenes", label: "Scenes", icon: Clapperboard },
 ];
 

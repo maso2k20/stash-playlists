@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 // Cheap aggregate counts for the dashboard stat tiles. All are simple COUNTs /
 // a single GROUP BY, so this stays fast to load.
 export async function GET() {
-  const [playlists, actors, clips, ratingGroups] = await Promise.all([
+  const [playlists, actors, studios, clips, ratingGroups] = await Promise.all([
     prisma.playlist.count(),
     prisma.actor.count(),
+    prisma.studio.count(),
     prisma.item.count(),
     prisma.item.groupBy({
       by: ["rating"],
@@ -24,6 +25,7 @@ export async function GET() {
   return NextResponse.json({
     playlists,
     actors,
+    studios,
     clips,
     ratings: { dislike: byRating[1], like: byRating[2], love: byRating[3] },
   });
