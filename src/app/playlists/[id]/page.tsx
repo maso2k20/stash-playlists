@@ -358,6 +358,81 @@ export default function PlaylistPlayer() {
     if (currentIndex < playOrder.length - 1) setCurrentIndex(i => i + 1);
   }, [playOrder, currentIndex, items, setCurrentIndex]);
 
+  // Trim the current clip: set the marker's end (in Stash and locally) to the
+  // current playback position, then move on as if the clip had ended.
+  const [settingEnd, setSettingEnd] = useState(false);
+  const [endMessage, setEndMessage] = useState<{ text: string; error?: boolean } | null>(null);
+
+  const handleSetEndHere = useCallback(async () => {
+    const player = playerRef.current;
+    const item = items[playOrder[currentIndex] ?? 0]?.item;
+    if (!player || player.isDisposed?.() || !item) return;
+
+    // The offset plugin makes player.currentTime() relative to the clip start;
+    // the tech reports the absolute position in the scene.
+    const techTime = player.tech_?.currentTime?.();
+    const absolute = typeof techTime === 'number' && techTime > 0
+      ? techTime
+      : item.startTime + (player.currentTime() || 0);
+    const endSeconds = Math.round(absolute * 10) / 10;
+
+    const markerStart = currentMarkerDetails?.id === item.id ? currentMarkerDetails.seconds : item.startTime;
+    if (endSeconds <= markerStart) {
+      setEndMessage({ text: 'Current position is before the marker start', error: true });
+      return;
+    }
+
+    setSettingEnd(true);
+    setEndMessage(null);
+    try {
+      // Update the marker in Stash so smart playlist refreshes keep the new end.
+      if (currentMarkerDetails?.id === item.id) {
+        await updateSceneMarker({
+          variables: { input: { id: item.id, end_seconds: endSeconds } },
+          notifyOnNetworkStatusChange: false,
+        });
+      }
+
+      const res = await fetch(`/api/items/${item.id}/end-time`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endTime: endSeconds }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Failed to save end time');
+
+      const mins = Math.floor(endSeconds / 60);
+      const secs = (endSeconds % 60).toFixed(1).padStart(4, '0');
+      setEndMessage({ text: `End set to ${mins}:${secs} on "${item.title}"` });
+
+      // Advance first so the new endTime doesn't reload the clip that's playing.
+      handleVideoEnded();
+      setPlaylist(prev => prev ? {
+        ...prev,
+        items: prev.items.map(pi => pi.item.id === item.id ? { ...pi, item: { ...pi.item, endTime: endSeconds } } : pi),
+      } : prev);
+    } catch (error) {
+      console.error('Failed to set end time:', error);
+      setEndMessage({ text: error instanceof Error ? error.message : 'Failed to set end time', error: true });
+    } finally {
+      setSettingEnd(false);
+    }
+  }, [items, playOrder, currentIndex, currentMarkerDetails, updateSceneMarker, handleVideoEnded]);
+
+  // "E" shortcut for Set end here (works in fullscreen; ignored while typing).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'e' && e.key !== 'E') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (settingEnd) return;
+      e.preventDefault();
+      handleSetEndHere();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [handleSetEndHere, settingEnd]);
+
   // Memoize offset to prevent video restarts when only scene data changes
   const offset = useMemo(() => {
     const result = currentItem
@@ -451,8 +526,27 @@ export default function PlaylistPlayer() {
                       }}
                       size="md"
                     />
+                    <Button
+                      size="sm"
+                      variant="outlined"
+                      color="neutral"
+                      loading={settingEnd}
+                      onClick={handleSetEndHere}
+                      title="Set this marker's end time to the current position and skip to the next clip (E)"
+                    >
+                      Set end here
+                    </Button>
                   </Box>
                 </Box>
+                {endMessage && (
+                  <Typography
+                    level="body-xs"
+                    color={endMessage.error ? 'danger' : 'success'}
+                    sx={{ mb: 1 }}
+                  >
+                    {endMessage.text}
+                  </Typography>
+                )}
 
                 {/* Performers in the current clip's scene (read-only) */}
                 {sceneData?.findScene?.performers && sceneData.findScene.performers.length > 0 && (
