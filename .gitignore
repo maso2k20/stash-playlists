@@ -50,3 +50,13 @@ dev.db
 
 # Claude Code local settings
 .claude/
+
+# Database backups
+/backups/
+prisma/*.db
+
+# Editor settings
+.vscode/
+
+# Design handoff files
+/design_handoff_console_redesign/
